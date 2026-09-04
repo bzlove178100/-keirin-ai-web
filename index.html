@@ -4,33 +4,361 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>競輪AI予想</title>
+
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0b1020;color:#fff}
-.container{width:min(92%,760px);margin:auto;padding:32px 0 60px}header{text-align:center;margin-bottom:32px}
-.subtitle{color:#9ca3af}.card{background:#151c2f;border:1px solid #29324a;border-radius:16px;padding:20px;margin-bottom:18px}
-label{display:block;margin:14px 0 7px;font-weight:600}input,select,textarea{width:100%;padding:13px;border-radius:10px;border:1px solid #374151;background:#0f172a;color:#fff;font-size:16px}
-textarea{min-height:130px}button{width:100%;margin-top:20px;padding:15px;border:0;border-radius:10px;background:#2563eb;color:#fff;font-size:17px;font-weight:700}
-#result{white-space:pre-wrap;line-height:1.7;color:#e5e7eb}.status{color:#60a5fa;font-weight:600}
+:root{
+  --bg:#0b1020;
+  --card:#151c2f;
+  --input:#0f172a;
+  --line:#2a3550;
+  --text:#fff;
+  --muted:#9ca3af;
+  --blue:#2f6df6;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+
+.wrap{
+  width:min(92%,760px);
+  margin:auto;
+  padding:35px 0 60px;
+}
+
+header{
+  text-align:center;
+  margin-bottom:30px;
+}
+
+h1{
+  font-size:34px;
+  margin:0 0 10px;
+}
+
+.sub{
+  color:var(--muted);
+}
+
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:20px;
+  margin-bottom:20px;
+}
+
+label{
+  display:block;
+  font-weight:700;
+  margin:15px 0 8px;
+}
+
+input,select,textarea{
+  width:100%;
+  padding:14px;
+  border-radius:10px;
+  border:1px solid #3b465f;
+  background:var(--input);
+  color:white;
+  font-size:16px;
+}
+
+textarea{
+  min-height:130px;
+}
+
+button{
+  width:100%;
+  margin-top:18px;
+  padding:15px;
+  border:0;
+  border-radius:11px;
+  background:var(--blue);
+  color:white;
+  font-size:18px;
+  font-weight:800;
+}
+
+.pick{
+  background:var(--input);
+  border:1px solid #36415b;
+  border-radius:13px;
+  padding:15px;
+  margin-top:12px;
+}
+
+.pick h3{
+  margin:0 0 10px;
+}
+
+.bet{
+  font-size:22px;
+  font-weight:800;
+}
+
+.percent{
+  color:#60a5fa;
+  font-weight:800;
+  margin-left:10px;
+}
+
+.reason{
+  color:#d1d5db;
+  line-height:1.6;
+  margin-top:8px;
+}
+
+.locked{
+  opacity:.55;
+}
+
+.lock{
+  color:#f59e0b;
+  margin-top:8px;
+  font-weight:700;
+}
+
+.note{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.6;
+}
 </style>
 </head>
+
 <body>
-<main class="container">
-<header><h1>🚴 競輪AI予想</h1><p class="subtitle">Keirin AI Prediction System</p></header>
+
+<div class="wrap">
+
+<header>
+<h1>🚴 競輪AI予想</h1>
+<p class="sub">Keirin AI Prediction System</p>
+</header>
+
 <section class="card">
-<label for="venue">競輪場</label><input id="venue" placeholder="例：玉野">
-<label for="race">レース</label>
-<select id="race"><option value="">選択してください</option><option>1R</option><option>2R</option><option>3R</option><option>4R</option><option>5R</option><option>6R</option><option>7R</option><option>8R</option><option>9R</option><option>10R</option><option>11R</option><option>12R</option></select>
-<label for="data">レースデータ</label><textarea id="data" placeholder="出走表・並び・オッズ・前検コメントなどを入力"></textarea>
-<button id="predictButton" type="button">AI予想を実行</button>
+
+<label>会員プラン</label>
+<select id="plan">
+<option value="free">無料会員</option>
+<option value="p1">有料会員1</option>
+<option value="p2">有料会員2</option>
+<option value="p3">有料会員3</option>
+<option value="day">1日フリー</option>
+<option value="venue">指定競輪場・当日全Rパス</option>
+</select>
+
+<label>競輪場</label>
+<input id="venue" placeholder="例：玉野">
+
+<label>レース</label>
+<select id="race">
+<option value="">選択してください</option>
+<option>1R</option>
+<option>2R</option>
+<option>3R</option>
+<option>4R</option>
+<option>5R</option>
+<option>6R</option>
+<option>7R</option>
+<option>8R</option>
+<option>9R</option>
+<option>10R</option>
+<option>11R</option>
+<option>12R</option>
+</select>
+
+<label>レースデータ</label>
+<textarea id="data"
+placeholder="出走表・並び・直近成績・オッズ・前検コメントなど"></textarea>
+
+<button id="run">AI予想を実行</button>
+
 </section>
-<section class="card"><h2>予想結果</h2><div id="result">まだ予想は実行されていません。</div></section>
-</main>
+
+<section class="card">
+
+<h2>予想結果</h2>
+
+<div id="summary" class="note">
+まだ予想は実行されていません。
+</div>
+
+<div id="results"></div>
+
+</section>
+
+<section class="card note">
+
+現在はWeb画面・会員ランク別表示の動作確認版です。
+
+実際の競輪AI予想処理、ユーザー認証、課金判定などは次工程で接続します。
+
+</section>
+
+</div>
+
 <script>
-document.getElementById("predictButton").addEventListener("click",function(){
-const venue=document.getElementById("venue").value.trim(),race=document.getElementById("race").value,data=document.getElementById("data").value.trim(),result=document.getElementById("result");
-if(!venue||!race){result.textContent="競輪場とレースを入力してください。";return}
-result.innerHTML='<span class="status">'+venue+" "+race+" の入力を確認しました。</span>\n\n現在はWeb画面の動作確認段階です。\n次の工程で競輪AIの予想処理と接続します。\n\n"+(data?"レースデータ：入力済み":"レースデータ：未入力");
+
+const predictions=[
+{
+title:"① 的中率重視",
+bet:"1-3-5",
+percent:"18%",
+reason:"能力・ライン・展開から最も成立率を高く評価する基本形。"
+},
+{
+title:"② 的中＋穴バランス",
+bet:"3-1-5",
+percent:"9%",
+reason:"基本展開を維持しながら着順を崩して配当との両立を狙う。"
+},
+{
+title:"③ 大穴",
+bet:"1-5-7",
+percent:"4%",
+reason:"2着・3着候補を独立評価し、人気薄の浮上まで狙う。"
+},
+{
+title:"④ 本命頭崩し",
+bet:"5-1-7",
+percent:"1.8%",
+reason:"本命1着候補が敗れる展開を想定した高配当シナリオ。"
+},
+{
+title:"⑤ 超大穴",
+bet:"7-5-1",
+percent:"0.7%",
+reason:"成立率は低いが、展開が大きく崩れた場合の一撃候補。"
+}
+];
+
+function access(plan,index){
+
+if(plan==="free"){
+return{
+show:index===0,
+reason:false,
+percent:false
+};
+}
+
+if(plan==="p1"){
+return{
+show:index<=1,
+reason:true,
+percent:false
+};
+}
+
+if(plan==="p2"){
+return{
+show:index<=2,
+reason:true,
+percent:true
+};
+}
+
+return{
+show:true,
+reason:true,
+percent:true
+};
+
+}
+
+document
+.getElementById("run")
+.addEventListener("click",function(){
+
+const venue=
+document.getElementById("venue").value.trim();
+
+const race=
+document.getElementById("race").value;
+
+const data=
+document.getElementById("data").value.trim();
+
+const plan=
+document.getElementById("plan").value;
+
+const summary=
+document.getElementById("summary");
+
+const results=
+document.getElementById("results");
+
+if(!venue || !race){
+
+summary.textContent=
+"競輪場とレースを入力してください。";
+
+results.innerHTML="";
+
+return;
+
+}
+
+summary.innerHTML=
+"<strong style='color:#60a5fa'>"+
+venue+" "+race+
+"</strong> の入力を確認しました。<br>"+
+(data
+?"レースデータ：入力済み"
+:"レースデータ：未入力");
+
+results.innerHTML="";
+
+predictions.forEach(function(p,index){
+
+const permission=
+access(plan,index);
+
+const box=
+document.createElement("div");
+
+box.className=
+"pick"+(permission.show?"":" locked");
+
+if(permission.show){
+
+box.innerHTML=
+
+"<h3>"+p.title+"</h3>"+
+
+"<div>"+
+"<span class='bet'>"+p.bet+"</span>"+
+(permission.percent
+?"<span class='percent'>予想 "+p.percent+"</span>"
+:"")+
+"</div>"+
+
+(permission.reason
+?"<div class='reason'>"+p.reason+"</div>"
+:"");
+
+}else{
+
+box.innerHTML=
+
+"<h3>"+p.title+"</h3>"+
+"<div class='lock'>🔒 上位プランで開示</div>";
+
+}
+
+results.appendChild(box);
+
 });
+
+});
+
 </script>
+
 </body>
 </html>
