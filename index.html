@@ -3,114 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://omamgmyyqnawlagbemcm.supabase.co; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; upgrade-insecure-requests">
 <title>競輪AI予想</title>
 <style>
-:root{
-  color-scheme:dark;
-  --bg:#0b1020;
-  --card:#151c2f;
-  --line:#2a3550;
-  --muted:#b2bdd0
-}
+:root{color-scheme:dark;--bg:#0b1020;--card:#151c2f;--line:#2a3550;--muted:#b2bdd0}
 *{box-sizing:border-box}
-body{
-  margin:0;
-  background:var(--bg);
-  color:#fff;
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-  line-height:1.7
-}
-.wrap{
-  width:min(92%,760px);
-  margin:auto;
-  padding:32px 0 60px
-}
+body{margin:0;background:var(--bg);color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.7}
+.wrap{width:min(92%,760px);margin:auto;padding:32px 0 60px}
 header{text-align:center;margin-bottom:28px}
-h1{font-size:30px;margin:0}
-h2{font-size:21px;margin:0 0 16px}
-h3{font-size:17px;margin:0 0 8px}
+h1{font-size:30px;margin:0} h2{font-size:21px;margin:0 0 16px} h3{font-size:17px;margin:0 0 8px}
 .sub,.note{color:var(--muted)}
-.card{
-  background:var(--card);
-  border:1px solid var(--line);
-  border-radius:18px;
-  padding:20px;
-  margin-bottom:20px
-}
-dl{margin:0}
-.status-row{
-  padding:13px 0;
-  border-bottom:1px solid var(--line)
-}
-dt{color:var(--muted)}
-dd{margin:4px 0 0;font-weight:700}
-.ok{color:#86efac}
-.pending{color:#fcd34d}
-.error{color:#fda4af}
-.notice{color:#fcd34d}
-.hidden{display:none!important}
-label{
-  display:block;
-  margin-top:12px;
-  margin-bottom:5px;
-  color:var(--muted)
-}
-input{
-  width:100%;
-  padding:13px 14px;
-  border:1px solid var(--line);
-  border-radius:10px;
-  background:#0f172a;
-  color:#fff;
-  font-size:16px
-}
-button{
-  width:100%;
-  margin-top:16px;
-  padding:14px;
-  border:0;
-  border-radius:11px;
-  background:#2f6df6;
-  color:#fff;
-  font-size:16px;
-  font-weight:700;
-  cursor:pointer
-}
-button.secondary{background:#354158}
-button:disabled{
-  background:#354158;
-  color:#c8d0dd;
-  cursor:not-allowed
-}
-button:focus-visible,
-input:focus-visible{
-  outline:3px solid #93c5fd;
-  outline-offset:3px
-}
-.categories{
-  display:grid;
-  gap:12px;
-  grid-template-columns:repeat(2,minmax(0,1fr))
-}
-.pick{
-  padding:16px;
-  background:#0f172a;
-  border:1px solid var(--line);
-  border-radius:12px
-}
-.pick p{margin:0;color:var(--muted)}
-.note{font-size:14px}
-footer{text-align:center}
-@media(max-width:480px){
-  .categories{grid-template-columns:1fr}
-  h1{font-size:26px}
-}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:20px}
+dl{margin:0}.status-row{padding:13px 0;border-bottom:1px solid var(--line)}dt{color:var(--muted)}dd{margin:4px 0 0;font-weight:700}
+.ok{color:#86efac}.pending{color:#fcd34d}.error{color:#fda4af}.notice{color:#fcd34d}.hidden{display:none!important}
+label{display:block;margin-top:12px;margin-bottom:5px;color:var(--muted)}
+input{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:10px;background:#0f172a;color:#fff;font-size:16px}
+button{width:100%;margin-top:16px;padding:14px;border:0;border-radius:11px;background:#2f6df6;color:#fff;font-size:16px;font-weight:700;cursor:pointer}
+button.secondary{background:#354158}button:disabled{background:#354158;color:#c8d0dd;cursor:not-allowed}
+button:focus-visible,input:focus-visible{outline:3px solid #93c5fd;outline-offset:3px}
+.categories{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.pick{padding:16px;background:#0f172a;border:1px solid var(--line);border-radius:12px}.pick p{margin:0;color:var(--muted)}
+.note{font-size:14px}footer{text-align:center}
+@media(max-width:480px){.categories{grid-template-columns:1fr}h1{font-size:26px}}
 </style>
 </head>
-
 <body>
 <main class="wrap">
-
 <header>
   <h1>🚴 競輪AI予想</h1>
   <p class="sub">個人利用版・owner認証対応</p>
@@ -118,51 +37,22 @@ footer{text-align:center}
 
 <section class="card" aria-labelledby="auth-title">
   <h2 id="auth-title">ログイン</h2>
-
   <div id="logged-out">
     <label for="email">メールアドレス</label>
-    <input
-      id="email"
-      type="email"
-      value="bz.love178100@gmail.com"
-      autocomplete="username"
-      inputmode="email"
-    >
-
+    <input id="email" type="email" autocomplete="username" inputmode="email" placeholder="ログイン用メールアドレス">
     <label for="password">パスワード</label>
-    <input
-      id="password"
-      type="password"
-      autocomplete="current-password"
-    >
-
+    <input id="password" type="password" autocomplete="current-password">
     <button id="login" type="button">ログイン</button>
-
-    <p id="auth-message" class="note">
-      パスワードはSupabaseへ直接送信され、このページのコードには保存しません。
-    </p>
+    <p id="auth-message" class="note">パスワードはSupabaseへ直接送信され、このページのコードには保存しません。</p>
   </div>
 
   <div id="logged-in" class="hidden">
     <dl>
-      <div class="status-row">
-        <dt>認証状態</dt>
-        <dd id="auth-status" class="ok">ログイン済み</dd>
-      </div>
-      <div class="status-row">
-        <dt>アカウント</dt>
-        <dd id="account-email">-</dd>
-      </div>
-      <div class="status-row">
-        <dt>権限</dt>
-        <dd id="account-role">-</dd>
-      </div>
-      <div class="status-row">
-        <dt>プラン</dt>
-        <dd id="account-plan">-</dd>
-      </div>
+      <div class="status-row"><dt>認証状態</dt><dd id="auth-status" class="ok">ログイン済み</dd></div>
+      <div class="status-row"><dt>アカウント</dt><dd id="account-email">-</dd></div>
+      <div class="status-row"><dt>権限</dt><dd id="account-role">-</dd></div>
+      <div class="status-row"><dt>プラン</dt><dd id="account-plan">-</dd></div>
     </dl>
-
     <p id="owner-message" class="note"></p>
     <button id="logout" class="secondary" type="button">ログアウト</button>
   </div>
@@ -170,118 +60,46 @@ footer{text-align:center}
 
 <section class="card" aria-labelledby="status-title">
   <h2 id="status-title">接続状態</h2>
-
   <div role="status" aria-live="polite" aria-atomic="true">
     <dl>
-      <div class="status-row">
-        <dt>Web → Supabase API</dt>
-        <dd id="api-status">未確認</dd>
-      </div>
-
-      <div class="status-row">
-        <dt>DB保存基盤</dt>
-        <dd id="storage-status">未確認</dd>
-      </div>
-
-      <div class="status-row">
-        <dt>Web owner認証</dt>
-        <dd id="owner-status" class="pending">未ログイン</dd>
-      </div>
-
-      <div class="status-row">
-        <dt>実AI予想エンジン</dt>
-        <dd id="engine-status" class="pending">未接続</dd>
-      </div>
-
-      <div class="status-row">
-        <dt>公開Webからの書き込み</dt>
-        <dd id="write-status">未確認</dd>
-      </div>
+      <div class="status-row"><dt>Web → Supabase API</dt><dd id="api-status">未確認</dd></div>
+      <div class="status-row"><dt>DB保存基盤</dt><dd id="storage-status">未確認</dd></div>
+      <div class="status-row"><dt>Web owner認証</dt><dd id="owner-status" class="pending">未ログイン</dd></div>
+      <div class="status-row"><dt>サーバー owner認証</dt><dd id="server-owner-status" class="pending">未ログイン</dd></div>
+      <div class="status-row"><dt>実AI予想エンジン</dt><dd id="engine-status" class="pending">未接続</dd></div>
+      <div class="status-row"><dt>公開Webからの書き込み</dt><dd id="write-status">未確認</dd></div>
     </dl>
-
-    <p id="status-message" class="note">
-      読み取り専用APIで状態を確認します。
-    </p>
-
-    <p id="checked-at" class="note">
-      確認時刻：未確認
-    </p>
+    <p id="status-message" class="note">読み取り専用APIで状態を確認します。</p>
+    <p id="checked-at" class="note">確認時刻：未確認</p>
   </div>
-
   <button id="refresh" type="button">接続状態を再確認</button>
-
-  <p class="note">
-    owner認証と予想エンジン接続は別々に確認します。
-  </p>
+  <p class="note">サーバー側owner認証は、ログイン中のJWTを使って predict-race に確認します。</p>
 </section>
 
 <section class="card" aria-labelledby="prediction-title">
   <h2 id="prediction-title">予想結果</h2>
-
-  <p class="notice">
-    実AI予想エンジンはまだ未接続です。買い目・確率・根拠はまだ表示しません。
-  </p>
-
-  <button
-    id="run"
-    type="button"
-    disabled
-    aria-describedby="run-note"
-  >
-    AI予想を実行（準備中）
-  </button>
-
-  <p id="run-note" class="note">
-    owner認証を確認後、次に実AIエンジンと安全な書き込み処理を接続します。
-  </p>
-
+  <p class="notice">実AI予想エンジンはまだ未接続です。買い目・確率・根拠はまだ表示しません。</p>
+  <button id="run" type="button" disabled aria-describedby="run-note">AI予想を実行（準備中）</button>
+  <p id="run-note" class="note">owner認証とAPI接続を確認後、次に実AIエンジンと安全な書き込み処理を接続します。</p>
   <div class="categories">
-    <article class="pick">
-      <h3>的中率重視</h3>
-      <p>予想データはありません。</p>
-    </article>
-
-    <article class="pick">
-      <h3>バランス</h3>
-      <p>予想データはありません。</p>
-    </article>
-
-    <article class="pick">
-      <h3>中穴</h3>
-      <p>予想データはありません。</p>
-    </article>
-
-    <article class="pick">
-      <h3>大穴</h3>
-      <p>予想データはありません。</p>
-    </article>
-
-    <article class="pick">
-      <h3>超大穴</h3>
-      <p>予想データはありません。</p>
-    </article>
+    <article class="pick"><h3>的中率重視</h3><p>予想データはありません。</p></article>
+    <article class="pick"><h3>バランス</h3><p>予想データはありません。</p></article>
+    <article class="pick"><h3>中穴</h3><p>予想データはありません。</p></article>
+    <article class="pick"><h3>大穴</h3><p>予想データはありません。</p></article>
+    <article class="pick"><h3>超大穴</h3><p>予想データはありません。</p></article>
   </div>
 </section>
 
-<footer class="note">
-  競輪AI・個人利用版 開発中<br>
-  会員ランク別の閲覧制御・課金機能は準備中です。
-</footer>
-
+<footer class="note">競輪AI・個人利用版 開発中<br>会員ランク別の閲覧制御・課金機能は準備中です。</footer>
 </main>
 
 <script>
 'use strict';
 
-const SUPABASE_URL =
-  'https://omamgmyyqnawlagbemcm.supabase.co';
-
-const SUPABASE_KEY =
-  'sb_publishable_kmR4KI8H1WooocHTrrdtKw_b2v49Fp1';
-
-const STATUS_URL =
-  SUPABASE_URL + '/functions/v1/predict-status';
-
+const SUPABASE_URL = 'https://omamgmyyqnawlagbemcm.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_kmR4KI8H1WooocHTrrdtKw_b2v49Fp1';
+const STATUS_URL = SUPABASE_URL + '/functions/v1/predict-status';
+const OWNER_VERIFY_URL = SUPABASE_URL + '/functions/v1/predict-race';
 const SESSION_KEY = 'keirin-ai-owner-session-v1';
 
 let currentSession = null;
@@ -296,20 +114,14 @@ function show(id, text, className = '') {
 }
 
 function saveSession(data) {
-  const expiresIn =
-    Number(data.expires_in || 3600);
-
+  const expiresIn = Number(data.expires_in || 3600);
   currentSession = {
     access_token: data.access_token,
     refresh_token: data.refresh_token,
     expires_at: Date.now() + expiresIn * 1000,
     user: data.user
   };
-
-  sessionStorage.setItem(
-    SESSION_KEY,
-    JSON.stringify(currentSession)
-  );
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
 }
 
 function clearSession() {
@@ -320,79 +132,44 @@ function clearSession() {
 
 async function refreshSessionIfNeeded() {
   if (!currentSession) return null;
-
-  if (
-    currentSession.access_token &&
-    currentSession.expires_at > Date.now() + 60000
-  ) {
-    return currentSession;
-  }
-
+  if (currentSession.access_token && currentSession.expires_at > Date.now() + 60000) return currentSession;
   if (!currentSession.refresh_token) {
     clearSession();
     return null;
   }
 
-  const response = await fetch(
-    SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token',
-    {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        refresh_token: currentSession.refresh_token
-      })
-    }
-  );
-
+  const response = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+    method: 'POST',
+    headers: {apikey: SUPABASE_KEY, 'Content-Type': 'application/json'},
+    body: JSON.stringify({refresh_token: currentSession.refresh_token}),
+    cache: 'no-store',
+    credentials: 'omit'
+  });
   const data = await response.json();
-
   if (!response.ok || !data.access_token) {
     clearSession();
     return null;
   }
-
   saveSession(data);
   return currentSession;
 }
 
 async function loadProfile() {
   const session = await refreshSessionIfNeeded();
-
-  if (!session || !session.user) {
-    throw new Error('有効なログイン情報がありません');
-  }
-
-  const userId =
-    encodeURIComponent(session.user.id);
+  if (!session || !session.user) throw new Error('有効なログイン情報がありません');
 
   const response = await fetch(
-    SUPABASE_URL +
-      '/rest/v1/user_profiles?user_id=eq.' +
-      userId +
-      '&select=role,plan',
+    SUPABASE_URL + '/rest/v1/user_profiles?user_id=eq.' + encodeURIComponent(session.user.id) + '&select=role,plan',
     {
       method: 'GET',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization:
-          'Bearer ' + session.access_token
-      }
+      headers: {apikey: SUPABASE_KEY, Authorization: 'Bearer ' + session.access_token, Accept: 'application/json'},
+      cache: 'no-store',
+      credentials: 'omit'
     }
   );
-
   const rows = await response.json();
-
-  if (!response.ok) {
-    throw new Error('権限情報を取得できませんでした');
-  }
-
-  if (!Array.isArray(rows) || rows.length !== 1) {
-    throw new Error('ユーザープロフィールを確認できませんでした');
-  }
-
+  if (!response.ok) throw new Error('権限情報を取得できませんでした');
+  if (!Array.isArray(rows) || rows.length !== 1) throw new Error('ユーザープロフィールを確認できませんでした');
   currentProfile = rows[0];
   return currentProfile;
 }
@@ -400,75 +177,29 @@ async function loadProfile() {
 function showSignedOut(message = '') {
   element('logged-out').classList.remove('hidden');
   element('logged-in').classList.add('hidden');
-
-  show(
-    'owner-status',
-    '未ログイン',
-    'pending'
-  );
-
-  if (message) {
-    show('auth-message', message, 'note error');
-  } else {
-    show(
-      'auth-message',
-      'パスワードはSupabaseへ直接送信され、このページのコードには保存しません。',
-      'note'
-    );
-  }
-
-  show(
-    'run-note',
-    'owner認証を確認後、次に実AIエンジンと安全な書き込み処理を接続します。',
-    'note'
-  );
+  show('owner-status', '未ログイン', 'pending');
+  show('server-owner-status', '未ログイン', 'pending');
+  show('auth-message', message || 'パスワードはSupabaseへ直接送信され、このページのコードには保存しません。', message ? 'note error' : 'note');
+  show('run-note', 'owner認証とAPI接続を確認後、次に実AIエンジンと安全な書き込み処理を接続します。', 'note');
 }
 
 function showSignedIn() {
   element('logged-out').classList.add('hidden');
   element('logged-in').classList.remove('hidden');
-
-  const email =
-    currentSession?.user?.email || '確認済みユーザー';
-
+  const email = currentSession?.user?.email || '確認済みユーザー';
   show('account-email', email);
   show('account-role', currentProfile.role);
   show('account-plan', currentProfile.plan);
 
-  const isOwner =
-    currentProfile.role === 'owner' &&
-    currentProfile.plan === 'owner';
-
+  const isOwner = currentProfile.role === 'owner' && currentProfile.plan === 'owner';
   if (isOwner) {
-    show(
-      'owner-status',
-      '認証済み（owner）',
-      'ok'
-    );
-
-    show(
-      'owner-message',
-      'owner権限を確認しました。',
-      'note ok'
-    );
-
-    show(
-      'run-note',
-      'owner認証済みです。次はpredict-race側のowner検証と実AIエンジンを接続します。',
-      'note'
-    );
+    show('owner-status', '認証済み（owner）', 'ok');
+    show('owner-message', 'Web側でowner権限を確認しました。', 'note ok');
+    show('server-owner-status', '確認待ち', 'pending');
   } else {
-    show(
-      'owner-status',
-      'ログイン済み・owner権限なし',
-      'error'
-    );
-
-    show(
-      'owner-message',
-      'このアカウントにはowner権限がありません。',
-      'note error'
-    );
+    show('owner-status', 'ログイン済み・owner権限なし', 'error');
+    show('owner-message', 'このアカウントにはowner権限がありません。', 'note error');
+    show('server-owner-status', 'owner権限なし', 'error');
   }
 }
 
@@ -476,65 +207,33 @@ async function login() {
   const button = element('login');
   const email = element('email').value.trim();
   const password = element('password').value;
-
   if (!email || !password) {
-    show(
-      'auth-message',
-      'メールアドレスとパスワードを入力してください。',
-      'note error'
-    );
+    show('auth-message', 'メールアドレスとパスワードを入力してください。', 'note error');
     return;
   }
 
   button.disabled = true;
-
-  show(
-    'auth-message',
-    'ログインを確認しています…',
-    'note'
-  );
-
+  show('auth-message', 'ログインを確認しています…', 'note');
   try {
-    const response = await fetch(
-      SUPABASE_URL +
-        '/auth/v1/token?grant_type=password',
-      {
-        method: 'POST',
-        headers: {
-          apikey: SUPABASE_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email,
-          password
-        })
-      }
-    );
-
+    const response = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      headers: {apikey: SUPABASE_KEY, 'Content-Type': 'application/json'},
+      body: JSON.stringify({email, password}),
+      cache: 'no-store',
+      credentials: 'omit'
+    });
     const data = await response.json();
-
     if (!response.ok || !data.access_token) {
-      throw new Error(
-        data.error_description ||
-        data.msg ||
-        data.message ||
-        'ログインできませんでした'
-      );
+      throw new Error(data.error_description || data.msg || data.message || 'ログインできませんでした');
     }
-
     saveSession(data);
-
     element('password').value = '';
-
     await loadProfile();
     showSignedIn();
-
-  } catch (error) {
+    await checkOwnerVerification();
+  } catch (_) {
     clearSession();
-
-    showSignedOut(
-      'ログインできませんでした。メールアドレスまたはパスワードを確認してください。'
-    );
+    showSignedOut('ログインできませんでした。メールアドレスまたはパスワードを確認してください。');
   } finally {
     button.disabled = false;
   }
@@ -542,233 +241,145 @@ async function login() {
 
 async function logout() {
   const token = currentSession?.access_token;
-
   try {
     if (token) {
-      await fetch(
-        SUPABASE_URL + '/auth/v1/logout',
-        {
-          method: 'POST',
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization:
-              'Bearer ' + token
-          }
-        }
-      );
+      await fetch(SUPABASE_URL + '/auth/v1/logout', {
+        method: 'POST',
+        headers: {apikey: SUPABASE_KEY, Authorization: 'Bearer ' + token},
+        cache: 'no-store',
+        credentials: 'omit'
+      });
     }
-  } catch (_) {
-  }
-
+  } catch (_) {}
   clearSession();
   showSignedOut();
 }
 
 async function restoreLogin() {
-  const raw =
-    sessionStorage.getItem(SESSION_KEY);
-
+  const raw = sessionStorage.getItem(SESSION_KEY);
   if (!raw) {
     showSignedOut();
     return;
   }
-
   try {
     currentSession = JSON.parse(raw);
     await loadProfile();
     showSignedIn();
+    await checkOwnerVerification();
   } catch (_) {
     clearSession();
-    showSignedOut(
-      'ログイン状態の有効期限が切れました。もう一度ログインしてください。'
-    );
+    showSignedOut('ログイン状態の有効期限が切れました。もう一度ログインしてください。');
+  }
+}
+
+async function checkOwnerVerification() {
+  if (!currentSession) {
+    show('server-owner-status', '未ログイン', 'pending');
+    return false;
+  }
+
+  show('server-owner-status', '確認中…', 'pending');
+  try {
+    const session = await refreshSessionIfNeeded();
+    if (!session?.access_token) throw new Error('session_missing');
+
+    const response = await fetch(OWNER_VERIFY_URL, {
+      method: 'GET',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: 'Bearer ' + session.access_token,
+        Accept: 'application/json'
+      },
+      cache: 'no-store',
+      credentials: 'omit'
+    });
+
+    let data = null;
+    try { data = await response.json(); } catch (_) {}
+
+    if (response.status === 401) {
+      clearSession();
+      showSignedOut('ログイン状態を再確認できませんでした。もう一度ログインしてください。');
+      return false;
+    }
+
+    if (!response.ok || data?.success !== true || data?.authenticated !== true || data?.owner !== true) {
+      show('server-owner-status', '認証できません', 'error');
+      show('status-message', data?.error || 'predict-raceでowner認証を確認できませんでした。', 'note error');
+      return false;
+    }
+
+    if (data.role !== 'owner' || data.plan !== 'owner') {
+      show('server-owner-status', 'owner情報不一致', 'error');
+      return false;
+    }
+
+    show('server-owner-status', '認証済み（owner）', 'ok');
+    show('engine-status', data.prediction_engine_connected ? '接続済み' : '未接続', data.prediction_engine_connected ? 'ok' : 'pending');
+    show('write-status', data.write_mode === 'locked_until_engine' ? 'ロック中（実AI未接続）' : '状態変更あり・要確認', data.write_mode === 'locked_until_engine' ? 'pending' : 'error');
+    show('run-note', 'サーバー側owner認証まで確認済みです。実AIエンジン未接続のため予想実行・書き込みはロックされています。', 'note');
+    return true;
+  } catch (_) {
+    show('server-owner-status', '確認失敗', 'error');
+    return false;
   }
 }
 
 async function checkStatus() {
   const button = element('refresh');
-
   if (button.disabled) return;
-
   button.disabled = true;
-
   show('api-status', '確認中…');
   show('storage-status', '未確認');
   show('write-status', '未確認');
+  show('status-message', '接続状態を確認しています。', 'note');
+  show('checked-at', '確認時刻：確認中', 'note');
 
-  show(
-    'status-message',
-    '接続状態を確認しています。',
-    'note'
-  );
-
-  show(
-    'checked-at',
-    '確認時刻：確認中',
-    'note'
-  );
-
-  const controller =
-    new AbortController();
-
-  const timeout =
-    setTimeout(
-      () => controller.abort(),
-      10000
-    );
-
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const response =
-      await fetch(
-        STATUS_URL,
-        {
-          method: 'GET',
-          mode: 'cors',
-          credentials: 'omit',
-          cache: 'no-store',
-          signal: controller.signal
-        }
-      );
-
-    if (!response.ok) {
-      throw new Error(
-        'HTTP ' + response.status
-      );
-    }
-
-    const data =
-      await response.json();
-
+    const response = await fetch(STATUS_URL, {
+      method: 'GET', mode: 'cors', credentials: 'omit', cache: 'no-store', signal: controller.signal
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const data = await response.json();
     if (
-      data.success !== true ||
-      data.service !== 'predict-status' ||
-      typeof data.api_connected !== 'boolean' ||
-      typeof data.storage_ready !== 'boolean' ||
-      typeof data.prediction_engine_connected !== 'boolean' ||
-      typeof data.write_mode !== 'string'
+      data.success !== true || data.service !== 'predict-status' ||
+      typeof data.api_connected !== 'boolean' || typeof data.storage_ready !== 'boolean' ||
+      typeof data.prediction_engine_connected !== 'boolean' || typeof data.write_mode !== 'string'
     ) {
-      throw new Error(
-        'ステータス応答の形式を確認できませんでした'
-      );
+      throw new Error('ステータス応答の形式を確認できませんでした');
     }
 
-    show(
-      'api-status',
-      data.api_connected
-        ? '接続済み'
-        : '未接続',
-      data.api_connected
-        ? 'ok'
-        : 'pending'
-    );
+    show('api-status', data.api_connected ? '接続済み' : '未接続', data.api_connected ? 'ok' : 'pending');
+    show('storage-status', data.storage_ready ? '接続済み' : '未接続', data.storage_ready ? 'ok' : 'pending');
+    show('engine-status', data.prediction_engine_connected ? '接続済み' : '未接続', data.prediction_engine_connected ? 'ok' : 'pending');
+    show('write-status', data.write_mode === 'locked_until_engine' ? 'ロック中（実AI未接続）' : 'ロック状態を要確認', data.write_mode === 'locked_until_engine' ? 'pending' : 'error');
+    show('status-message', '公開ステータスAPIを確認しました。', 'note');
 
-    show(
-      'storage-status',
-      data.storage_ready
-        ? '接続済み'
-        : '未接続',
-      data.storage_ready
-        ? 'ok'
-        : 'pending'
-    );
-
-    show(
-      'engine-status',
-      data.prediction_engine_connected
-        ? '接続済み'
-        : '未接続',
-      data.prediction_engine_connected
-        ? 'ok'
-        : 'pending'
-    );
-
-    show(
-      'write-status',
-      data.write_mode ===
-        'locked_until_owner_auth'
-        ? 'ロック中'
-        : '状態変更あり・要確認',
-      'pending'
-    );
-
-    show(
-      'status-message',
-      '状態を取得しました。',
-      'note'
-    );
-
+    if (currentSession) await checkOwnerVerification();
   } catch (error) {
-
-    show(
-      'api-status',
-      '接続を確認できません',
-      'error'
-    );
-
-    show(
-      'storage-status',
-      '未確認（通信失敗）',
-      'pending'
-    );
-
-    show(
-      'engine-status',
-      '未確認',
-      'pending'
-    );
-
-    show(
-      'write-status',
-      '未確認',
-      'pending'
-    );
-
-    show(
-      'status-message',
-      error.name === 'AbortError'
-        ? '接続確認がタイムアウトしました。'
-        : '状態を取得できませんでした。',
-      'note error'
-    );
-
+    show('api-status', '接続を確認できません', 'error');
+    show('storage-status', '未確認（通信失敗）', 'pending');
+    show('engine-status', '未確認', 'pending');
+    show('write-status', '未確認', 'pending');
+    show('status-message', error.name === 'AbortError' ? '接続確認がタイムアウトしました。' : '状態を取得できませんでした。', 'note error');
   } finally {
     clearTimeout(timeout);
-
-    show(
-      'checked-at',
-      '確認試行時刻：' +
-        new Date().toLocaleString(
-          'ja-JP',
-          {timeZone:'Asia/Tokyo'}
-        ) +
-        '（日本時間）',
-      'note'
-    );
-
+    show('checked-at', '確認試行時刻：' + new Date().toLocaleString('ja-JP', {timeZone:'Asia/Tokyo'}) + '（日本時間）', 'note');
     button.disabled = false;
   }
 }
 
-element('login')
-  .addEventListener('click', login);
+element('login').addEventListener('click', login);
+element('logout').addEventListener('click', logout);
+element('refresh').addEventListener('click', checkStatus);
+element('password').addEventListener('keydown', event => { if (event.key === 'Enter') login(); });
 
-element('logout')
-  .addEventListener('click', logout);
-
-element('refresh')
-  .addEventListener('click', checkStatus);
-
-element('password')
-  .addEventListener(
-    'keydown',
-    event => {
-      if (event.key === 'Enter') login();
-    }
-  );
-
-restoreLogin();
-checkStatus();
-
+(async () => {
+  await restoreLogin();
+  await checkStatus();
+})();
 </script>
 </body>
 </html>
