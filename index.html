@@ -94,6 +94,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
   <textarea id="race-json" spellcheck="false" placeholder='{"race":{"date":"2026-09-15","venue":"伊東温泉","race_number":9},"players":[...],"odds":{"trifecta":{...}}}'></textarea>
 
   <button id="run-dry" type="button" disabled>Phase32でdry-run（保存なし）</button>
+  <button id="save-snapshot" class="secondary" type="button" disabled>予測スナップショットをJSON保存</button>
+  <p id="snapshot-note" class="note">dry-run成功後に、予測時点の入力・全確率・15点を端末へ保存できます。DBには保存しません。</p>
   <p id="run-dry-note" class="note">owner認証と開発AIの安全状態を確認すると実行可能になります。</p>
   <p id="input-quality" class="note">入力品質：未実行</p>
 
@@ -145,6 +147,7 @@ const SESSION_KEY = 'keirin-ai-owner-session-v1';
 
 let currentSession = null;
 let currentProfile = null;
+let lastDryRunSnapshot = null;
 
 const element = id => document.getElementById(id);
 function show(id, text, className = '') { const el = element(id); el.textContent = text; el.className = className; }
@@ -207,6 +210,8 @@ function showSignedOut(message = '') {
   show('backtest-engine-status','未確認','pending');
   show('dev-write-status','未確認','pending');
   element('run-dry').disabled = true;
+  element('save-snapshot').disabled = true;
+  lastDryRunSnapshot = null;
   element('run-backtest').disabled = true;
   show('run-dry-note','owner認証と開発AIの安全状態を確認すると実行可能になります。','note');
   show('backtest-note','owner認証とバックテストエンジンの安全状態を確認すると実行可能になります。','note');
@@ -306,6 +311,34 @@ function clearCategory(id, text='候補なし') {
 
 function resetDryRunResults(text='未実行') {
   for (const id of ['cat-hit','cat-balance','cat-middle','cat-longshot','cat-super']) clearCategory(id,text);
+  lastDryRunSnapshot = null;
+  if (element('save-snapshot')) element('save-snapshot').disabled = true;
+}
+
+function safeFilenamePart(value) {
+  return String(value ?? '').trim().replace(/[^0-9A-Za-z_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60) || 'race';
+}
+
+function downloadJson(filename, value) {
+  const blob = new Blob([JSON.stringify(value,null,2)],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function savePredictionSnapshot() {
+  if (!lastDryRunSnapshot) return;
+  const race = lastDryRunSnapshot.race_data?.race || {};
+  const date = safeFilenamePart(race.date || 'date');
+  const venue = safeFilenamePart(race.venue || 'venue');
+  const no = safeFilenamePart(race.race_number || 'R');
+  downloadJson(`phase32-snapshot-${date}-${venue}-${no}.json`, lastDryRunSnapshot);
+  show('snapshot-note','予測スナップショットを端末へ保存しました。結果確定後の履歴化に使えます。','note ok');
 }
 
 function appendPick(box, pick) {
@@ -425,6 +458,14 @@ async function runRealDryRun() {
       return;
     }
 
+    lastDryRunSnapshot = {
+      schema_version:'prediction-snapshot-v1',
+      captured_at:new Date().toISOString(),
+      race_data:raceData,
+      engine_response:data
+    };
+    element('save-snapshot').disabled = false;
+    show('snapshot-note','dry-run成功。結果確定前の予測スナップショットを保存できます。','note ok');
     renderDryRun(data);
   } catch (_) {
     show('run-dry-note','通信または実行エラーでdry-runできませんでした。','note error');
@@ -659,6 +700,7 @@ element('login').addEventListener('click',login);
 element('logout').addEventListener('click',logout);
 element('refresh').addEventListener('click',checkStatus);
 element('run-dry').addEventListener('click',runRealDryRun);
+element('save-snapshot').addEventListener('click',savePredictionSnapshot);
 element('race-file').addEventListener('change',loadRaceFile);
 element('run-backtest').addEventListener('click',runBacktestDryRun);
 element('backtest-file').addEventListener('change',loadBacktestFile);
