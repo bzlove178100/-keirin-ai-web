@@ -69,6 +69,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
       <div class="status-row"><dt>本番サーバー owner認証</dt><dd id="server-owner-status" class="pending">未ログイン</dd></div>
       <div class="status-row"><dt>開発AI owner認証</dt><dd id="dev-owner-status" class="pending">未ログイン</dd></div>
       <div class="status-row"><dt>Phase32 実レースdry-run</dt><dd id="dev-engine-status" class="pending">未確認</dd></div>
+      <div class="status-row"><dt>履歴バックテスト/確率校正</dt><dd id="backtest-engine-status" class="pending">未確認</dd></div>
       <div class="status-row"><dt>開発AIのDB書き込み</dt><dd id="dev-write-status" class="pending">未確認</dd></div>
       <div class="status-row"><dt>本番データ自動取得</dt><dd id="data-source-status" class="pending">未接続</dd></div>
       <div class="status-row"><dt>本番AI予想エンジン</dt><dd id="engine-status" class="pending">未接続</dd></div>
@@ -105,6 +106,29 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
   </div>
 </section>
 
+<section class="card" aria-labelledby="backtest-title">
+  <h2 id="backtest-title">履歴バックテスト / 確率校正</h2>
+  <p class="notice">開発検証専用です。履歴予想と確定結果を入力して集計します。外部データ取得・DB保存・本番予想は行いません。</p>
+
+  <label for="backtest-file">バックテストJSONファイル</label>
+  <input id="backtest-file" type="file" accept=".json,application/json">
+
+  <label for="backtest-json">バックテストデータJSON</label>
+  <textarea id="backtest-json" spellcheck="false" placeholder='{"mode":"dry_run","payload":{"records":[...]}}'></textarea>
+
+  <button id="run-backtest" type="button" disabled>履歴バックテストを実行（保存なし）</button>
+  <p id="backtest-note" class="note">owner認証とバックテストエンジンの安全状態を確認すると実行可能になります。</p>
+
+  <div class="categories" id="backtest-results">
+    <article class="pick"><h3>全体</h3><p id="bt-overall">未実行</p></article>
+    <article class="pick"><h3>的中率重視</h3><p id="bt-hit">未実行</p></article>
+    <article class="pick"><h3>バランス</h3><p id="bt-balance">未実行</p></article>
+    <article class="pick"><h3>中穴</h3><p id="bt-middle">未実行</p></article>
+    <article class="pick"><h3>大穴</h3><p id="bt-longshot">未実行</p></article>
+    <article class="pick"><h3>超大穴</h3><p id="bt-super">未実行</p></article>
+  </div>
+</section>
+
 <footer class="note">競輪AI・個人利用版 開発中<br>データ取得・予想・保存・表示を分離し、後から機能追加できる構造で開発しています。</footer>
 </main>
 
@@ -116,6 +140,7 @@ const SUPABASE_KEY = 'sb_publishable_kmR4KI8H1WooocHTrrdtKw_b2v49Fp1';
 const STATUS_URL = SUPABASE_URL + '/functions/v1/predict-status';
 const OWNER_VERIFY_URL = SUPABASE_URL + '/functions/v1/predict-race';
 const DEV_ENGINE_URL = SUPABASE_URL + '/functions/v1/predict-engine-dev';
+const BACKTEST_URL = SUPABASE_URL + '/functions/v1/backtest-engine-dev';
 const SESSION_KEY = 'keirin-ai-owner-session-v1';
 
 let currentSession = null;
@@ -179,9 +204,12 @@ function showSignedOut(message = '') {
   show('server-owner-status','未ログイン','pending');
   show('dev-owner-status','未ログイン','pending');
   show('dev-engine-status','未確認','pending');
+  show('backtest-engine-status','未確認','pending');
   show('dev-write-status','未確認','pending');
   element('run-dry').disabled = true;
+  element('run-backtest').disabled = true;
   show('run-dry-note','owner認証と開発AIの安全状態を確認すると実行可能になります。','note');
+  show('backtest-note','owner認証とバックテストエンジンの安全状態を確認すると実行可能になります。','note');
   show('auth-message', message || 'パスワードはSupabaseへ直接送信され、このページのコードには保存しません。', message ? 'note error' : 'note');
 }
 
@@ -224,6 +252,7 @@ async function login() {
     showSignedIn();
     await checkOwnerVerification();
     await checkDevEngine();
+    await checkBacktestEngine();
   } catch (_) {
     clearSession();
     showSignedOut('ログインできませんでした。メールアドレスまたはパスワードを確認してください。');
@@ -248,6 +277,7 @@ async function restoreLogin() {
     showSignedIn();
     await checkOwnerVerification();
     await checkDevEngine();
+    await checkBacktestEngine();
   } catch (_) {
     clearSession();
     showSignedOut('ログイン状態の有効期限が切れました。もう一度ログインしてください。');
@@ -469,6 +499,126 @@ async function checkDevEngine() {
   }
 }
 
+async function checkBacktestEngine() {
+  if (!currentSession) {
+    show('backtest-engine-status','未ログイン','pending');
+    element('run-backtest').disabled = true;
+    return false;
+  }
+  show('backtest-engine-status','確認中…','pending');
+  try {
+    const response = await authenticatedGet(BACKTEST_URL);
+    let data = null; try { data = await response.json(); } catch (_) {}
+    const ready = response.ok && data?.success === true && data?.owner === true && data?.dry_run_enabled === true && data?.db_write_enabled === false && data?.production_prediction_enabled === false && data?.engine_version === 'backtest-v3-settlement-aware-multiclass';
+    show('backtest-engine-status', ready ? '準備済み（保存なし）' : '状態要確認', ready ? 'ok' : 'error');
+    element('run-backtest').disabled = !ready;
+    return ready;
+  } catch (_) {
+    show('backtest-engine-status','確認失敗','error');
+    element('run-backtest').disabled = true;
+    return false;
+  }
+}
+
+function formatPercent(value) {
+  return value == null ? '-' : `${(Number(value) * 100).toFixed(2)}%`;
+}
+
+function formatMetricSummary(summary, races = null, raceHitRate = null) {
+  if (!summary) return 'データなし';
+  const parts = [
+    `買い目 ${summary.picks ?? 0}点`,
+    `的中 ${summary.hits ?? 0}`,
+    `買い目的中率 ${formatPercent(summary.hit_rate)}`,
+    `ROI ${summary.roi_multiple == null ? '-' : Number(summary.roi_multiple).toFixed(3)+'倍'}`
+  ];
+  if (races != null) parts.unshift(`レース ${races}`);
+  if (raceHitRate != null) parts.splice(2,0,`レース的中率 ${formatPercent(raceHitRate)}`);
+  return parts.join(' / ');
+}
+
+function resetBacktestResults(text='未実行') {
+  for (const id of ['bt-overall','bt-hit','bt-balance','bt-middle','bt-longshot','bt-super']) show(id,text);
+}
+
+function renderBacktestResult(data) {
+  const result = data?.result;
+  if (!result) { resetBacktestResults('結果なし'); return; }
+  const pq = result.probability_quality || {};
+  const selectionText = formatMetricSummary(result.selection_performance, result.records);
+  const probabilityText = `確率評価 ${pq.races_with_full_probability_input ?? 0}レース / LogLoss ${pq.mean_multiclass_log_loss ?? '-'} / Brier ${pq.mean_multiclass_brier_sum ?? '-'} / MRR ${pq.mean_reciprocal_rank ?? '-'} / Top10 ${formatPercent(pq.top10_accuracy)} / 確率合計 ${pq.mean_probability_mass ?? '-'}`;
+  show('bt-overall', `${selectionText} / ${probabilityText}`);
+  const map = [
+    ['bt-hit','hit_priority'],['bt-balance','balance'],['bt-middle','middle'],['bt-longshot','longshot'],['bt-super','super_longshot']
+  ];
+  for (const [id,key] of map) {
+    const c = result.categories?.[key];
+    show(id, c ? formatMetricSummary(c, c.races, c.race_hit_rate) : 'データなし');
+  }
+  show('backtest-note',`バックテスト完了：${result.records ?? 0}レース。保存0件。選択成績（払戻は確定オッズ）と全210通りの順位・確率品質を分離評価しています。将来の的中率を保証するものではありません。`,'note ok');
+}
+
+async function runBacktestDryRun() {
+  const button = element('run-backtest');
+  if (button.disabled || !currentSession) return;
+  let parsed;
+  try {
+    const raw = element('backtest-json').value.trim();
+    if (!raw) throw new Error('empty');
+    parsed = JSON.parse(raw);
+  } catch (_) {
+    show('backtest-note','JSON形式を確認できません。正しいJSONを貼り付けるかファイルを選んでください。','note error');
+    return;
+  }
+  const body = parsed?.mode === 'dry_run' && parsed?.payload ? parsed : {mode:'dry_run',payload:parsed};
+  button.disabled = true;
+  resetBacktestResults('実行中…');
+  show('backtest-note','履歴バックテストを実行しています。DB保存は行いません。','note pending');
+  try {
+    const response = await authenticatedPost(BACKTEST_URL, body);
+    let data = null; try { data = await response.json(); } catch (_) {}
+    if (response.status === 401) {
+      clearSession();
+      showSignedOut('ログイン状態を再確認できませんでした。もう一度ログインしてください。');
+      resetBacktestResults('未実行');
+      return;
+    }
+    const safe = response.ok && data?.success === true && data?.saved === false && data?.db_write_enabled === false && data?.production_prediction_enabled === false;
+    if (!safe) {
+      const details = Array.isArray(data?.validation_errors) ? data.validation_errors.join(' / ') : (data?.error || `HTTP ${response.status}`);
+      show('backtest-note',`バックテストできませんでした：${details}`,'note error');
+      resetBacktestResults('入力またはサーバー状態を確認してください');
+      return;
+    }
+    renderBacktestResult(data);
+  } catch (_) {
+    show('backtest-note','通信または実行エラーでバックテストできませんでした。','note error');
+    resetBacktestResults('実行失敗');
+  } finally {
+    const ready = currentSession && element('backtest-engine-status').classList.contains('ok');
+    button.disabled = !ready;
+  }
+}
+
+async function loadBacktestFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (file.size > 5_000_000) {
+    show('backtest-note','JSONファイルが大きすぎます。5MB以下のファイルを使用してください。','note error');
+    event.target.value = '';
+    return;
+  }
+  try {
+    const text = await file.text();
+    JSON.parse(text);
+    element('backtest-json').value = text;
+    show('backtest-note',`バックテストJSONを読み込みました：${file.name}`,'note ok');
+  } catch (_) {
+    show('backtest-note','選択したファイルは有効なJSONではありません。','note error');
+    event.target.value = '';
+  }
+}
+
 async function checkStatus() {
   const button = element('refresh');
   if (button.disabled) return;
@@ -492,6 +642,7 @@ async function checkStatus() {
     if (currentSession) {
       await checkOwnerVerification();
       await checkDevEngine();
+      await checkBacktestEngine();
     }
   } catch (error) {
     show('api-status','接続を確認できません','error');
@@ -509,6 +660,8 @@ element('logout').addEventListener('click',logout);
 element('refresh').addEventListener('click',checkStatus);
 element('run-dry').addEventListener('click',runRealDryRun);
 element('race-file').addEventListener('change',loadRaceFile);
+element('run-backtest').addEventListener('click',runBacktestDryRun);
+element('backtest-file').addEventListener('change',loadBacktestFile);
 element('password').addEventListener('keydown',event=>{if(event.key==='Enter')login();});
 (async()=>{await restoreLogin();await checkStatus();})();
 </script>
