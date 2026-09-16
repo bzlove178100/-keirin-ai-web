@@ -18,12 +18,13 @@ h1{font-size:30px;margin:0} h2{font-size:21px;margin:0 0 16px} h3{font-size:17px
 dl{margin:0}.status-row{padding:13px 0;border-bottom:1px solid var(--line)}dt{color:var(--muted)}dd{margin:4px 0 0;font-weight:700}
 .ok{color:#86efac}.pending{color:#fcd34d}.error{color:#fda4af}.notice{color:#fcd34d}.hidden{display:none!important}
 label{display:block;margin-top:12px;margin-bottom:5px;color:var(--muted)}
-input{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:10px;background:#0f172a;color:#fff;font-size:16px}
+input,textarea{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:10px;background:#0f172a;color:#fff;font-size:16px}
+textarea{min-height:220px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.5}
 button{width:100%;margin-top:16px;padding:14px;border:0;border-radius:11px;background:#2f6df6;color:#fff;font-size:16px;font-weight:700;cursor:pointer}
 button.secondary{background:#354158}button:disabled{background:#354158;color:#c8d0dd;cursor:not-allowed}
-button:focus-visible,input:focus-visible{outline:3px solid #93c5fd;outline-offset:3px}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #93c5fd;outline-offset:3px}
 .categories{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
-.pick{padding:16px;background:#0f172a;border:1px solid var(--line);border-radius:12px}.pick p{margin:0;color:var(--muted)}
+.pick{padding:16px;background:#0f172a;border:1px solid var(--line);border-radius:12px}.pick p{margin:0 0 8px;color:var(--muted)}.pick-item{padding:10px 0;border-top:1px solid var(--line)}.pick-item:first-child{border-top:0}.combo{font-weight:800;color:#fff}.meta{font-size:13px;color:var(--muted)}
 .note{font-size:14px}footer{text-align:center}
 @media(max-width:480px){.categories{grid-template-columns:1fr}h1{font-size:26px}}
 </style>
@@ -67,30 +68,40 @@ button:focus-visible,input:focus-visible{outline:3px solid #93c5fd;outline-offse
       <div class="status-row"><dt>Web owner認証</dt><dd id="owner-status" class="pending">未ログイン</dd></div>
       <div class="status-row"><dt>本番サーバー owner認証</dt><dd id="server-owner-status" class="pending">未ログイン</dd></div>
       <div class="status-row"><dt>開発AI owner認証</dt><dd id="dev-owner-status" class="pending">未ログイン</dd></div>
-      <div class="status-row"><dt>Phase32 dry-run</dt><dd id="dev-engine-status" class="pending">未確認</dd></div>
+      <div class="status-row"><dt>Phase32 実レースdry-run</dt><dd id="dev-engine-status" class="pending">未確認</dd></div>
       <div class="status-row"><dt>開発AIのDB書き込み</dt><dd id="dev-write-status" class="pending">未確認</dd></div>
-      <div class="status-row"><dt>本番データ取得</dt><dd id="data-source-status" class="pending">未接続</dd></div>
+      <div class="status-row"><dt>本番データ自動取得</dt><dd id="data-source-status" class="pending">未接続</dd></div>
       <div class="status-row"><dt>本番AI予想エンジン</dt><dd id="engine-status" class="pending">未接続</dd></div>
       <div class="status-row"><dt>公開WebからのDB書き込み</dt><dd id="write-status">未確認</dd></div>
     </dl>
-    <p id="status-message" class="note">本番系と開発dry-runを分離して状態を確認します。</p>
+    <p id="status-message" class="note">本番系とowner専用dry-runを分離して状態を確認します。</p>
     <p id="checked-at" class="note">確認時刻：未確認</p>
   </div>
   <button id="refresh" type="button">接続状態を再確認</button>
-  <p class="note">Phase32 dry-runはowner専用の開発機能です。本番予想・DB保存とは分離されています。</p>
+  <p class="note">実レースdry-runはログイン済みownerのみ利用できます。確認済みデータだけを使い、未確認オッズで不足カテゴリを補完しません。DB保存は行いません。</p>
 </section>
 
 <section class="card" aria-labelledby="prediction-title">
-  <h2 id="prediction-title">予想結果</h2>
-  <p class="notice">本番データ取得はまだ未接続です。架空の買い目・確率・根拠は表示しません。</p>
-  <button id="run" type="button" disabled aria-describedby="run-note">AI予想を実行（本番データ待ち）</button>
-  <p id="run-note" class="note">開発dry-runの接続確認後も、本番データ取得と保存を有効化するまでは予想実行しません。</p>
-  <div class="categories">
-    <article class="pick"><h3>的中率重視</h3><p>実データ予想はありません。</p></article>
-    <article class="pick"><h3>バランス</h3><p>実データ予想はありません。</p></article>
-    <article class="pick"><h3>中穴</h3><p>実データ予想はありません。</p></article>
-    <article class="pick"><h3>大穴</h3><p>実データ予想はありません。</p></article>
-    <article class="pick"><h3>超大穴</h3><p>実データ予想はありません。</p></article>
+  <h2 id="prediction-title">実レースdry-run</h2>
+  <p class="notice">開発検証専用です。予想結果はDBへ保存されず、本番予想として公開されません。</p>
+
+  <label for="race-file">レースJSONファイル</label>
+  <input id="race-file" type="file" accept=".json,application/json">
+  <p class="note">スマホではJSONファイルを選ぶだけで入力できます。下の欄へ直接貼り付けても実行できます。</p>
+
+  <label for="race-json">レースデータJSON</label>
+  <textarea id="race-json" spellcheck="false" placeholder='{"race":{"date":"2026-09-15","venue":"伊東温泉","race_number":9},"players":[...],"odds":{"trifecta":{...}}}'></textarea>
+
+  <button id="run-dry" type="button" disabled>Phase32でdry-run（保存なし）</button>
+  <p id="run-dry-note" class="note">owner認証と開発AIの安全状態を確認すると実行可能になります。</p>
+  <p id="input-quality" class="note">入力品質：未実行</p>
+
+  <div class="categories" id="prediction-categories">
+    <article class="pick"><h3>的中率重視</h3><div id="cat-hit"><p>未実行</p></div></article>
+    <article class="pick"><h3>バランス</h3><div id="cat-balance"><p>未実行</p></div></article>
+    <article class="pick"><h3>中穴</h3><div id="cat-middle"><p>未実行</p></div></article>
+    <article class="pick"><h3>大穴</h3><div id="cat-longshot"><p>未実行</p></div></article>
+    <article class="pick"><h3>超大穴</h3><div id="cat-super"><p>未実行</p></div></article>
   </div>
 </section>
 
@@ -167,7 +178,10 @@ function showSignedOut(message = '') {
   show('owner-status','未ログイン','pending');
   show('server-owner-status','未ログイン','pending');
   show('dev-owner-status','未ログイン','pending');
-  show('dev-engine-status','未確認','pending'); show('dev-write-status','未確認','pending');
+  show('dev-engine-status','未確認','pending');
+  show('dev-write-status','未確認','pending');
+  element('run-dry').disabled = true;
+  show('run-dry-note','owner認証と開発AIの安全状態を確認すると実行可能になります。','note');
   show('auth-message', message || 'パスワードはSupabaseへ直接送信され、このページのコードには保存しません。', message ? 'note error' : 'note');
 }
 
@@ -246,6 +260,169 @@ async function authenticatedGet(url) {
   return fetch(url,{method:'GET',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+session.access_token,Accept:'application/json'},cache:'no-store',credentials:'omit'});
 }
 
+async function authenticatedPost(url, body) {
+  const session = await refreshSessionIfNeeded();
+  if (!session?.access_token) throw new Error('session_missing');
+  return fetch(url,{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+session.access_token,Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',credentials:'omit'});
+}
+
+function clearCategory(id, text='候補なし') {
+  const box = element(id);
+  box.replaceChildren();
+  const p = document.createElement('p');
+  p.textContent = text;
+  box.appendChild(p);
+}
+
+function resetDryRunResults(text='未実行') {
+  for (const id of ['cat-hit','cat-balance','cat-middle','cat-longshot','cat-super']) clearCategory(id,text);
+}
+
+function appendPick(box, pick) {
+  const item = document.createElement('div');
+  item.className = 'pick-item';
+
+  const combo = document.createElement('div');
+  combo.className = 'combo';
+  combo.textContent = `${pick.rank ?? '-'}位  ${pick.combo_key ?? '-'}`;
+  item.appendChild(combo);
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const odds = pick.odds == null ? 'オッズ未確認' : `${Number(pick.odds).toFixed(1)}倍`;
+  const prob = pick.estimated_probability == null ? '推定率未算出' : `AI暫定推定率 ${(Number(pick.estimated_probability)*100).toFixed(3)}%`;
+  meta.textContent = `${odds} / ${prob}`;
+  item.appendChild(meta);
+
+  if (pick.reason) {
+    const reason = document.createElement('p');
+    reason.textContent = String(pick.reason);
+    item.appendChild(reason);
+  }
+  box.appendChild(item);
+}
+
+function renderCategory(id, category) {
+  const box = element(id);
+  box.replaceChildren();
+  const picks = Array.isArray(category?.picks) ? category.picks : [];
+  if (!picks.length) {
+    const p = document.createElement('p');
+    p.textContent = category?.category_note || '確認済みデータ内では候補なし';
+    box.appendChild(p);
+    return;
+  }
+  for (const pick of picks) appendPick(box, pick);
+  if (category?.category_note) {
+    const note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = category.category_note;
+    box.appendChild(note);
+  }
+}
+
+function renderDryRun(data) {
+  const selected = data?.prediction?.selected_predictions;
+  const cats = selected?.categories || {};
+  renderCategory('cat-hit', cats.hit_priority);
+  renderCategory('cat-balance', cats.balance);
+  renderCategory('cat-middle', cats.middle);
+  renderCategory('cat-longshot', cats.longshot);
+  renderCategory('cat-super', cats.super_longshot);
+
+  const quality = data?.input_quality || {};
+  const count = Number(quality.trifecta_odds_count || 0);
+  const possible = Number(quality.possible_trifecta_count || 0);
+  const coverage = possible > 0 ? ((count / possible) * 100).toFixed(1) : '0.0';
+  const warnings = Array.isArray(quality.warnings) && quality.warnings.length ? ` / 注意: ${quality.warnings.join(' | ')}` : '';
+  show('input-quality', `入力品質：3連単オッズ ${count}/${possible}（${coverage}%）${warnings}`, warnings ? 'note pending' : 'note ok');
+
+  const total = data?.prediction?.validation?.total_picks ?? '-';
+  show('run-dry-note', `dry-run完了：${total}点 / 保存0件。未確認オッズでの補完なし。`, 'note ok');
+}
+
+async function runRealDryRun() {
+  const button = element('run-dry');
+  if (button.disabled || !currentSession) return;
+
+  let parsed;
+  try {
+    const raw = element('race-json').value.trim();
+    if (!raw) throw new Error('empty');
+    parsed = JSON.parse(raw);
+  } catch (_) {
+    show('run-dry-note','JSON形式を確認できません。ファイルを選ぶか、正しいJSONを貼り付けてください。','note error');
+    return;
+  }
+
+  const raceData = parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.race_data ? parsed.race_data : parsed;
+  button.disabled = true;
+  resetDryRunResults('実行中…');
+  show('run-dry-note','Phase32で実レースdry-runを実行しています。DB保存は行いません。','note pending');
+  show('input-quality','入力品質：確認中','note');
+
+  try {
+    const response = await authenticatedPost(DEV_ENGINE_URL,{mode:'dry_run',race_data:raceData});
+    let data = null;
+    try { data = await response.json(); } catch (_) {}
+
+    if (response.status === 401) {
+      clearSession();
+      showSignedOut('ログイン状態を再確認できませんでした。もう一度ログインしてください。');
+      resetDryRunResults('未実行');
+      return;
+    }
+
+    if (!response.ok || data?.success !== true) {
+      const details = Array.isArray(data?.validation_errors) ? data.validation_errors.join(' / ') : (data?.error || `HTTP ${response.status}`);
+      show('run-dry-note',`dry-runできませんでした：${details}`,'note error');
+      resetDryRunResults('入力またはサーバー状態を確認してください');
+      return;
+    }
+
+    const safe =
+      data?.prediction_generated === true &&
+      data?.saved === false &&
+      data?.db_write_enabled === false &&
+      data?.production_prediction_enabled === false &&
+      data?.prediction?.validation?.no_fallback_fill === true &&
+      data?.prediction?.validation?.max_three_per_category === true &&
+      data?.prediction?.validation?.unique_picks === data?.prediction?.validation?.total_picks;
+
+    if (!safe) {
+      show('run-dry-note','安全条件を確認できないため結果表示を停止しました。DB保存状態を確認してください。','note error');
+      resetDryRunResults('安全確認エラー');
+      return;
+    }
+
+    renderDryRun(data);
+  } catch (_) {
+    show('run-dry-note','通信または実行エラーでdry-runできませんでした。','note error');
+    resetDryRunResults('実行失敗');
+  } finally {
+    const ready = currentSession && element('dev-engine-status').classList.contains('ok');
+    button.disabled = !ready;
+  }
+}
+
+async function loadRaceFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (file.size > 2_000_000) {
+    show('run-dry-note','JSONファイルが大きすぎます。2MB以下のファイルを使用してください。','note error');
+    event.target.value = '';
+    return;
+  }
+  try {
+    const text = await file.text();
+    JSON.parse(text);
+    element('race-json').value = text;
+    show('run-dry-note',`JSONファイルを読み込みました：${file.name}`,'note ok');
+  } catch (_) {
+    show('run-dry-note','選択したファイルは有効なJSONとして読み込めませんでした。','note error');
+  }
+}
+
 async function checkOwnerVerification() {
   if (!currentSession) { show('server-owner-status','未ログイン','pending'); return false; }
   show('server-owner-status','確認中…','pending');
@@ -258,32 +435,36 @@ async function checkOwnerVerification() {
     }
     show('server-owner-status','認証済み（owner）','ok');
     show('engine-status', data.prediction_engine_connected ? '接続済み' : '未接続', data.prediction_engine_connected ? 'ok' : 'pending');
-    show('write-status', data.write_mode === 'locked_until_engine' ? 'ロック中' : '状態変更あり・要確認', data.write_mode === 'locked_until_engine' ? 'pending' : 'error');
+    show('write-status', data.write_mode === 'locked_until_engine' ? 'ロック中（安全）' : '状態変更あり・要確認', data.write_mode === 'locked_until_engine' ? 'pending' : 'error');
     return true;
   } catch (_) { show('server-owner-status','確認失敗','error'); return false; }
 }
 
 async function checkDevEngine() {
-  if (!currentSession) { show('dev-owner-status','未ログイン','pending'); show('dev-engine-status','未確認','pending'); show('dev-write-status','未確認','pending'); return false; }
+  if (!currentSession) { show('dev-owner-status','未ログイン','pending'); show('dev-engine-status','未確認','pending'); return false; }
   show('dev-owner-status','確認中…','pending');
-  show('dev-engine-status','確認中…','pending'); show('dev-write-status','未確認','pending'); show('data-source-status','未確認','pending');
+  show('dev-engine-status','確認中…','pending');
   try {
     const response = await authenticatedGet(DEV_ENGINE_URL);
     let data = null; try { data = await response.json(); } catch (_) {}
-    if (!response.ok || data?.success !== true || data?.service !== 'predict-engine-dev' || data?.authenticated !== true || data?.owner !== true || data?.role !== 'owner' || data?.plan !== 'owner') {
+    if (!response.ok || data?.success !== true || data?.owner !== true) {
       show('dev-owner-status','認証できません','error');
       show('dev-engine-status','利用不可','error');
+      element('run-dry').disabled = true;
       return false;
     }
     show('dev-owner-status','認証済み（owner）','ok');
     const dryReady = data.dry_run_enabled === true && data.production_prediction_enabled === false && data.db_write_enabled === false;
-    show('dev-engine-status', dryReady ? '準備済み（dry-runのみ）' : '状態要確認', dryReady ? 'ok' : 'error');
-    show('data-source-status', data.data_source_connected ? '接続済み' : '未接続', data.data_source_connected ? 'ok' : 'pending');
-    show('dev-write-status', data.db_write_enabled === false ? 'OFF（保存なし）' : '状態要確認', data.db_write_enabled === false ? 'pending' : 'error');
-    return dryReady;
+    const partialReady = data.architecture?.engine === 'phase32-partial-odds-no-fill-ts2';
+    show('dev-engine-status', dryReady && partialReady ? '準備済み（部分オッズ対応）' : dryReady ? 'dry-run準備済み・版要確認' : '状態要確認', dryReady && partialReady ? 'ok' : dryReady ? 'pending' : 'error');
+    show('data-source-status', data.data_source_connected ? '接続済み' : '未接続（JKA回答待ち）', data.data_source_connected ? 'ok' : 'pending');
+    if (data.db_write_enabled === false) { show('dev-write-status','OFF（保存なし）','ok'); show('write-status','DB書き込みOFF（安全）','pending'); } else { show('dev-write-status','状態要確認','error'); }
+    element('run-dry').disabled = !(dryReady && partialReady);
+    return dryReady && partialReady;
   } catch (_) {
     show('dev-owner-status','確認失敗','error');
     show('dev-engine-status','確認失敗','error');
+    element('run-dry').disabled = true;
     return false;
   }
 }
@@ -302,11 +483,11 @@ async function checkStatus() {
     const response = await fetch(STATUS_URL,{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',signal:controller.signal});
     if (!response.ok) throw new Error('HTTP '+response.status);
     const data = await response.json();
-    if (data.success !== true || data.service !== 'predict-status' || typeof data.api_connected !== 'boolean' || typeof data.storage_ready !== 'boolean' || typeof data.prediction_engine_connected !== 'boolean' || typeof data.write_mode !== 'string') throw new Error('invalid_status');
+    if (data.success !== true || data.service !== 'predict-status') throw new Error('invalid_status');
     show('api-status', data.api_connected ? '接続済み' : '未接続', data.api_connected ? 'ok' : 'pending');
     show('storage-status', data.storage_ready ? '接続済み' : '未接続', data.storage_ready ? 'ok' : 'pending');
     show('engine-status', data.prediction_engine_connected ? '接続済み' : '未接続', data.prediction_engine_connected ? 'ok' : 'pending');
-    show('write-status', data.write_mode === 'locked_until_engine' ? 'ロック中' : 'ロック状態を要確認', data.write_mode === 'locked_until_engine' ? 'pending' : 'error');
+    show('write-status', data.write_mode === 'locked_until_engine' ? 'ロック中（安全）' : 'ロック状態を要確認', data.write_mode === 'locked_until_engine' ? 'pending' : 'error');
     show('status-message','公開ステータスAPIを確認しました。','note');
     if (currentSession) {
       await checkOwnerVerification();
@@ -314,7 +495,7 @@ async function checkStatus() {
     }
   } catch (error) {
     show('api-status','接続を確認できません','error');
-    show('storage-status','未確認（通信失敗）','pending'); show('engine-status','未確認','pending'); show('write-status','未確認','pending');
+    show('storage-status','未確認（通信失敗）','pending');
     show('status-message', error.name === 'AbortError' ? '接続確認がタイムアウトしました。' : '状態を取得できませんでした。','note error');
   } finally {
     clearTimeout(timeout);
@@ -326,6 +507,8 @@ async function checkStatus() {
 element('login').addEventListener('click',login);
 element('logout').addEventListener('click',logout);
 element('refresh').addEventListener('click',checkStatus);
+element('run-dry').addEventListener('click',runRealDryRun);
+element('race-file').addEventListener('change',loadRaceFile);
 element('password').addEventListener('keydown',event=>{if(event.key==='Enter')login();});
 (async()=>{await restoreLogin();await checkStatus();})();
 </script>
