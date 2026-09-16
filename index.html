@@ -69,6 +69,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
       <div class="status-row"><dt>本番サーバー owner認証</dt><dd id="server-owner-status" class="pending">未ログイン</dd></div>
       <div class="status-row"><dt>開発AI owner認証</dt><dd id="dev-owner-status" class="pending">未ログイン</dd></div>
       <div class="status-row"><dt>Phase32 実レースdry-run</dt><dd id="dev-engine-status" class="pending">未確認</dd></div>
+      <div class="status-row"><dt>履歴生成パイプライン</dt><dd id="history-pipeline-status" class="pending">未確認</dd></div>
       <div class="status-row"><dt>履歴バックテスト/確率校正</dt><dd id="backtest-engine-status" class="pending">未確認</dd></div>
       <div class="status-row"><dt>開発AIのDB書き込み</dt><dd id="dev-write-status" class="pending">未確認</dd></div>
       <div class="status-row"><dt>本番データ自動取得</dt><dd id="data-source-status" class="pending">未接続</dd></div>
@@ -108,6 +109,33 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
   </div>
 </section>
 
+<section class="card" aria-labelledby="history-title">
+  <h2 id="history-title">結果確定 → 履歴JSON生成</h2>
+  <p class="notice">開発検証専用です。予測スナップショットと確定結果から履歴を生成し、そのままバックテストします。DB保存・本番予想・外部データ取得は行いません。</p>
+
+  <label for="history-snapshot-file">予測スナップショットJSON</label>
+  <input id="history-snapshot-file" type="file" accept=".json,application/json">
+  <p id="history-snapshot-note" class="note">レース前に保存した phase32-snapshot-...json を選択してください。</p>
+
+  <label for="result-combo">確定3連単</label>
+  <input id="result-combo" type="text" inputmode="numeric" autocomplete="off" placeholder="例：1-3-2">
+
+  <label for="result-odds">確定オッズ（倍）</label>
+  <input id="result-odds" type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="例：9.1">
+
+  <label for="result-time">結果確定時刻</label>
+  <input id="result-time" type="datetime-local" step="1">
+  <p class="note">端末の現地時刻として入力します。予測スナップショットの保存時刻より後である必要があります。</p>
+
+  <button id="run-history" type="button" disabled>履歴生成 → バックテスト（保存なし）</button>
+  <button id="save-history" class="secondary" type="button" disabled>履歴JSONを端末へ保存</button>
+  <p id="history-note" class="note">owner認証と履歴パイプラインの安全状態を確認すると実行可能になります。</p>
+
+  <label for="history-json">生成した履歴JSON</label>
+  <textarea id="history-json" spellcheck="false" readonly placeholder="実行後に、backtest-engine-devへそのまま渡せるJSONを表示します。"></textarea>
+  <p id="history-backtest-summary" class="note">バックテスト：未実行</p>
+</section>
+
 <section class="card" aria-labelledby="backtest-title">
   <h2 id="backtest-title">履歴バックテスト / 確率校正</h2>
   <p class="notice">開発検証専用です。履歴予想と確定結果を入力して集計します。外部データ取得・DB保存・本番予想は行いません。</p>
@@ -142,12 +170,16 @@ const SUPABASE_KEY = 'sb_publishable_kmR4KI8H1WooocHTrrdtKw_b2v49Fp1';
 const STATUS_URL = SUPABASE_URL + '/functions/v1/predict-status';
 const OWNER_VERIFY_URL = SUPABASE_URL + '/functions/v1/predict-race';
 const DEV_ENGINE_URL = SUPABASE_URL + '/functions/v1/predict-engine-dev';
+const HISTORY_PIPELINE_URL = SUPABASE_URL + '/functions/v1/history-pipeline-dev';
 const BACKTEST_URL = SUPABASE_URL + '/functions/v1/backtest-engine-dev';
 const SESSION_KEY = 'keirin-ai-owner-session-v1';
 
 let currentSession = null;
 let currentProfile = null;
 let lastDryRunSnapshot = null;
+let loadedHistorySnapshot = null;
+let lastHistoryBacktestPayload = null;
+let historyPipelineReady = false;
 
 const element = id => document.getElementById(id);
 function show(id, text, className = '') { const el = element(id); el.textContent = text; el.className = className; }
@@ -207,13 +239,20 @@ function showSignedOut(message = '') {
   show('server-owner-status','未ログイン','pending');
   show('dev-owner-status','未ログイン','pending');
   show('dev-engine-status','未確認','pending');
+  show('history-pipeline-status','未確認','pending');
   show('backtest-engine-status','未確認','pending');
   show('dev-write-status','未確認','pending');
   element('run-dry').disabled = true;
   element('save-snapshot').disabled = true;
   lastDryRunSnapshot = null;
+  loadedHistorySnapshot = null;
+  lastHistoryBacktestPayload = null;
+  historyPipelineReady = false;
+  element('run-history').disabled = true;
+  element('save-history').disabled = true;
   element('run-backtest').disabled = true;
   show('run-dry-note','owner認証と開発AIの安全状態を確認すると実行可能になります。','note');
+  show('history-note','owner認証と履歴パイプラインの安全状態を確認すると実行可能になります。','note');
   show('backtest-note','owner認証とバックテストエンジンの安全状態を確認すると実行可能になります。','note');
   show('auth-message', message || 'パスワードはSupabaseへ直接送信され、このページのコードには保存しません。', message ? 'note error' : 'note');
 }
@@ -257,6 +296,7 @@ async function login() {
     showSignedIn();
     await checkOwnerVerification();
     await checkDevEngine();
+    await checkHistoryPipeline();
     await checkBacktestEngine();
   } catch (_) {
     clearSession();
@@ -282,6 +322,7 @@ async function restoreLogin() {
     showSignedIn();
     await checkOwnerVerification();
     await checkDevEngine();
+    await checkHistoryPipeline();
     await checkBacktestEngine();
   } catch (_) {
     clearSession();
@@ -526,18 +567,180 @@ async function checkDevEngine() {
     }
     show('dev-owner-status','認証済み（owner）','ok');
     const dryReady = data.dry_run_enabled === true && data.production_prediction_enabled === false && data.db_write_enabled === false;
-    const partialReady = data.architecture?.engine === 'phase32-partial-odds-no-fill-ts2';
-    show('dev-engine-status', dryReady && partialReady ? '準備済み（部分オッズ対応）' : dryReady ? 'dry-run準備済み・版要確認' : '状態要確認', dryReady && partialReady ? 'ok' : dryReady ? 'pending' : 'error');
+    const versionReady = data.architecture?.engine === 'phase32-hit-priority-all210-v1' && data.hit_priority_scope === 'all_combinations' && data.odds_band_scope === 'confirmed_odds_only';
+    show('dev-engine-status', dryReady && versionReady ? '準備済み（v14・全210対応）' : dryReady ? 'dry-run準備済み・版要確認' : '状態要確認', dryReady && versionReady ? 'ok' : dryReady ? 'pending' : 'error');
     show('data-source-status', data.data_source_connected ? '接続済み' : '未接続（JKA回答待ち）', data.data_source_connected ? 'ok' : 'pending');
     if (data.db_write_enabled === false) { show('dev-write-status','OFF（保存なし）','ok'); show('write-status','DB書き込みOFF（安全）','pending'); } else { show('dev-write-status','状態要確認','error'); }
-    element('run-dry').disabled = !(dryReady && partialReady);
-    return dryReady && partialReady;
+    element('run-dry').disabled = !(dryReady && versionReady);
+    return dryReady && versionReady;
   } catch (_) {
     show('dev-owner-status','確認失敗','error');
     show('dev-engine-status','確認失敗','error');
     element('run-dry').disabled = true;
     return false;
   }
+}
+
+function validOutcomeCombo(value) {
+  if (!/^\d+-\d+-\d+$/.test(value)) return false;
+  const cars = value.split('-');
+  return new Set(cars).size === 3;
+}
+
+function updateHistoryRunState() {
+  const canRun = Boolean(currentSession && historyPipelineReady && loadedHistorySnapshot);
+  element('run-history').disabled = !canRun;
+}
+
+async function checkHistoryPipeline() {
+  if (!currentSession) {
+    historyPipelineReady = false;
+    show('history-pipeline-status','未ログイン','pending');
+    updateHistoryRunState();
+    return false;
+  }
+  show('history-pipeline-status','確認中…','pending');
+  try {
+    const response = await authenticatedGet(HISTORY_PIPELINE_URL);
+    let data = null; try { data = await response.json(); } catch (_) {}
+    const ready = response.ok && data?.success === true && data?.owner === true && data?.dry_run_enabled === true && data?.db_write_enabled === false && data?.external_fetch_enabled === false && data?.production_prediction_enabled === false;
+    historyPipelineReady = ready;
+    show('history-pipeline-status', ready ? '準備済み（保存なし）' : '状態要確認', ready ? 'ok' : 'error');
+    show('history-note', ready ? '履歴生成とバックテストを安全なdry-runで実行できます。' : '履歴パイプラインの安全状態を確認してください。', ready ? 'note ok' : 'note error');
+    updateHistoryRunState();
+    return ready;
+  } catch (_) {
+    historyPipelineReady = false;
+    show('history-pipeline-status','確認失敗','error');
+    show('history-note','履歴パイプラインへ接続できませんでした。','note error');
+    updateHistoryRunState();
+    return false;
+  }
+}
+
+async function loadHistorySnapshotFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (file.size > 5_000_000) {
+    show('history-snapshot-note','JSONファイルが大きすぎます。5MB以下のファイルを使用してください。','note error');
+    event.target.value = '';
+    return;
+  }
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const race = parsed?.race_data?.race;
+    const prediction = parsed?.engine_response?.prediction;
+    if (!race || !prediction?.selected_predictions || !Array.isArray(prediction?.trifecta_scores) || typeof parsed?.captured_at !== 'string') {
+      throw new Error('snapshot_invalid');
+    }
+    loadedHistorySnapshot = parsed;
+    lastHistoryBacktestPayload = null;
+    element('save-history').disabled = true;
+    element('history-json').value = '';
+    show('history-backtest-summary','バックテスト：未実行','note');
+    show('history-snapshot-note',`読み込み済み：${file.name} / ${race.date ?? '-'} ${race.venue ?? '-'} ${race.race_number ?? '-'}R / 予測時刻 ${parsed.captured_at}`,'note ok');
+    updateHistoryRunState();
+  } catch (_) {
+    loadedHistorySnapshot = null;
+    lastHistoryBacktestPayload = null;
+    element('save-history').disabled = true;
+    element('history-json').value = '';
+    show('history-snapshot-note','有効な予測スナップショットJSONとして読み込めませんでした。','note error');
+    updateHistoryRunState();
+  }
+}
+
+async function runHistoryPipeline() {
+  const button = element('run-history');
+  if (button.disabled || !currentSession || !loadedHistorySnapshot) return;
+
+  const outcomeCombo = element('result-combo').value.trim();
+  const settlementOdds = Number(element('result-odds').value);
+  const resultLocal = element('result-time').value;
+
+  if (!validOutcomeCombo(outcomeCombo)) {
+    show('history-note','確定3連単は「1-3-2」の形式で、異なる3車を入力してください。','note error');
+    return;
+  }
+  if (!Number.isFinite(settlementOdds) || settlementOdds <= 0) {
+    show('history-note','確定オッズは0より大きい数値を入力してください。','note error');
+    return;
+  }
+  if (!resultLocal) {
+    show('history-note','結果確定時刻を入力してください。','note error');
+    return;
+  }
+  const resultDate = new Date(resultLocal);
+  if (Number.isNaN(resultDate.getTime())) {
+    show('history-note','結果確定時刻を確認できません。','note error');
+    return;
+  }
+  const capturedAt = new Date(loadedHistorySnapshot.captured_at);
+  if (Number.isNaN(capturedAt.getTime()) || resultDate.getTime() <= capturedAt.getTime()) {
+    show('history-note','結果確定時刻は予測スナップショットの保存時刻より後にしてください。','note error');
+    return;
+  }
+
+  button.disabled = true;
+  element('save-history').disabled = true;
+  show('history-note','履歴生成 → バックテストを実行しています。DB保存は行いません。','note pending');
+  show('history-backtest-summary','バックテスト：実行中…','note pending');
+
+  const body = {
+    mode:'dry_run',
+    snapshot:loadedHistorySnapshot,
+    settlement:{
+      outcome_combo:outcomeCombo,
+      settlement_odds:settlementOdds,
+      result_timestamp:resultDate.toISOString()
+    }
+  };
+
+  try {
+    const response = await authenticatedPost(HISTORY_PIPELINE_URL, body);
+    let data = null; try { data = await response.json(); } catch (_) {}
+    if (response.status === 401) {
+      clearSession();
+      showSignedOut('ログイン状態を再確認できませんでした。もう一度ログインしてください。');
+      return;
+    }
+    const safe = response.ok && data?.success === true && data?.saved === false && data?.db_write_enabled === false && data?.external_fetch_enabled === false && data?.production_prediction_enabled === false && data?.history_record && data?.backtest_result;
+    if (!safe) {
+      const details = Array.isArray(data?.validation_errors) ? data.validation_errors.join(' / ') : (data?.error || `HTTP ${response.status}`);
+      show('history-note',`履歴生成できませんでした：${details}`,'note error');
+      show('history-backtest-summary','バックテスト：未実行','note error');
+      return;
+    }
+
+    const backtestPayload = data.backtest_request?.mode === 'dry_run' && data.backtest_request?.payload
+      ? data.backtest_request
+      : {mode:'dry_run',payload:{records:[data.history_record]}};
+    lastHistoryBacktestPayload = backtestPayload;
+    element('history-json').value = JSON.stringify(backtestPayload,null,2);
+    element('backtest-json').value = JSON.stringify(backtestPayload,null,2);
+    element('save-history').disabled = false;
+    show('history-note','履歴JSONを生成しました。DB保存0件のまま、同じ履歴でバックテストまで完了しています。','note ok');
+    renderBacktestResult({result:data.backtest_result});
+    const bt = data.backtest_result;
+    const roi = bt?.selection_performance?.roi_multiple;
+    show('history-backtest-summary',`バックテスト：${bt?.records ?? 0}レース / 買い目 ${bt?.selection_performance?.picks ?? 0}点 / 的中 ${bt?.selection_performance?.hits ?? 0} / ROI ${roi == null ? '-' : Number(roi).toFixed(3)+'倍'}`,'note ok');
+  } catch (_) {
+    show('history-note','通信または実行エラーで履歴生成できませんでした。','note error');
+    show('history-backtest-summary','バックテスト：実行失敗','note error');
+  } finally {
+    updateHistoryRunState();
+  }
+}
+
+function saveHistoryJson() {
+  if (!lastHistoryBacktestPayload) return;
+  const race = loadedHistorySnapshot?.race_data?.race || {};
+  const date = safeFilenamePart(race.date || 'date');
+  const venue = safeFilenamePart(race.venue || 'venue');
+  const no = safeFilenamePart(race.race_number || 'R');
+  downloadJson(`backtest-history-${date}-${venue}-${no}.json`, lastHistoryBacktestPayload);
+  show('history-note','履歴JSONを端末へ保存しました。backtest-engine-devへそのまま読み込めます。','note ok');
 }
 
 async function checkBacktestEngine() {
@@ -683,6 +886,7 @@ async function checkStatus() {
     if (currentSession) {
       await checkOwnerVerification();
       await checkDevEngine();
+      await checkHistoryPipeline();
       await checkBacktestEngine();
     }
   } catch (error) {
@@ -702,6 +906,9 @@ element('refresh').addEventListener('click',checkStatus);
 element('run-dry').addEventListener('click',runRealDryRun);
 element('save-snapshot').addEventListener('click',savePredictionSnapshot);
 element('race-file').addEventListener('change',loadRaceFile);
+element('history-snapshot-file').addEventListener('change',loadHistorySnapshotFile);
+element('run-history').addEventListener('click',runHistoryPipeline);
+element('save-history').addEventListener('click',saveHistoryJson);
 element('run-backtest').addEventListener('click',runBacktestDryRun);
 element('backtest-file').addEventListener('change',loadBacktestFile);
 element('password').addEventListener('keydown',event=>{if(event.key==='Enter')login();});
