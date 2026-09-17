@@ -111,7 +111,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
 
 <section class="card" aria-labelledby="history-title">
   <h2 id="history-title">結果確定 → 履歴JSON生成</h2>
-  <p class="notice">開発検証専用です。予測スナップショットと確定結果から履歴を生成し、そのままバックテストします。DB保存・本番予想・外部データ取得は行いません。</p>
+  <p class="notice">開発検証専用です。予測スナップショットと確定結果から履歴を生成し、そのままバックテストします。前向き検証と再現・旧データを分離し、DB保存・本番予想・外部データ取得は行いません。</p>
 
   <label for="history-snapshot-file">予測スナップショットJSON</label>
   <input id="history-snapshot-file" type="file" accept=".json,application/json">
@@ -125,7 +125,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
 
   <label for="result-time">結果確定時刻</label>
   <input id="result-time" type="datetime-local" step="1">
-  <p class="note">端末の現地時刻として入力します。予測スナップショットの保存時刻より後である必要があります。</p>
+  <p class="note">端末の現地時刻として入力します。前向き検証ではスナップショット保存後、再現・旧データでは実際の結果確定時刻を入力してください。</p>
 
   <button id="run-history" type="button" disabled>履歴生成 → バックテスト（保存なし）</button>
   <button id="save-history" class="secondary" type="button" disabled>履歴JSONを端末へ保存</button>
@@ -658,6 +658,12 @@ function validOutcomeCombo(value) {
     new Set(cars).size === 3;
 }
 
+function historyEvaluationScope(snapshot) {
+  const prospective = snapshot?.validation_mode === 'prospective-only' &&
+    snapshot?.snapshot_eligibility?.prospective === true;
+  return prospective ? 'prospective' : 'replay_or_legacy';
+}
+
 function updateHistoryRunState() {
   const canRun = Boolean(currentSession && historyPipelineReady && loadedHistorySnapshot);
   element('run-history').disabled = !canRun;
@@ -746,10 +752,12 @@ async function loadHistorySnapshotFile(event) {
     show('history-backtest-summary','バックテスト：未実行','note');
 
     const localCaptured = new Date(parsed.captured_at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'});
+    const evaluationScope = historyEvaluationScope(parsed);
+    const scopeLabel = evaluationScope === 'prospective' ? '前向き検証' : '再現・旧データ';
     show(
       'history-snapshot-note',
-      `読み込み済み：${file.name} / ${race.date ?? '-'} ${race.venue ?? '-'} ${race.race_number ?? '-'}R / 予測時刻 ${localCaptured}（日本時間） / 全210確率確認済み`,
-      'note ok'
+      `読み込み済み：${file.name} / ${race.date ?? '-'} ${race.venue ?? '-'} ${race.race_number ?? '-'}R / スナップショット時刻 ${localCaptured}（日本時間） / ${scopeLabel} / 全210確率確認済み`,
+      evaluationScope === 'prospective' ? 'note ok' : 'note pending'
     );
     updateHistoryRunState();
   } catch (_) {
@@ -788,8 +796,13 @@ async function runHistoryPipeline() {
     return;
   }
   const capturedAt = new Date(loadedHistorySnapshot.captured_at);
-  if (Number.isNaN(capturedAt.getTime()) || resultDate.getTime() <= capturedAt.getTime()) {
-    show('history-note','結果確定時刻は予測スナップショットの保存時刻より後にしてください。','note error');
+  const evaluationScope = historyEvaluationScope(loadedHistorySnapshot);
+  if (Number.isNaN(capturedAt.getTime())) {
+    show('history-note','予測スナップショットの保存時刻を確認できません。','note error');
+    return;
+  }
+  if (evaluationScope === 'prospective' && resultDate.getTime() <= capturedAt.getTime()) {
+    show('history-note','前向き検証では、結果確定時刻を予測スナップショットの保存時刻より後にしてください。','note error');
     return;
   }
 
@@ -800,6 +813,8 @@ async function runHistoryPipeline() {
 
   const body = {
     mode:'dry_run',
+    evaluation_scope:evaluationScope,
+    require_prospective:evaluationScope === 'prospective',
     snapshot:loadedHistorySnapshot,
     settlement:{
       outcome_combo:outcomeCombo,
