@@ -123,9 +123,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
   <label for="result-odds">確定オッズ（倍）</label>
   <input id="result-odds" type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="例：9.1">
 
-  <label for="result-time">結果確定時刻</label>
+  <label for="result-time">結果確定時刻（前向き検証は必須）</label>
   <input id="result-time" type="datetime-local" step="1">
-  <p class="note">端末の現地時刻として入力します。前向き検証ではスナップショット保存後、再現・旧データでは実際の結果確定時刻を入力してください。</p>
+  <p class="note">端末の現地時刻として入力します。前向き検証ではスナップショット保存後の時刻が必須です。再現・旧データで正確な時刻が不明な場合は、空欄のまま実行できます（不明として記録）。</p>
 
   <button id="run-history" type="button" disabled>履歴生成 → バックテスト（保存なし）</button>
   <button id="save-history" class="secondary" type="button" disabled>履歴JSONを端末へ保存</button>
@@ -786,21 +786,25 @@ async function runHistoryPipeline() {
     show('history-note','確定オッズは0より大きい数値を入力してください。','note error');
     return;
   }
-  if (!resultLocal) {
-    show('history-note','結果確定時刻を入力してください。','note error');
-    return;
-  }
-  const resultDate = new Date(resultLocal);
-  if (Number.isNaN(resultDate.getTime())) {
-    show('history-note','結果確定時刻を確認できません。','note error');
-    return;
-  }
-  const capturedAt = new Date(loadedHistorySnapshot.captured_at);
   const evaluationScope = historyEvaluationScope(loadedHistorySnapshot);
+  const capturedAt = new Date(loadedHistorySnapshot.captured_at);
   if (Number.isNaN(capturedAt.getTime())) {
     show('history-note','予測スナップショットの保存時刻を確認できません。','note error');
     return;
   }
+
+  let resultDate = null;
+  if (resultLocal) {
+    resultDate = new Date(resultLocal);
+    if (Number.isNaN(resultDate.getTime())) {
+      show('history-note','結果確定時刻を確認できません。','note error');
+      return;
+    }
+  } else if (evaluationScope === 'prospective') {
+    show('history-note','前向き検証では結果確定時刻を入力してください。','note error');
+    return;
+  }
+
   if (evaluationScope === 'prospective' && resultDate.getTime() <= capturedAt.getTime()) {
     show('history-note','前向き検証では、結果確定時刻を予測スナップショットの保存時刻より後にしてください。','note error');
     return;
@@ -819,7 +823,8 @@ async function runHistoryPipeline() {
     settlement:{
       outcome_combo:outcomeCombo,
       settlement_odds:settlementOdds,
-      result_timestamp:resultDate.toISOString()
+      result_timestamp:resultDate ? resultDate.toISOString() : null,
+      result_time_unknown:resultDate === null
     }
   };
 
@@ -1146,3 +1151,4 @@ element('password').addEventListener('keydown',event=>{if(event.key==='Enter')lo
 </script>
 </body>
 </html>
+
