@@ -1,0 +1,32 @@
+name: keirin-ai regression
+
+on:
+  push:
+    branches:
+      - main
+      - dev-golden-dataset-ci
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run web and safety regression checks
+        run: python tests/test_regression.py
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Run Phase32 engine contract tests
+        run: deno test tests/phase32_contract_test.ts
