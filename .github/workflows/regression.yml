@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - dev-golden-dataset-ci
+      - dev-training-capture-v1
   pull_request:
     branches:
       - main
@@ -28,5 +28,5 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Run Phase32 engine contract tests
-        run: deno test tests/phase32_contract_test.ts
+      - name: Run engine and training-input contract tests
+        run: deno test tests/phase32_contract_test.ts tests/training_input_test.ts
