@@ -2,7 +2,7 @@
 
 ## Current stage
 
-The repository can now capture a leakage-safe `training_input` inside prospective history records and convert eligible history JSON into rider-level rows.
+The repository can capture a leakage-safe `training_input` inside prospective history records and convert eligible history JSON into rider-level rows.
 
 A record is accepted for supervised training only when all of the following are true:
 
@@ -49,20 +49,31 @@ Targets are derived only after the race from top-level `outcome_combo`:
 
 Settlement odds and result timestamps are not exposed as model features.
 
-## Planned LightGBM integration
+## LightGBM position-model candidate
 
-The first ML candidate should preserve the existing Phase32 interface rather than replacing the web/API contract.
+The first offline ML candidate preserves the existing Phase32/web contract instead of replacing it.
 
-Proposed flow:
+Implemented development flow:
 
-1. Train position-specific models for 1st, 2nd, and 3rd place using rider-level prospective data.
-2. Score every rider for each position.
-3. Generate all valid ordered triples.
-4. Combine the three position scores for each triple.
-5. Normalize across all valid triples to produce a 210-combination probability table for a seven-rider race.
-6. Compare against the current Phase32 baseline using the existing backtest metrics.
-7. Calibrate probabilities only after enough prospective validation data exists.
-8. Keep odds-band selection separate from raw model scoring; monetary EV remains disabled until probability calibration is validated.
+1. `train_position_models.py` trains independent LightGBM LambdaRank models for 1st, 2nd, and 3rd place from rider-level prospective data.
+2. Raw position-ranking scores are converted with a within-race softmax only to create normalized position distributions. They remain **uncalibrated**.
+3. `trifecta_adapter.py` combines the three position distributions over all valid ordered triples.
+4. A seven-rider race is required to produce exactly 210 unique trifecta combinations with probability mass approximately 1.
+5. Offline validation reports position-ranking metrics plus trifecta Top-1/3/5/10 and mean reciprocal rank.
+6. The generated model files are development artifacts only and are not connected to `predict-engine-dev`.
+
+Training example after eligible prospective history has been accumulated:
+
+```bash
+python ml/build_training_dataset.py path/to/history-json-dir \
+  --output artifacts/training-riders.csv \
+  --summary artifacts/training-summary.json
+
+python ml/train_position_models.py artifacts/training-riders.csv \
+  --output-dir artifacts/lightgbm-position-models-v1
+```
+
+The trainer currently uses rider performance, line, recent-form, condition, bank-fit, and parsed-comment fields as model features. Prediction-time trifecta odds are not used as model features; odds-band selection remains a later layer.
 
 ## Evaluation rules
 
@@ -70,8 +81,12 @@ Proposed flow:
 - Never mix replay/legacy records into formal prospective accuracy claims.
 - Keep all rows from the same race in the same split.
 - Compare ML candidates against the preserved Phase32 baseline before promotion.
+- Treat softmax-normalized LightGBM scores and the resulting trifecta table as uncalibrated until prospective calibration is validated.
+- Do not enable monetary EV from uncalibrated scores.
 - Do not enable production prediction, external fetching, or database writes merely because an ML model exists.
 
 ## Data sufficiency
 
-No fixed minimum race count is asserted here. The repository should first accumulate prospective, pre-result, settled records and report the actual class balance and coverage. Model training and promotion criteria should be decided from those observed data rather than from an arbitrary threshold.
+No production-sufficiency race count is asserted here. The trainer has a small technical minimum only to prevent malformed development runs; that threshold is **not** a claim that the resulting model is statistically ready for use.
+
+The next evidence gate is to accumulate genuine prospective, pre-result, settled records and report the observed sample size, class behavior, missing-feature coverage, chronological validation results, and comparison with the preserved Phase32 baseline. Promotion criteria should then be defined from those observed data rather than from an arbitrary race-count threshold.
