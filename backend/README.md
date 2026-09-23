@@ -18,6 +18,9 @@ or deployed HTTP calls are used. These tests do not verify authentication,
 CORS, browser integration, or production deployment.
 
 Baseline: 3 passed, 3 failed. Patched: 6 passed.
-No Edge Functions have been redeployed by this change.
+backtest-engine-dev was deployed as version 5 on 2026-09-23, with verify_jwt=true.
+Retrieved deployed source matches this branch. Regression suite: 6 passed.
+Unauthenticated HTTP request returns 401. Prediction row count before/after: 0.
+Authenticated live end-to-end behavior remains unverified; no owner session is available.
 Actual saved input checked so far is raw race input, not a prediction snapshot.
 A matching confirmed settlement is still required for real-race replay.
