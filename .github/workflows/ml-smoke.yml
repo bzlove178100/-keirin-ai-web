@@ -19,6 +19,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONPATH: .
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
