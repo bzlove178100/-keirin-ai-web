@@ -39,3 +39,10 @@ def test_safety_contracts_remain_off():
     assert "PRODUCTION_DATA_SOURCE_CONNECTED=false" in data_source
     assert "DB_WRITE_ENABLED=false" in persistence
     assert "PERSISTENCE_MODE='disabled_until_validation'" in persistence
+
+
+if __name__ == "__main__":
+    test_golden_manifest_contract()
+    test_web_history_and_backtest_contract_present()
+    test_safety_contracts_remain_off()
+    print("keirin-ai regression checks: PASS")
