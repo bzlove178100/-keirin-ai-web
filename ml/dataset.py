@@ -15,14 +15,14 @@ def _num(value: Any) -> float | None:
         return None
 
 
-def _iso(value: Any) -> datetime:
+def _time_key(value: Any) -> float:
     if not isinstance(value, str) or not value:
-        return datetime.min
+        return float("-inf")
     text = value.replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(text)
+        return datetime.fromisoformat(text).timestamp()
     except ValueError:
-        return datetime.min
+        return float("-inf")
 
 
 def supervised_eligibility(record: dict[str, Any]) -> tuple[bool, str]:
@@ -64,7 +64,7 @@ def select_latest_eligible_per_race(records: Iterable[dict[str, Any]]) -> tuple[
             excluded["race_id_missing"] = excluded.get("race_id_missing", 0) + 1
             continue
         current = selected.get(race_id)
-        if current is None or _iso(record.get("prediction_timestamp")) > _iso(current.get("prediction_timestamp")):
+        if current is None or _time_key(record.get("prediction_timestamp")) > _time_key(current.get("prediction_timestamp")):
             selected[race_id] = record
     return list(selected.values()), excluded
 
@@ -155,7 +155,7 @@ def build_rows(records: Iterable[dict[str, Any]]) -> tuple[list[dict[str, Any]],
     materialized = list(records)
     selected, excluded = select_latest_eligible_per_race(materialized)
     rows: list[dict[str, Any]] = []
-    for record in sorted(selected, key=lambda r: (str(r.get("prediction_timestamp") or ""), str(r.get("race_id") or ""))):
+    for record in sorted(selected, key=lambda r: (_time_key(r.get("prediction_timestamp")), str(r.get("race_id") or ""))):
         rows.extend(rider_rows(record))
     summary = {
         "input_records": len(materialized),
