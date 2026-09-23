@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - dev-lightgbm-position-models-v1
+      - dev-lightgbm-offline-inference-v1
   pull_request:
     branches:
       - main
