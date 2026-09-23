@@ -70,7 +70,7 @@ def test_predict_endpoint_keeps_kdreams_sanitizer_before_scoring():
     assert sanitize_pos < quality_pos < predict_pos
 
 
-def test_history_builder_safety_and_scope_contract():
+def test_history_builder_safety_scope_and_training_eligibility_contract():
     source = (ROOT / "supabase/functions/history-builder-dev/index.ts").read_text(encoding="utf-8")
     required = [
         "db_write_enabled:false",
@@ -81,14 +81,22 @@ def test_history_builder_safety_and_scope_contract():
         "unknown result time is allowed only for replay_or_legacy",
         "prediction_timestamp must be earlier than result_timestamp for prospective evaluation",
         "exclude from prospective accuracy claims",
+        "keirin-training-input-v1",
+        "backtest-record-v2",
+        "training_input:trainingInput",
+        "training_eligibility",
+        "supervised_training:supervisedTraining",
+        "contains K-Dreams no-ticket marker 9999.9",
+        "evaluation_scope==='prospective'&&temporal_order==='prediction_before_result'&&trainingInput!==null",
     ]
     for text in required:
-        assert text in source, f"missing history safety marker: {text}"
+        assert text in source, f"missing history/training safety marker: {text}"
 
 
-def test_history_pipeline_safety_and_temporal_contract():
+def test_history_pipeline_safety_temporal_and_training_capture_contract():
     source = (ROOT / "supabase/functions/history-pipeline-dev/index.ts").read_text(encoding="utf-8")
     required = [
+        "buildTrainingInput",
         "db_write_enabled:false",
         "external_fetch_enabled:false",
         "production_prediction_enabled:false",
@@ -96,10 +104,30 @@ def test_history_pipeline_safety_and_temporal_contract():
         "unknown result time is allowed only for replay_or_legacy",
         "snapshot.captured_at must be earlier than settlement.result_timestamp for prospective evaluation",
         "snapshot is not eligible for prospective evaluation",
+        "training_input:trainingInput",
+        "supervised_training_eligible",
+        "supervised training is disabled",
         "No database writes or external result fetches occur",
     ]
     for text in required:
-        assert text in source, f"missing pipeline safety marker: {text}"
+        assert text in source, f"missing pipeline training/safety marker: {text}"
+
+
+def test_training_input_module_removes_no_ticket_markers_and_excludes_targets():
+    source = (ROOT / "supabase/functions/history-pipeline-dev/training_input.ts").read_text(encoding="utf-8")
+    required = [
+        "keirin-training-input-v1",
+        "ignored_combos",
+        "Number(raw[key])===9999.9",
+        "delete raw[key]",
+        "removed_combos",
+        "evaluation_scope:evaluationScope",
+    ]
+    for text in required:
+        assert text in source, f"missing training input marker: {text}"
+    forbidden = ["outcome_combo", "settlement_odds", "result_timestamp"]
+    for text in forbidden:
+        assert text not in source, f"target leakage field present in training input builder: {text}"
 
 
 def test_backtest_contract_separates_scope_roi_and_probability_quality():
@@ -129,7 +157,8 @@ if __name__ == "__main__":
     test_web_history_and_backtest_contract_present()
     test_prediction_safety_contracts_remain_off()
     test_predict_endpoint_keeps_kdreams_sanitizer_before_scoring()
-    test_history_builder_safety_and_scope_contract()
-    test_history_pipeline_safety_and_temporal_contract()
+    test_history_builder_safety_scope_and_training_eligibility_contract()
+    test_history_pipeline_safety_temporal_and_training_capture_contract()
+    test_training_input_module_removes_no_ticket_markers_and_excludes_targets()
     test_backtest_contract_separates_scope_roi_and_probability_quality()
     print("keirin-ai regression checks: PASS")
