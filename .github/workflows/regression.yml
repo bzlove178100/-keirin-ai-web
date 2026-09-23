@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - dev-ml-adapter-v1
+      - 'dev-*'
   pull_request:
     branches:
       - main
@@ -26,6 +26,10 @@ jobs:
         run: python tests/test_regression.py
       - name: Run ML dataset safety checks
         run: python tests/test_ml_dataset.py
+      - name: Run model feature and split contract checks
+        run: python tests/test_model_contract.py
+      - name: Run ML readiness reporting checks
+        run: python tests/test_readiness.py
       - name: Run trifecta adapter checks
         run: python tests/test_trifecta_adapter.py
       - name: Set up Deno
