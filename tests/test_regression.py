@@ -17,6 +17,15 @@ def test_golden_manifest_contract():
     assert all(v == 3 for v in data["category_pick_counts"].values())
 
 
+def test_iwaki_raw_fixture_keeps_kdreams_no_ticket_marker():
+    data = json.loads((ROOT / "tests/golden/iwakitaira11-raw-kdreams-input.json").read_text(encoding="utf-8"))
+    odds = data["odds"]["trifecta"]
+    assert len(odds) == 60
+    assert data["prediction_context"]["source"].startswith("K-Dreams")
+    bad = [k for k, v in odds.items() if float(v) == 9999.9]
+    assert bad == ["2-6-3"]
+
+
 def test_web_history_and_backtest_contract_present():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     required = [
@@ -39,6 +48,26 @@ def test_prediction_safety_contracts_remain_off():
     assert "PRODUCTION_DATA_SOURCE_CONNECTED=false" in data_source
     assert "DB_WRITE_ENABLED=false" in persistence
     assert "PERSISTENCE_MODE='disabled_until_validation'" in persistence
+
+
+def test_predict_endpoint_keeps_kdreams_sanitizer_before_scoring():
+    source = (ROOT / "supabase/functions/predict-engine-dev/index.ts").read_text(encoding="utf-8")
+    required = [
+        "kdreams_9999_9_unbet_as_unavailable",
+        "Number(value)===9999.9",
+        "delete (trifecta as Record<string,unknown>)[key]",
+        "ignored_count:ignored.length",
+        "Unknown odds are never inferred",
+        "K-Dreams 9999.9 no-ticket displays are excluded",
+        "production_prediction_enabled:false",
+    ]
+    for text in required:
+        assert text in source, f"missing predict sanitizer marker: {text}"
+    sanitize_pos = source.index("const sanitized=sanitizeKnownOdds(payload)")
+    quality_pos = source.index("const inputQuality=assessInputQuality(normalized)")
+    predict_pos = source.index("buildFullPredictionWithWeights(normalized)")
+    assert -1 not in (sanitize_pos, quality_pos, predict_pos)
+    assert sanitize_pos < quality_pos < predict_pos
 
 
 def test_history_builder_safety_and_scope_contract():
@@ -96,8 +125,10 @@ def test_backtest_contract_separates_scope_roi_and_probability_quality():
 
 if __name__ == "__main__":
     test_golden_manifest_contract()
+    test_iwaki_raw_fixture_keeps_kdreams_no_ticket_marker()
     test_web_history_and_backtest_contract_present()
     test_prediction_safety_contracts_remain_off()
+    test_predict_endpoint_keeps_kdreams_sanitizer_before_scoring()
     test_history_builder_safety_and_scope_contract()
     test_history_pipeline_safety_and_temporal_contract()
     test_backtest_contract_separates_scope_roi_and_probability_quality()
