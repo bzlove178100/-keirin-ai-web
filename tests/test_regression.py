@@ -32,7 +32,7 @@ def test_web_history_and_backtest_contract_present():
         assert text in html, f"missing web contract marker: {text}"
 
 
-def test_safety_contracts_remain_off():
+def test_prediction_safety_contracts_remain_off():
     data_source = (ROOT / "supabase/functions/predict-engine-dev/data_source_contract.ts").read_text(encoding="utf-8")
     persistence = (ROOT / "supabase/functions/predict-engine-dev/persistence_contract.ts").read_text(encoding="utf-8")
     assert "DATA_SOURCE_MODE='caller_supplied_only'" in data_source
@@ -41,8 +41,25 @@ def test_safety_contracts_remain_off():
     assert "PERSISTENCE_MODE='disabled_until_validation'" in persistence
 
 
+def test_history_builder_safety_and_scope_contract():
+    source = (ROOT / "supabase/functions/history-builder-dev/index.ts").read_text(encoding="utf-8")
+    required = [
+        "db_write_enabled:false",
+        "external_fetch_enabled:false",
+        "production_prediction_enabled:false",
+        "replay_or_legacy",
+        "prospective",
+        "unknown result time is allowed only for replay_or_legacy",
+        "prediction_timestamp must be earlier than result_timestamp for prospective evaluation",
+        "exclude from prospective accuracy claims",
+    ]
+    for text in required:
+        assert text in source, f"missing history safety marker: {text}"
+
+
 if __name__ == "__main__":
     test_golden_manifest_contract()
     test_web_history_and_backtest_contract_present()
-    test_safety_contracts_remain_off()
+    test_prediction_safety_contracts_remain_off()
+    test_history_builder_safety_and_scope_contract()
     print("keirin-ai regression checks: PASS")
