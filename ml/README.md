@@ -75,6 +75,29 @@ python ml/train_position_models.py artifacts/training-riders.csv \
 
 The trainer currently uses rider performance, line, recent-form, condition, bank-fit, and parsed-comment fields as model features. Prediction-time trifecta odds are not used as model features; odds-band selection remains a later layer.
 
+## Offline inference
+
+`predict_position_models.py` loads the three saved model files and runs the same rider-feature extraction used by the training dataset. This reduces training-serving skew before any API integration is attempted.
+
+```bash
+python ml/predict_position_models.py path/to/pre-race.json \
+  --model-dir artifacts/lightgbm-position-models-v1 \
+  --output artifacts/offline-prediction.json
+```
+
+The offline inference result contains:
+
+- first/second/third rider distributions and rankings
+- all valid ordered trifecta combinations
+- exactly 210 combinations for a seven-rider race
+- normalized trifecta mass
+- confirmed prediction-time odds when present
+- an audit of K-Dreams `9999.9` no-ticket markers removed from odds metadata
+
+The model never uses trifecta odds as model features. Unknown odds are not inferred. Attached odds are metadata only; `monetary_expected_value` remains null and `monetary_ev_enabled` remains false.
+
+The offline runtime also refuses artifacts whose feature schema or model version does not match the current runtime, and it accepts only artifacts whose metrics identify them as completed offline-validation models with production disabled.
+
 ## Evaluation rules
 
 - Split train/validation/test by time, not by individual rider rows from the same race.
