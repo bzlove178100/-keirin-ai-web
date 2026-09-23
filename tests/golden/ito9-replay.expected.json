@@ -1,0 +1,22 @@
+{
+  "fixture_id": "2026-09-15-ito9-replay-v1",
+  "usage": "diagnostic_regression_only",
+  "evaluation_scope": "replay_or_legacy",
+  "race_id": "2026-09-15-伊東温泉-9R",
+  "outcome_combo": "1-3-2",
+  "settlement_odds": 9.1,
+  "engine_version": "phase32-hit-priority-all210-v1",
+  "trifecta_score_count": 210,
+  "unique_trifecta_score_count": 210,
+  "probability_mass": 1.0,
+  "selected_pick_count": 15,
+  "unique_selected_pick_count": 15,
+  "category_pick_counts": {
+    "hit_priority": 3,
+    "balance": 3,
+    "middle": 3,
+    "longshot": 3,
+    "super_longshot": 3
+  },
+  "notes": "Legacy/replay record. Do not include in prospective accuracy claims."
+}
