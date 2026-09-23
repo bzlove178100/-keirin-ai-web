@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - dev-ml-dataset-v1
+      - dev-ml-adapter-v1
   pull_request:
     branches:
       - main
@@ -26,6 +26,8 @@ jobs:
         run: python tests/test_regression.py
       - name: Run ML dataset safety checks
         run: python tests/test_ml_dataset.py
+      - name: Run trifecta adapter checks
+        run: python tests/test_trifecta_adapter.py
       - name: Set up Deno
         uses: denoland/setup-deno@v2
         with:
