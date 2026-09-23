@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - dev-training-capture-v1
+      - dev-ml-dataset-v1
   pull_request:
     branches:
       - main
@@ -24,6 +24,8 @@ jobs:
           python-version: '3.12'
       - name: Run web and safety regression checks
         run: python tests/test_regression.py
+      - name: Run ML dataset safety checks
+        run: python tests/test_ml_dataset.py
       - name: Set up Deno
         uses: denoland/setup-deno@v2
         with:
