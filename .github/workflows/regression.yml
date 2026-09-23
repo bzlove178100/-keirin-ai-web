@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - dev-ml-adapter-v1
+      - dev-lightgbm-position-models-v1
   pull_request:
     branches:
       - main
