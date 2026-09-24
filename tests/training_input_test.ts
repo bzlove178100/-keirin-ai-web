@@ -44,3 +44,44 @@ Deno.test('training input contains pre-race features only and no settlement targ
   assert(!('settlement_odds' in result), 'settlement odds must not leak into training input');
   assert(!serialized.includes('result_timestamp'), 'result timestamp must not leak into training input');
 });
+
+Deno.test('prospective WINTICKET input preserves confirmed partial odds without inventing missing combinations', () => {
+  const players = Array.from({length:7},(_,i)=>({
+    car_number:i+1,
+    name:`rider-${i+1}`,
+    style:i===0?'逃':'追',
+    race_score:80+i,
+    S:0,
+    H:0,
+    B:0,
+    line_id:`L${i+1}`,
+    line_position:1,
+    line_length:1,
+  }));
+  const snapshot:any = {
+    captured_at:'2026-09-24T10:20:46+09:00',
+    race_data:{
+      race:{date:'2026-09-24',venue:'test',race_number:1,scheduled_start_jst:'2026-09-24T15:53:00+09:00'},
+      players,
+      odds:{trifecta:{'1-2-3':21.4,'1-2-4':36.9,'7-3-6':52.4}},
+      prediction_context:{source:'WINTICKET',pre_race_confirmed:true},
+    },
+  };
+  const engineResponse:any = {
+    odds_sanitization:{
+      policy:'snapshot_safety_filter',
+      source_matched:false,
+      ignored_combos:[],
+    },
+  };
+  const result:any = buildTrainingInput(snapshot,engineResponse,'prospective');
+  const odds = result.odds.trifecta;
+
+  assert(result.schema_version === TRAINING_SCHEMA, 'training schema changed');
+  assert(result.evaluation_scope === 'prospective', 'prospective scope must be preserved');
+  assert(result.players.length === 7, 'all riders must be preserved');
+  assert(Object.keys(odds).length === 3, 'partial confirmed odds must remain partial');
+  assert(odds['1-2-3'] === 21.4 && odds['7-3-6'] === 52.4, 'confirmed odds changed');
+  assert(!('1-3-2' in odds), 'missing combinations must never be invented');
+  assert(result.prediction_context?.source === 'WINTICKET', 'source context must be preserved');
+});
