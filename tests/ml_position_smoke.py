@@ -107,6 +107,12 @@ def main() -> None:
                 'trifecta': {
                     '1-4-5': 12.3,
                     '2-6-3': 9999.9,
+                    '1-2-3': 'NaN',
+                    '1-2-4': 'Infinity',
+                    '1-2-5': True,
+                    '1-1-2': 12.0,
+                    '1-2-9': 15.0,
+                    'invalid': 20.0,
                 }
             },
             'prediction_context': {'source': 'K-Dreams'},
