@@ -22,6 +22,7 @@ def record(i: int, *, race_id: str | None = None, odds_count: int = 72):
         "metadata": {
             "evaluation_scope": "prospective",
             "temporal_order": "prediction_before_result",
+            "result_timestamp": (predicted + timedelta(minutes=30)).isoformat(),
             "training_eligibility": {"supervised_training": True},
         },
         "training_input": {
@@ -41,14 +42,31 @@ class CollectionStatusTest(unittest.TestCase):
         self.assertEqual(report["distinct_prediction_times"], 4)
         self.assertEqual(report["remaining_distinct_prediction_times"], 1)
         self.assertFalse(report["collection_threshold_met"])
+        self.assertFalse(report["chronological_evaluation_may_run"])
+        self.assertEqual(report["split_preview"]["blocked_reason"], "need_at_least_five_distinct_prediction_times")
         self.assertEqual(report["known_trifecta_odds_count"]["min"], 72)
 
-    def test_five_distinct_times_meet_only_the_technical_collection_threshold(self):
+    def test_five_distinct_times_meet_technical_and_split_requirements_when_settled(self):
         report = collection_status([record(i) for i in range(MIN_DISTINCT_PREDICTION_TIMES)])
         self.assertTrue(report["collection_threshold_met"])
         self.assertTrue(report["chronological_evaluation_may_run"])
         self.assertEqual(report["remaining_distinct_prediction_times"], 0)
+        self.assertEqual(report["split_preview"]["train_races"], 3)
+        self.assertEqual(report["split_preview"]["validation_races"], 1)
+        self.assertEqual(report["split_preview"]["test_races"], 1)
+        self.assertEqual(report["split_preview"]["purged_unsettled_at_boundary"], 0)
         self.assertIn("not evidence of statistical sufficiency", report["note"])
+
+    def test_five_times_can_still_be_blocked_by_unsettled_boundary_labels(self):
+        records = [record(i) for i in range(MIN_DISTINCT_PREDICTION_TIMES)]
+        records[0]["metadata"]["result_timestamp"] = (datetime.fromisoformat(records[3]["prediction_timestamp"]) + timedelta(minutes=5)).isoformat()
+        records[1]["metadata"]["result_timestamp"] = (datetime.fromisoformat(records[3]["prediction_timestamp"]) + timedelta(minutes=10)).isoformat()
+        report = collection_status(records)
+        self.assertTrue(report["collection_threshold_met"])
+        self.assertFalse(report["chronological_evaluation_may_run"])
+        self.assertEqual(report["split_preview"]["blocked_reason"], "insufficient_non_overlapping_partitions")
+        self.assertEqual(report["split_preview"]["train_races"], 1)
+        self.assertEqual(report["split_preview"]["purged_unsettled_at_boundary"], 2)
 
     def test_latest_eligible_snapshot_per_race_is_used(self):
         older = record(0, race_id="SAME")
@@ -64,6 +82,16 @@ class CollectionStatusTest(unittest.TestCase):
         report = collection_status([bad])
         self.assertEqual(report["eligible_unique_races"], 0)
         self.assertEqual(report["invalid_prediction_times"], 1)
+
+    def test_missing_or_noncausal_result_timestamp_blocks_split_preview(self):
+        missing = record(0)
+        missing["metadata"]["result_timestamp"] = None
+        noncausal = record(1)
+        noncausal["metadata"]["result_timestamp"] = noncausal["prediction_timestamp"]
+        report = collection_status([missing, noncausal])
+        self.assertEqual(report["eligible_unique_races"], 2)
+        self.assertEqual(report["invalid_result_times"], 2)
+        self.assertFalse(report["chronological_evaluation_may_run"])
 
 
 if __name__ == "__main__":
