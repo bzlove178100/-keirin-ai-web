@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import math
 from typing import Any
 
 _KDREAMS = re.compile(r"K[-\s]?Dreams|Kドリームス|ケイドリームス", re.IGNORECASE)
@@ -84,13 +85,19 @@ def sanitize_prediction_odds(race_data: dict[str, Any]) -> tuple[dict[str, float
     source_matched = bool(_KDREAMS.search(source))
     clean: dict[str, float] = {}
     ignored: list[str] = []
+    cars = {str(int(p["car_number"])) for p in race_data.get("players", [])}
 
     for key, raw_value in raw.items():
+        parts = str(key).split("-")
+        if len(parts) != 3 or len(set(parts)) != 3 or not set(parts) <= cars:
+            continue
+        if isinstance(raw_value, bool):
+            continue
         try:
             value = float(raw_value)
         except (TypeError, ValueError):
             continue
-        if value <= 0:
+        if not math.isfinite(value) or value <= 0:
             continue
         if source_matched and value == 9999.9:
             ignored.append(str(key))
