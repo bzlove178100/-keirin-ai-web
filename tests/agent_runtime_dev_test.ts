@@ -1,0 +1,99 @@
+import {
+  RUNTIME_CAPABILITIES,
+  SAFETY_STATE,
+  findForbiddenSecretPath,
+  preflightTask,
+} from '../supabase/functions/agent-runtime-dev/contract.ts';
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new Error(message);
+}
+
+Deno.test('hosted agent runtime keeps all side-effect switches disabled', () => {
+  assert(SAFETY_STATE.production_prediction_enabled === false, 'production prediction must remain off');
+  assert(SAFETY_STATE.db_write_enabled === false, 'database writing must remain off');
+  assert(SAFETY_STATE.external_automatic_fetch_enabled === false, 'external automatic fetching must remain off');
+  assert(SAFETY_STATE.runtime_task_execution_enabled === false, 'runtime task execution must remain off in v1');
+  assert(SAFETY_STATE.persistence_enabled === false, 'hosted task persistence must remain off in v1');
+});
+
+Deno.test('all external capabilities start explicitly unbound', () => {
+  assert(RUNTIME_CAPABILITIES.length >= 6, 'expected shared runtime capability declarations');
+  assert(RUNTIME_CAPABILITIES.every((cap) => cap.bound === false), 'no provider capability may be silently bound');
+  const delivery = RUNTIME_CAPABILITIES.find((cap) => cap.action === 'report.deliver');
+  assert(delivery?.access === 'write', 'report delivery must be classified as a write');
+  assert(delivery?.supports_dry_run === false, 'report delivery must not pretend to support dry-run');
+});
+
+Deno.test('read-only task preflight is valid but blocked on missing host bindings', () => {
+  const task = {
+    schema_version: 'agent-task-v1',
+    task_id: 'keirin-read-status',
+    allowed_actions: ['github.read_main', 'github.verify_ci'],
+    steps: [
+      {
+        step_id: 'read-main',
+        action: 'github.read_main',
+        verify_action: 'github.verify_ci',
+      },
+    ],
+  };
+  const result = preflightTask(task, ['read']);
+  assert(result.ok === true, 'task should pass structural preflight');
+  if (!result.ok) throw new Error(result.error);
+  assert(result.ready === false, 'unbound host capabilities must prevent ready=true');
+  assert(result.forbidden_access_actions.length === 0, 'read-only task should not violate access policy');
+  assert(result.unbound_actions.includes('github.read_main'), 'missing GitHub read binding must be reported');
+  assert(result.unbound_actions.includes('github.verify_ci'), 'missing CI binding must be reported');
+  assert(result.execution_enabled === false, 'preflight must never enable task execution');
+});
+
+Deno.test('preflight blocks write capability under read-only access policy', () => {
+  const task = {
+    schema_version: 'agent-task-v1',
+    task_id: 'artifact-write-test',
+    allowed_actions: ['files.write_artifact'],
+    steps: [{ step_id: 'write', action: 'files.write_artifact' }],
+  };
+  const result = preflightTask(task, ['read']);
+  assert(result.ok === true, 'task should pass structural validation');
+  if (!result.ok) throw new Error(result.error);
+  assert(result.ready === false, 'write action must not be ready under read-only policy');
+  assert(result.forbidden_access_actions.includes('files.write_artifact'), 'write action must be reported as forbidden');
+});
+
+Deno.test('task preflight rejects secret-shaped fields recursively', () => {
+  const task = {
+    schema_version: 'agent-task-v1',
+    task_id: 'secret-test',
+    allowed_actions: ['github.read_main'],
+    inputs: {
+      nested: {
+        api_key: 'must-not-be-sent',
+      },
+    },
+    steps: [{ step_id: 'read', action: 'github.read_main' }],
+  };
+  const path = findForbiddenSecretPath(task);
+  assert(path === '$.inputs.nested.api_key', 'secret path should identify nested field');
+  const result = preflightTask(task, ['read']);
+  assert(result.ok === false, 'task containing secret-shaped field must be rejected');
+});
+
+Deno.test('task preflight rejects undeclared and unknown actions', () => {
+  const task = {
+    schema_version: 'agent-task-v1',
+    task_id: 'bad-actions',
+    allowed_actions: ['github.read_main'],
+    steps: [
+      { step_id: 'known-but-undeclared', action: 'github.verify_ci' },
+      { step_id: 'unknown', action: 'provider.does_not_exist' },
+    ],
+  };
+  const result = preflightTask(task, ['read']);
+  assert(result.ok === true, 'structural preflight should return a detailed blocked result');
+  if (!result.ok) throw new Error(result.error);
+  assert(result.ready === false, 'undeclared/unknown actions must prevent ready state');
+  assert(result.undeclared_actions.includes('github.verify_ci'), 'undeclared action should be reported');
+  assert(result.unknown_actions.includes('provider.does_not_exist'), 'unknown action should be reported');
+});
