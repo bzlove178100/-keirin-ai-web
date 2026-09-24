@@ -34,6 +34,20 @@ class StepSpec:
         if not self.retry_safe and self.max_attempts != 1:
             raise ValueError("unsafe_retry_requires_single_attempt")
 
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "StepSpec":
+        return cls(
+            step_id=str(payload["step_id"]),
+            action=str(payload["action"]),
+            args=dict(payload.get("args") or {}),
+            verify_action=(str(payload["verify_action"]) if payload.get("verify_action") is not None else None),
+            retry_safe=bool(payload.get("retry_safe", False)),
+            max_attempts=int(payload.get("max_attempts", 1)),
+        )
+
 
 @dataclass(frozen=True)
 class TaskSpec:
@@ -70,6 +84,33 @@ class TaskSpec:
                 raise ValueError(f"action_not_allowed:{step.action}")
             if step.verify_action and step.verify_action not in allowed:
                 raise ValueError(f"verification_action_not_allowed:{step.verify_action}")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "task_id": self.task_id,
+            "title": self.title,
+            "goal": self.goal,
+            "allowed_actions": list(self.allowed_actions),
+            "steps": [step.to_dict() for step in self.steps],
+            "inputs": dict(self.inputs),
+            "completion_conditions": list(self.completion_conditions),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "TaskSpec":
+        spec = cls(
+            task_id=str(payload["task_id"]),
+            title=str(payload["title"]),
+            goal=str(payload["goal"]),
+            allowed_actions=tuple(str(value) for value in payload.get("allowed_actions") or ()),
+            steps=tuple(StepSpec.from_dict(item) for item in payload.get("steps") or ()),
+            inputs=dict(payload.get("inputs") or {}),
+            completion_conditions=tuple(str(value) for value in payload.get("completion_conditions") or ()),
+            schema_version=str(payload.get("schema_version") or ""),
+        )
+        spec.validate()
+        return spec
 
 
 @dataclass
