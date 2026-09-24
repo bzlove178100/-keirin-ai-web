@@ -96,7 +96,7 @@ Deno.serve(async (req: Request) => {
       capability_status: diagnostics,
     },
     message:
-      'Owner-only hosted runtime shell. V2 performs status/diagnostics and preflight only: no task execution, persistence, provider writes, external automatic fetching, or report delivery.',
+      'Owner-only hosted runtime shell. V3 declares broad research/text/image/video/code capabilities for routing and diagnostics, but remains preflight-only: no task execution, persistence, provider writes, external automatic fetching, or report delivery.',
   };
 
   if (req.method === 'GET') return reply(base);
@@ -117,7 +117,7 @@ Deno.serve(async (req: Request) => {
         success: false,
         service: AGENT_RUNTIME_SERVICE,
         service_version: AGENT_RUNTIME_VERSION,
-        error: 'mode must be preflight; task execution is disabled in v2',
+        error: 'mode must be preflight; task execution is disabled in v3',
         safety: SAFETY_STATE,
         diagnostics: base.diagnostics,
       },
