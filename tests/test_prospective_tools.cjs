@@ -17,6 +17,7 @@ const COMBOS = permutations([1,2,3,4,5,6,7]);
 
 function snapshot(i = 0, source = 'WINTICKET') {
   const captured = new Date(Date.UTC(2026, 8, 24, 0 + i, 0, 0));
+  const scheduled = new Date(captured.getTime() + 30 * 60 * 1000);
   const players = Array.from({length: 7}, (_, index) => {
     const car = index + 1;
     return {
@@ -42,12 +43,12 @@ function snapshot(i = 0, source = 'WINTICKET') {
     snapshot_eligibility: {
       prospective: true,
       reason: 'before_scheduled_start',
-      scheduled_start: new Date(captured.getTime() + 30 * 60 * 1000).toISOString(),
+      scheduled_start: scheduled.toISOString(),
       prestart_confirmed: true,
       clock_source: 'client_unverified',
     },
     race_data: {
-      race: {date: '2026-09-24', venue: 'TEST', race_number: i + 1},
+      race: {date: '2026-09-24', venue: 'TEST', race_number: i + 1, scheduled_start_jst: scheduled.toISOString()},
       players,
       odds: {trifecta: known},
       prediction_context: {source, known_odds_count: 72},
@@ -76,12 +77,11 @@ function snapshot(i = 0, source = 'WINTICKET') {
 function history(i) {
   const snap = snapshot(i);
   const captured = new Date(snap.captured_at);
-  const record = tools.buildHistory(snap, {
+  return tools.buildHistory(snap, {
     outcomeCombo: `${1 + (i % 5)}-${2 + (i % 5)}-${3 + (i % 5)}`,
     settlementOdds: 39.3 + i,
-    resultTimestamp: new Date(captured.getTime() + 10 * 60 * 1000).toISOString(),
+    resultTimestamp: new Date(captured.getTime() + 40 * 60 * 1000).toISOString(),
   });
-  return record;
 }
 
 (function testHistoryBuildPreservesPartialOddsAndSafety() {
@@ -108,6 +108,28 @@ function history(i) {
   }), /result_timestamp_timezone_missing/);
 })();
 
+(function testResultBeforeScheduledStartRejected() {
+  const snap = snapshot(0);
+  assert.throws(() => tools.buildHistory(snap, {
+    outcomeCombo: '3-4-7',
+    settlementOdds: 39.3,
+    resultTimestamp: new Date(new Date(snap.captured_at).getTime() + 10 * 60 * 1000).toISOString(),
+  }), /result_confirmation_before_scheduled_start/);
+})();
+
+(function testCaptureAtOrAfterScheduledStartRejected() {
+  const snap = snapshot(0);
+  snap.snapshot_eligibility.scheduled_start = snap.captured_at;
+  snap.race_data.race.scheduled_start_jst = snap.captured_at;
+  assert.throws(() => tools.validateSnapshot(snap), /snapshot_capture_not_before_scheduled_start/);
+})();
+
+(function testMismatchedScheduledStartRejected() {
+  const snap = snapshot(0);
+  snap.race_data.race.scheduled_start_jst = new Date(Date.parse(snap.snapshot_eligibility.scheduled_start) + 60 * 1000).toISOString();
+  assert.throws(() => tools.validateSnapshot(snap), /scheduled_start_mismatch/);
+})();
+
 (function testKDreamsMarkerRemovedOnlyAsUnavailable() {
   const snap = snapshot(0, 'K-Dreams');
   const first = Object.keys(snap.race_data.odds.trifecta)[0];
@@ -130,6 +152,14 @@ function history(i) {
   assert.strictEqual(status.split.validation_races, 1);
   assert.strictEqual(status.split.test_races, 1);
   assert.strictEqual(status.known_trifecta_odds_count.min, 72);
+})();
+
+(function testCollectionAuditRejectsImpossibleScheduleOrder() {
+  const record = history(0);
+  record.metadata.result_timestamp = new Date(Date.parse(record.prediction_timestamp) + 10 * 60 * 1000).toISOString();
+  const status = tools.collectionStatus([record]);
+  assert.strictEqual(status.eligible_unique_races, 0);
+  assert.strictEqual(status.excluded.invalid_schedule_order, 1);
 })();
 
 (function testBoundaryPurgeCanStillBlockFiveTimes() {

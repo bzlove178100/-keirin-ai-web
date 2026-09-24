@@ -21,6 +21,44 @@ def _time_key(value: Any) -> float:
         return float("-inf")
 
 
+def _aware_time(value: Any) -> float | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.timestamp()
+
+
+def _schedule_order(record: dict[str, Any], training_input: dict[str, Any]) -> tuple[bool, str]:
+    metadata = record.get("metadata") or {}
+    source_snapshot = metadata.get("source_snapshot") or {}
+    snapshot_eligibility = source_snapshot.get("snapshot_eligibility") or {}
+    scheduled_raw = snapshot_eligibility.get("scheduled_start")
+    if scheduled_raw is None:
+        # Legacy prospective records created before scheduled-start capture remain readable.
+        return True, "schedule_unavailable"
+
+    prediction = _aware_time(record.get("prediction_timestamp"))
+    captured = _aware_time(training_input.get("captured_at"))
+    result = _aware_time(metadata.get("result_timestamp"))
+    scheduled = _aware_time(scheduled_raw)
+    if None in (prediction, captured, result, scheduled):
+        return False, "invalid_schedule_time"
+    if captured != prediction or not prediction < scheduled <= result:
+        return False, "invalid_schedule_order"
+
+    race_scheduled_raw = (training_input.get("race") or {}).get("scheduled_start_jst")
+    if race_scheduled_raw is not None:
+        race_scheduled = _aware_time(race_scheduled_raw)
+        if race_scheduled is None or race_scheduled != scheduled:
+            return False, "scheduled_start_mismatch"
+    return True, "schedule_order_valid"
+
+
 def supervised_eligibility(record: dict[str, Any]) -> tuple[bool, str]:
     metadata = record.get("metadata") or {}
     eligibility = metadata.get("training_eligibility") or {}
@@ -38,6 +76,9 @@ def supervised_eligibility(record: dict[str, Any]) -> tuple[bool, str]:
         return False, "training_schema_mismatch"
     if training_input.get("evaluation_scope") != "prospective":
         return False, "training_input_not_prospective"
+    schedule_ok, schedule_reason = _schedule_order(record, training_input)
+    if not schedule_ok:
+        return False, schedule_reason
     players = training_input.get("players")
     if not isinstance(players, list) or len(players) < 4:
         return False, "players_missing"

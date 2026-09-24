@@ -70,13 +70,26 @@
     return true;
   }
 
+  function snapshotTimes(snapshot) {
+    const eligibility = snapshot.snapshot_eligibility || {};
+    const captured = parseAwareTime(snapshot.captured_at, 'captured_at');
+    const scheduled = parseAwareTime(eligibility.scheduled_start, 'scheduled_start');
+    if (captured >= scheduled) fail('snapshot_capture_not_before_scheduled_start');
+    const race = ((snapshot.race_data || {}).race) || {};
+    if (race.scheduled_start_jst != null) {
+      const raceScheduled = parseAwareTime(race.scheduled_start_jst, 'race_scheduled_start');
+      if (raceScheduled !== scheduled) fail('scheduled_start_mismatch');
+    }
+    return { captured, scheduled };
+  }
+
   function validateSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) fail('snapshot_required');
     if (snapshot.schema_version !== 'prediction-snapshot-v1') fail('snapshot_schema_mismatch');
     if (snapshot.validation_mode !== 'prospective-only') fail('snapshot_not_prospective_only');
     const eligibility = snapshot.snapshot_eligibility || {};
     if (eligibility.prospective !== true || eligibility.prestart_confirmed !== true) fail('snapshot_not_prospective');
-    parseAwareTime(snapshot.captured_at, 'captured_at');
+    snapshotTimes(snapshot);
 
     const raceData = snapshot.race_data || {};
     const players = raceData.players;
@@ -134,10 +147,11 @@
     if (!validCombo(outcomeCombo)) fail('outcome_combo_invalid');
     const settlementOdds = Number(settlement && settlement.settlementOdds);
     if (!Number.isFinite(settlementOdds) || settlementOdds <= 0) fail('settlement_odds_invalid');
-    const captured = parseAwareTime(snapshot.captured_at, 'captured_at');
+    const { captured, scheduled } = snapshotTimes(snapshot);
     const resultTimestamp = settlement && settlement.resultTimestamp;
     const settled = parseAwareTime(resultTimestamp, 'result_timestamp');
     if (captured >= settled) fail('prediction_must_precede_result_confirmation');
+    if (settled < scheduled) fail('result_confirmation_before_scheduled_start');
 
     const raceData = snapshot.race_data;
     const race = raceData.race || {};
@@ -162,7 +176,7 @@
       evaluation_scope: 'prospective',
     };
     const raceId = `${race.date || 'date'}-${race.venue || 'venue'}-${race.race_number || 'R'}R`;
-    const record = {
+    return {
       race_id: raceId,
       prediction_timestamp: snapshot.captured_at,
       outcome_combo: outcomeCombo,
@@ -194,7 +208,6 @@
         schema_version: OUTPUT_SCHEMA,
       },
     };
-    return record;
   }
 
   function recordsFromJson(value) {
@@ -242,6 +255,15 @@
     const resultTime = parseAwareTime(metadata.result_timestamp, 'timestamp');
     const captured = parseAwareTime(training.captured_at, 'timestamp');
     if (captured !== predictionTime || predictionTime >= resultTime) fail('invalid_temporal_order');
+
+    const snapshotEligibility = (((metadata.source_snapshot || {}).snapshot_eligibility) || {});
+    if (snapshotEligibility.scheduled_start != null) {
+      const scheduled = parseAwareTime(snapshotEligibility.scheduled_start, 'scheduled_start');
+      if (predictionTime >= scheduled || resultTime < scheduled) fail('invalid_schedule_order');
+      const raceScheduledRaw = ((training.race || {}).scheduled_start_jst);
+      if (raceScheduledRaw != null && parseAwareTime(raceScheduledRaw, 'race_scheduled_start') !== scheduled) fail('scheduled_start_mismatch');
+    }
+
     const players = training.players;
     if (!Array.isArray(players) || players.length !== 7) fail('seven_unique_riders_required');
     const cars = players.map((player) => player && player.car_number);
