@@ -78,6 +78,22 @@ def _categories_valid(selected: Any) -> bool:
     return True
 
 
+def _snapshot_times(snapshot: dict[str, Any]) -> tuple[datetime, datetime]:
+    eligibility = snapshot.get("snapshot_eligibility") or {}
+    captured = _iso(snapshot.get("captured_at"), "captured_at")
+    scheduled = _iso(eligibility.get("scheduled_start"), "scheduled_start")
+    if captured >= scheduled:
+        raise ValueError("snapshot_capture_not_before_scheduled_start")
+
+    race = ((snapshot.get("race_data") or {}).get("race") or {})
+    race_scheduled_raw = race.get("scheduled_start_jst")
+    if race_scheduled_raw is not None:
+        race_scheduled = _iso(race_scheduled_raw, "race_scheduled_start")
+        if race_scheduled != scheduled:
+            raise ValueError("scheduled_start_mismatch")
+    return captured, scheduled
+
+
 def validate_snapshot(snapshot: dict[str, Any]) -> None:
     if snapshot.get("schema_version") != "prediction-snapshot-v1":
         raise ValueError("snapshot_schema_mismatch")
@@ -86,7 +102,7 @@ def validate_snapshot(snapshot: dict[str, Any]) -> None:
     eligibility = snapshot.get("snapshot_eligibility") or {}
     if eligibility.get("prospective") is not True or eligibility.get("prestart_confirmed") is not True:
         raise ValueError("snapshot_not_prospective")
-    _iso(snapshot.get("captured_at"), "captured_at")
+    _snapshot_times(snapshot)
 
     race_data = snapshot.get("race_data") or {}
     players = race_data.get("players")
@@ -161,10 +177,12 @@ def build_history_record(
     if not math.isfinite(odds) or odds <= 0:
         raise ValueError("settlement_odds_invalid")
 
-    captured = _iso(snapshot["captured_at"], "captured_at")
+    captured, scheduled = _snapshot_times(snapshot)
     result_time = _iso(result_timestamp, "result_timestamp")
     if captured >= result_time:
         raise ValueError("prediction_must_precede_result_confirmation")
+    if result_time < scheduled:
+        raise ValueError("result_confirmation_before_scheduled_start")
 
     race_data = snapshot["race_data"]
     race = race_data.get("race") or {}
