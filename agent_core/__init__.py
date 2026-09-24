@@ -7,6 +7,7 @@ explicit and testable.
 
 from .adapters import Capability, CallableReadOnlyGitHubAdapter, ToolRegistry
 from .delivery import BridgeReportDelivery, DeliveryResult, ReportDelivery
+from .job_router import JOB_ROUTES, JobPlan, JobRequest, JobRoute, JobRouter
 from .model import (
     ActionResult,
     ArtifactState,
@@ -43,6 +44,11 @@ __all__ = [
     "DeliveryResult",
     "FileArtifactAdapter",
     "FileStateStore",
+    "JOB_ROUTES",
+    "JobPlan",
+    "JobRequest",
+    "JobRoute",
+    "JobRouter",
     "PreflightReport",
     "ReadOnlySupabaseStatusAdapter",
     "ReportDelivery",
