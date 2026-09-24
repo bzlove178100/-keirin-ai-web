@@ -9,6 +9,7 @@ STATE_SCHEMA_VERSION = "agent-task-state-v1"
 ARTIFACT_SCHEMA_VERSION = "agent-artifact-state-v1"
 
 TaskStatus = Literal["pending", "running", "completed", "blocked", "failed"]
+ReconciliationResolution = Literal["not_applied", "applied_and_verified", "needs_manual_action"]
 
 
 def utc_now_iso() -> str:
@@ -174,6 +175,7 @@ class TaskState:
     blocked_reason: str | None = None
     last_error: str | None = None
     artifacts: dict[str, ArtifactState] = field(default_factory=dict)
+    reconciliations: list[dict[str, Any]] = field(default_factory=list)
     updated_at: str = field(default_factory=utc_now_iso)
     schema_version: str = STATE_SCHEMA_VERSION
 
@@ -201,6 +203,7 @@ class TaskState:
             blocked_reason=payload.get("blocked_reason"),
             last_error=payload.get("last_error"),
             artifacts=artifacts,
+            reconciliations=list(payload.get("reconciliations") or []),
             updated_at=str(payload.get("updated_at") or utc_now_iso()),
             schema_version=str(payload.get("schema_version")),
         )

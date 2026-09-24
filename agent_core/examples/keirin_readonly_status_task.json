@@ -1,0 +1,41 @@
+{
+  "schema_version": "agent-task-v1",
+  "task_id": "keirin-readonly-status-check",
+  "title": "競輪AI 現行状態の読み取り確認",
+  "goal": "ユーザーのスクリーンショット再送を要求せず、GitHubの現行要件・状態記録と既存CI成功状態を読み取りだけで確認する",
+  "allowed_actions": [
+    "github.read_main",
+    "github.verify_ci"
+  ],
+  "inputs": {
+    "repository": "bzlove178100/-keirin-ai-web",
+    "production_prediction_enabled": false,
+    "db_write_enabled": false,
+    "external_fetch_enabled": false
+  },
+  "steps": [
+    {
+      "step_id": "read-current-state",
+      "action": "github.read_main",
+      "args": {
+        "ref": "main",
+        "required_files": [
+          "AI_AGENT_REQUIREMENTS.md",
+          "AGENTS.md",
+          "WORK_STATUS.md"
+        ]
+      },
+      "verify_action": "github.verify_ci",
+      "retry_safe": true,
+      "max_attempts": 2
+    }
+  ],
+  "completion_conditions": [
+    "current requirement and status files were read from main",
+    "existing CI state was verified successfully",
+    "no GitHub write action was used",
+    "production prediction remains off",
+    "development DB writes remain off",
+    "external automatic fetching remains off"
+  ]
+}
