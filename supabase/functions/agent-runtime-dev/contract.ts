@@ -1,9 +1,10 @@
 export const AGENT_RUNTIME_SERVICE = 'agent-runtime-dev';
-export const AGENT_RUNTIME_VERSION = 'v1-owner-readonly-preflight';
+export const AGENT_RUNTIME_VERSION = 'v2-owner-readonly-preflight-diagnostics';
 export const TASK_SCHEMA_VERSION = 'agent-task-v1';
 export const RUNTIME_BINDING_SCHEMA_VERSION = 'agent-runtime-bindings-v1';
 
 export type AccessMode = 'read' | 'write' | 'execute';
+export type AuthorizationState = 'not_bound' | 'not_configured' | 'authorized' | 'authorization_failed';
 
 export type RuntimeCapability = {
   action: string;
@@ -12,6 +13,19 @@ export type RuntimeCapability = {
   bound: boolean;
   supports_dry_run: boolean;
   description: string;
+};
+
+export type CapabilityDiagnostic = {
+  action: string;
+  access: AccessMode;
+  declared: true;
+  bound: boolean;
+  authorization_state: AuthorizationState;
+  authorized: boolean;
+  verified: boolean;
+  last_error: string | null;
+  supports_dry_run: boolean;
+  required_permissions: string[];
 };
 
 export const SAFETY_STATE = Object.freeze({
@@ -77,7 +91,7 @@ export const RUNTIME_CAPABILITIES: RuntimeCapability[] = [
     required_permissions: ['files:write'],
     bound: false,
     supports_dry_run: false,
-    description: 'External host binding required. No write binding is enabled in v1.',
+    description: 'External host binding required. No write binding is enabled in v2.',
   },
   {
     action: 'report.deliver',
@@ -85,9 +99,24 @@ export const RUNTIME_CAPABILITIES: RuntimeCapability[] = [
     required_permissions: ['report:deliver'],
     bound: false,
     supports_dry_run: false,
-    description: 'Destination is intentionally not configured in v1.',
+    description: 'Destination is intentionally not configured in v2.',
   },
 ];
+
+export function capabilityDiagnostics(): CapabilityDiagnostic[] {
+  return RUNTIME_CAPABILITIES.map((capability) => ({
+    action: capability.action,
+    access: capability.access,
+    declared: true as const,
+    bound: capability.bound,
+    authorization_state: capability.bound ? 'not_configured' : 'not_bound',
+    authorized: false,
+    verified: false,
+    last_error: null,
+    supports_dry_run: capability.supports_dry_run,
+    required_permissions: [...capability.required_permissions],
+  }));
+}
 
 const FORBIDDEN_SECRET_KEYS = new Set([
   'token',
