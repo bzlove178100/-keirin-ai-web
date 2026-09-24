@@ -4,13 +4,13 @@ import json
 import os
 import re
 import tempfile
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from .model import ArtifactState, ArtifactUpdate, TaskState, utc_now_iso
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_RECONCILIATION_RESOLUTIONS = {"not_applied", "applied_and_verified", "needs_manual_action"}
 
 
 class FileStateStore:
@@ -69,6 +69,75 @@ class FileStateStore:
             state.artifacts[update.artifact_id] = existing
         existing.merge(update)
         return existing
+
+    def reconcile_blocked_step(
+        self,
+        task_id: str,
+        *,
+        step_id: str,
+        resolution: str,
+        note: str,
+        artifact_updates: tuple[ArtifactUpdate, ...] = (),
+    ) -> TaskState:
+        """Explicitly reconcile a blocked step before any further execution.
+
+        ``not_applied`` means the caller verified that the prior action did not take
+        effect; the step may be attempted again on the next run.
+
+        ``applied_and_verified`` means the caller verified the side effect and its
+        intended result; the step is marked completed and will be skipped on resume.
+
+        ``needs_manual_action`` keeps the task blocked and records why automation must
+        not continue.
+        """
+
+        if resolution not in _RECONCILIATION_RESOLUTIONS:
+            raise ValueError("invalid_reconciliation_resolution")
+        if not step_id.strip():
+            raise ValueError("step_id_required")
+        if not note.strip():
+            raise ValueError("reconciliation_note_required")
+
+        state = self.load_state(task_id)
+        if state.status != "blocked":
+            raise ValueError("task_not_blocked")
+
+        for update in artifact_updates:
+            self.apply_artifact_update(state, update)
+
+        record = {
+            "timestamp": utc_now_iso(),
+            "step_id": step_id,
+            "resolution": resolution,
+            "note": note,
+            "previous_blocked_reason": state.blocked_reason,
+            "previous_last_error": state.last_error,
+        }
+        state.reconciliations.append(record)
+
+        if resolution == "not_applied":
+            state.status = "pending"
+            state.blocked_reason = None
+            state.last_error = None
+            state.attempts.pop(step_id, None)
+        elif resolution == "applied_and_verified":
+            if step_id not in state.completed_steps:
+                state.completed_steps.append(step_id)
+            state.status = "pending"
+            state.blocked_reason = None
+            state.last_error = None
+        else:
+            state.status = "blocked"
+
+        self.save_state(state)
+        self.append_event(
+            task_id=task_id,
+            step_id=step_id,
+            event_type="step_reconciled",
+            message=resolution,
+            data={"note": note},
+        )
+        return state
 
     def append_event(
         self,
