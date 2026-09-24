@@ -5,6 +5,7 @@ import {
   RUNTIME_BINDING_SCHEMA_VERSION,
   RUNTIME_CAPABILITIES,
   SAFETY_STATE,
+  capabilityDiagnostics,
   preflightTask,
 } from './contract.ts';
 
@@ -76,6 +77,7 @@ Deno.serve(async (req: Request) => {
     );
   }
 
+  const diagnostics = capabilityDiagnostics();
   const base = {
     success: true,
     service: AGENT_RUNTIME_SERVICE,
@@ -87,8 +89,14 @@ Deno.serve(async (req: Request) => {
     plan: owner.plan,
     safety: SAFETY_STATE,
     capabilities: RUNTIME_CAPABILITIES,
+    diagnostics: {
+      runtime_mode: 'owner_preflight_only',
+      execution_enabled: false,
+      persistence_enabled: false,
+      capability_status: diagnostics,
+    },
     message:
-      'Owner-only hosted runtime shell. V1 performs preflight only: no task execution, persistence, provider writes, external automatic fetching, or report delivery.',
+      'Owner-only hosted runtime shell. V2 performs status/diagnostics and preflight only: no task execution, persistence, provider writes, external automatic fetching, or report delivery.',
   };
 
   if (req.method === 'GET') return reply(base);
@@ -109,8 +117,9 @@ Deno.serve(async (req: Request) => {
         success: false,
         service: AGENT_RUNTIME_SERVICE,
         service_version: AGENT_RUNTIME_VERSION,
-        error: 'mode must be preflight; task execution is disabled in v1',
+        error: 'mode must be preflight; task execution is disabled in v2',
         safety: SAFETY_STATE,
+        diagnostics: base.diagnostics,
       },
       400,
     );
@@ -127,6 +136,7 @@ Deno.serve(async (req: Request) => {
         error: result.error,
         ...('secret_path' in result ? { secret_path: result.secret_path } : {}),
         safety: SAFETY_STATE,
+        diagnostics: base.diagnostics,
       },
       422,
     );
