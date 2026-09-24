@@ -57,6 +57,20 @@ class EvaluationTest(unittest.TestCase):
         conflict['outcome_combo'] = '2-3-4'
         self.assertEqual(prepare([good, conflict], synthetic=True)[0], [])
 
+    def test_chronological_evaluation_requires_at_least_five_distinct_prediction_times(self):
+        four = evaluate_records([fixture(i) for i in range(4)], synthetic=True)
+        self.assertEqual(four['status'], 'blocked_insufficient_eligible_data')
+        self.assertEqual(four['blocked_reason'], 'need_at_least_five_distinct_prediction_times')
+
+        five = [fixture(i) for i in range(5)]
+        selected, _ = prepare(five, synthetic=True)
+        train, valid, test, audit = split_records(selected)
+        self.assertGreaterEqual(len(train), 2)
+        self.assertGreaterEqual(len(valid), 1)
+        self.assertGreaterEqual(len(test), 1)
+        self.assertEqual(len({x['prediction_time'] for x in selected}), 5)
+        self.assertEqual(audit['purged_unsettled_at_boundary'], 0)
+
     def test_utc_order_and_boundary_purge(self):
         records = [fixture(i) for i in range(10)]
         # A training-period label unavailable at validation time must be purged.
