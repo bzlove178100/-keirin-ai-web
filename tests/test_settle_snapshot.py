@@ -133,6 +133,29 @@ class SettleSnapshotTest(unittest.TestCase):
                 result_timestamp="2026-09-24T01:20:00Z",
             )
 
+    def test_rejects_result_confirmation_before_scheduled_start(self):
+        snap = snapshot()
+        with self.assertRaisesRegex(ValueError, "result_confirmation_before_scheduled_start"):
+            build_history_record(
+                snap,
+                outcome_combo="3-4-7",
+                settlement_odds=39.3,
+                result_timestamp="2026-09-24T02:00:00Z",
+            )
+
+    def test_rejects_snapshot_capture_at_or_after_scheduled_start(self):
+        snap = snapshot()
+        snap["snapshot_eligibility"]["scheduled_start"] = "2026-09-24T01:20:00Z"
+        snap["race_data"]["race"]["scheduled_start_jst"] = "2026-09-24T10:20:00+09:00"
+        with self.assertRaisesRegex(ValueError, "snapshot_capture_not_before_scheduled_start"):
+            validate_snapshot(snap)
+
+    def test_rejects_mismatched_schedule_fields(self):
+        snap = snapshot()
+        snap["race_data"]["race"]["scheduled_start_jst"] = "2026-09-24T15:54:00+09:00"
+        with self.assertRaisesRegex(ValueError, "scheduled_start_mismatch"):
+            validate_snapshot(snap)
+
     def test_rejects_incomplete_probability_table_and_bad_outcome(self):
         snap = snapshot()
         snap["engine_response"]["prediction"]["trifecta_scores"].pop()
