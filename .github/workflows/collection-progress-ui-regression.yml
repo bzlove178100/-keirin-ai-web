@@ -1,0 +1,33 @@
+name: collection progress UI regression
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify generated Web state is current
+        run: |
+          python tools/patch_collection_progress_ui.py
+          git diff --exit-code -- index.html
+      - name: Run collection progress UI checks
+        run: node tests/test_collection_status_ui.cjs
