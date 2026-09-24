@@ -10,70 +10,49 @@ from typing import Any
 
 try:
     from .build_training_dataset import load_records
-    from .dataset import select_latest_eligible_per_race
+    from .evaluation_protocol import prepare, readiness
 except ImportError:
     from build_training_dataset import load_records
-    from dataset import select_latest_eligible_per_race
+    from evaluation_protocol import prepare, readiness
 
 MIN_DISTINCT_PREDICTION_TIMES = 5
 
 
-def _parse_time(value: Any) -> datetime | None:
-    if not isinstance(value, str) or not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return None
-    return parsed.astimezone(timezone.utc)
-
-
 def collection_status(records: list[dict[str, Any]]) -> dict[str, Any]:
-    selected, excluded = select_latest_eligible_per_race(records)
-    valid: list[tuple[dict[str, Any], datetime]] = []
-    invalid_prediction_times = 0
-    for record in selected:
-        predicted = _parse_time(record.get("prediction_timestamp"))
-        if predicted is None:
-            invalid_prediction_times += 1
-            continue
-        valid.append((record, predicted))
-
-    distinct_times = sorted({predicted for _, predicted in valid})
-    counts = []
-    for record, _ in valid:
-        training = record.get("training_input") or {}
+    selected, quality = prepare(records)
+    protocol = readiness(records)
+    counts: list[int] = []
+    for item in selected:
+        training = item["record"].get("training_input") or {}
         odds = ((training.get("odds") or {}).get("trifecta") or {})
         if isinstance(odds, dict):
             counts.append(len(odds))
 
-    eligible_race_ids = sorted(str(record.get("race_id")) for record, _ in valid)
-    distinct_count = len(distinct_times)
-    threshold_met = distinct_count >= MIN_DISTINCT_PREDICTION_TIMES
+    prediction_times = sorted({item["prediction_time"] for item in selected})
     report = {
         "input_records": len(records),
-        "eligible_unique_races": len(valid),
-        "eligible_race_ids": eligible_race_ids,
-        "distinct_prediction_times": distinct_count,
+        "eligible_unique_races": len(selected),
+        "eligible_race_ids": [item["race_id"] for item in selected],
+        "distinct_prediction_times": protocol["distinct_prediction_times"],
         "minimum_distinct_prediction_times": MIN_DISTINCT_PREDICTION_TIMES,
-        "remaining_distinct_prediction_times": max(0, MIN_DISTINCT_PREDICTION_TIMES - distinct_count),
-        "collection_threshold_met": threshold_met,
-        "chronological_evaluation_may_run": threshold_met,
-        "excluded": dict(excluded),
-        "invalid_prediction_times": invalid_prediction_times,
+        "remaining_distinct_prediction_times": protocol["remaining_distinct_prediction_times"],
+        "collection_threshold_met": protocol["technical_time_minimum_met"],
+        "chronological_evaluation_may_run": protocol["chronological_partitions_ready"],
+        "blocked_reason": protocol["blocked_reason"],
+        "split": protocol["split"],
+        "excluded": quality["excluded"],
+        "duplicate_snapshots_removed": quality["duplicate_snapshots_removed"],
+        "missing_feature_counts": quality["missing_feature_counts"],
+        "missing_feature_fraction": quality["missing_feature_fraction"],
         "known_trifecta_odds_count": {
             "min": min(counts) if counts else None,
             "median": median(counts) if counts else None,
             "max": max(counts) if counts else None,
         },
-        "prediction_times_utc": [value.isoformat() for value in distinct_times],
-        "note": (
-            "Five distinct prediction times are only the technical minimum. "
-            "The paired evaluator can still block after chronological leakage purging, "
-            "and this threshold is not evidence of statistical sufficiency or profitability."
-        ),
+        "prediction_times_utc": [
+            datetime.fromtimestamp(value, timezone.utc).isoformat() for value in prediction_times
+        ],
+        "note": protocol["note"],
     }
     return report
 
@@ -85,7 +64,7 @@ def main() -> int:
     parser.add_argument(
         "--require-ready",
         action="store_true",
-        help="Exit with code 2 until the five-distinct-time technical minimum is met",
+        help="Exit with code 2 until leakage-safe chronological partitions can be formed",
     )
     args = parser.parse_args()
 
@@ -95,7 +74,7 @@ def main() -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(text, encoding="utf-8")
     print(text)
-    if args.require_ready and not report["collection_threshold_met"]:
+    if args.require_ready and not report["chronological_evaluation_may_run"]:
         return 2
     return 0
 
