@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .adapters import Capability, ToolRegistry
+from .adapters import AccessMode, Capability, ToolRegistry
 from .orchestrator import AgentOrchestrator, PreflightReport
 from .runtime_bridge import BridgeToolAdapter, RuntimeBridge
 from .store import FileStateStore
@@ -21,22 +21,35 @@ _FORBIDDEN_BINDING_KEYS = {
     "apikey",
     "authorization",
 }
+_BINDING_KEYS = {
+    "provider",
+    "action",
+    "access",
+    "required_permissions",
+    "supports_dry_run",
+    "description",
+}
+_MANIFEST_KEYS = {"schema_version", "bindings"}
 
 
 @dataclass(frozen=True)
 class RuntimeBinding:
     provider: str
     action: str
-    access: str
+    access: AccessMode
     required_permissions: tuple[str, ...] = ()
     supports_dry_run: bool = False
     description: str = ""
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "RuntimeBinding":
-        forbidden = {str(key).lower() for key in payload} & _FORBIDDEN_BINDING_KEYS
+        keys = {str(key) for key in payload}
+        forbidden = {key.lower() for key in keys} & _FORBIDDEN_BINDING_KEYS
         if forbidden:
             raise ValueError(f"credentials_forbidden_in_binding:{','.join(sorted(forbidden))}")
+        unknown = keys - _BINDING_KEYS
+        if unknown:
+            raise ValueError(f"unknown_runtime_binding_field:{','.join(sorted(unknown))}")
         provider = str(payload.get("provider") or "").strip()
         action = str(payload.get("action") or "").strip()
         access = str(payload.get("access") or "").strip()
@@ -46,11 +59,14 @@ class RuntimeBinding:
             raise ValueError("binding_action_required")
         if access not in {"read", "write", "execute"}:
             raise ValueError("binding_access_invalid")
+        permissions = tuple(str(value).strip() for value in payload.get("required_permissions") or ())
+        if any(not permission for permission in permissions):
+            raise ValueError("empty_required_permission")
         return cls(
             provider=provider,
             action=action,
-            access=access,
-            required_permissions=tuple(str(value) for value in payload.get("required_permissions") or ()),
+            access=access,  # type: ignore[arg-type]
+            required_permissions=permissions,
             supports_dry_run=bool(payload.get("supports_dry_run", False)),
             description=str(payload.get("description") or ""),
         )
@@ -58,7 +74,7 @@ class RuntimeBinding:
     def capability(self) -> Capability:
         return Capability(
             action=self.action,
-            access=self.access,  # type: ignore[arg-type]
+            access=self.access,
             required_permissions=self.required_permissions,
             supports_dry_run=self.supports_dry_run,
             description=self.description,
@@ -72,13 +88,20 @@ class RuntimeManifest:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "RuntimeManifest":
-        forbidden = {str(key).lower() for key in payload} & _FORBIDDEN_BINDING_KEYS
+        keys = {str(key) for key in payload}
+        forbidden = {key.lower() for key in keys} & _FORBIDDEN_BINDING_KEYS
         if forbidden:
             raise ValueError(f"credentials_forbidden_in_manifest:{','.join(sorted(forbidden))}")
+        unknown = keys - _MANIFEST_KEYS
+        if unknown:
+            raise ValueError(f"unknown_runtime_manifest_field:{','.join(sorted(unknown))}")
         schema = str(payload.get("schema_version") or "")
         if schema != "agent-runtime-bindings-v1":
             raise ValueError("runtime_manifest_schema_mismatch")
-        bindings = tuple(RuntimeBinding.from_dict(item) for item in payload.get("bindings") or ())
+        raw_bindings = payload.get("bindings") or ()
+        if not isinstance(raw_bindings, list):
+            raise ValueError("runtime_bindings_must_be_list")
+        bindings = tuple(RuntimeBinding.from_dict(item) for item in raw_bindings)
         if not bindings:
             raise ValueError("runtime_bindings_required")
         seen: set[str] = set()
