@@ -1,6 +1,8 @@
 import {
+  AGENT_RUNTIME_VERSION,
   RUNTIME_CAPABILITIES,
   SAFETY_STATE,
+  capabilityDiagnostics,
   findForbiddenSecretPath,
   preflightTask,
 } from '../supabase/functions/agent-runtime-dev/contract.ts';
@@ -9,12 +11,16 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
+Deno.test('hosted agent runtime version exposes diagnostics generation', () => {
+  assert(AGENT_RUNTIME_VERSION === 'v2-owner-readonly-preflight-diagnostics', 'runtime version changed unexpectedly');
+});
+
 Deno.test('hosted agent runtime keeps all side-effect switches disabled', () => {
   assert(SAFETY_STATE.production_prediction_enabled === false, 'production prediction must remain off');
   assert(SAFETY_STATE.db_write_enabled === false, 'database writing must remain off');
   assert(SAFETY_STATE.external_automatic_fetch_enabled === false, 'external automatic fetching must remain off');
-  assert(SAFETY_STATE.runtime_task_execution_enabled === false, 'runtime task execution must remain off in v1');
-  assert(SAFETY_STATE.persistence_enabled === false, 'hosted task persistence must remain off in v1');
+  assert(SAFETY_STATE.runtime_task_execution_enabled === false, 'runtime task execution must remain off in v2');
+  assert(SAFETY_STATE.persistence_enabled === false, 'hosted task persistence must remain off in v2');
 });
 
 Deno.test('all external capabilities start explicitly unbound', () => {
@@ -23,6 +29,19 @@ Deno.test('all external capabilities start explicitly unbound', () => {
   const delivery = RUNTIME_CAPABILITIES.find((cap) => cap.action === 'report.deliver');
   assert(delivery?.access === 'write', 'report delivery must be classified as a write');
   assert(delivery?.supports_dry_run === false, 'report delivery must not pretend to support dry-run');
+});
+
+Deno.test('capability diagnostics distinguish declared bound authorized verified and last error', () => {
+  const diagnostics = capabilityDiagnostics();
+  assert(diagnostics.length === RUNTIME_CAPABILITIES.length, 'every declared capability needs a diagnostic');
+  for (const diagnostic of diagnostics) {
+    assert(diagnostic.declared === true, 'capability must be explicitly declared');
+    assert(diagnostic.bound === false, 'hosted v2 has no provider binding');
+    assert(diagnostic.authorization_state === 'not_bound', 'unbound capability must report not_bound authorization state');
+    assert(diagnostic.authorized === false, 'unbound capability must not claim authorization');
+    assert(diagnostic.verified === false, 'unbound capability must not claim verification');
+    assert(diagnostic.last_error === null, 'unattempted capability must not invent an error');
+  }
 });
 
 Deno.test('read-only task preflight is valid but blocked on missing host bindings', () => {
