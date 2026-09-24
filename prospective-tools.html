@@ -39,7 +39,7 @@
 
 <section class="card">
 <h2>前向きデータ収集状況</h2>
-<p class="note">生成済みの履歴JSONを複数選択すると、LightGBM比較前の時系列条件を端末内で確認します。</p>
+<p class="note">生成済みの履歴JSONを複数選択すると、LightGBM比較前の時系列条件を端末内で確認します。以前保存した統合JSONと新しい履歴JSONを一緒に選んでも構いません。</p>
 <label for="history-files">履歴JSON（複数選択可）</label>
 <input id="history-files" type="file" accept=".json,application/json" multiple>
 <div class="grid">
@@ -50,11 +50,14 @@
 </div>
 <p id="collection-status" class="note">履歴ファイルを選択してください。</p>
 <pre id="collection-summary">-</pre>
+<button id="save-history-bundle" class="secondary" type="button" disabled>選択した履歴を1つの私有JSONにまとめて保存</button>
+<p id="history-bundle-status" class="note">履歴ファイルを選択すると、完全に同一の重複だけを除外して端末内で統合できます。</p>
 </section>
 
 <footer class="note">確率は未校正です。このツールは金銭的EVや収益性を判定しません。</footer>
 </main>
 <script src="prospective-tools-core.js"></script>
 <script src="prospective-tools-ui.js"></script>
+<script src="prospective-history-bundle.js"></script>
 </body>
 </html>
