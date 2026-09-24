@@ -26,14 +26,15 @@ Updated: 2026-09-24 UTC.
 - PR #31 (`13fa28c141fb0ba4b7a45a9dd62a43f5baaecb57`) made the evaluator reuse the shared strict prospective evaluation protocol so readiness and paired offline evaluation are locked to one preparation/split contract.
 - PR #32 (`acdb0f40febc4500b4d0fd64f37897d5fbb7ee86`) added `AI_AGENT_REQUIREMENTS.md`, changed `AGENTS.md` to treat the broad autonomous-agent goal as authoritative, and moved the next development priority away from race-data collection alone.
 - PR #33 (`3f01d041969bd1d3cd4304c5047313e3828cccac`) added the first shared autonomous-agent runtime core: machine-readable `TaskSpec`, atomic private task-state persistence, append-only activity ledger, explicit allowed-action gates, stable per-step idempotency keys, verifier hooks, conservative blocked/failed resume semantics, separate artifact lifecycle stages, and a keirin development-validation task adapter. Regression includes agent-core safety tests and passed before merge.
+- PR #35 (`3eab3291d54d7824301c7a030d0db9a02bd05be6`) added explicit blocked-step reconciliation, capability/permission metadata for tool adapters, orchestration preflight, an injected read-only GitHub adapter contract, a read-only keirin status task, and Asia/Tokyo daily activity/revenue reporting contracts. Missing revenue is represented as `unknown` or `unavailable` and cannot silently become zero. Agent orchestration/reporting regression and the existing keirin/Web regression passed before merge.
 - Current real prospective collection status is one eligible distinct prediction time. Four additional distinct eligible prediction times are required to reach the paired evaluator's five-time technical minimum. Boundary purging can still require more than five races/times.
 - Two old saved history variants lack `training_input` and cannot supply the new evaluation.
 
 ## Validation
 
-CI covers Web capture/cutoff checks, browser-local prospective tools, private-history bundle behavior, the main-Web prospective-tools launcher, strict collection-readiness UI state, ML dataset safety, collection readiness, offline snapshot settlement, scheduled-start causality, trifecta adaptation, Phase32 contracts, training-input sanitization, LightGBM position-model smoke, paired chronological leakage checks and shared agent-core safety checks.
+CI covers Web capture/cutoff checks, browser-local prospective tools, private-history bundle behavior, the main-Web prospective-tools launcher, strict collection-readiness UI state, ML dataset safety, collection readiness, offline snapshot settlement, scheduled-start causality, trifecta adaptation, Phase32 contracts, training-input sanitization, LightGBM position-model smoke, paired chronological leakage checks, shared agent-core safety checks, and agent orchestration/reporting checks.
 
-The agent-core regression verifies idempotent resume, no automatic repetition after blocked/failed states, safe retry only for explicitly `retry_safe` steps, verifier-gated completion, separate artifact state (`created`, `verified`, `persistent_saved`, `device_saved`, `ui_loaded`), task-id path safety and JSON TaskSpec round-tripping.
+The agent-core regression verifies idempotent resume, no automatic repetition after blocked/failed states, safe retry only for explicitly `retry_safe` steps, verifier-gated completion, separate artifact state (`created`, `verified`, `persistent_saved`, `device_saved`, `ui_loaded`), task-id path safety, JSON TaskSpec round-tripping, explicit reconciliation of ambiguous side effects, preflight before partial execution, read-only GitHub adapter capability metadata, and missing-revenue handling.
 
 The strict keirin preparation path validates prospective scope, training schema, timezone-aware chronology, scheduled-start causality when available, seven riders/styles, Phase32 engine version, complete finite 210-combination baseline probabilities, outcome membership, duplicate/conflict rules and chronological boundary purging.
 
@@ -47,9 +48,11 @@ When the technical minimum and chronological partitions are available, run the p
 
 ## Common agent state
 
-The first generic runtime foundation now exists and is tested, but the independent autonomous agent is not complete. The current core has no live GitHub/Supabase/Web tool adapters, no explicit reconciliation API for safely unblocking an ambiguous side effect, no scheduler/runtime host, no cross-provider tool router, and no configured 21:00 sales/activity delivery.
+The generic runtime foundation, resumable state, explicit reconciliation, tool-capability registry, orchestration preflight, read-only GitHub adapter contract, activity ledger and reporting contract now exist and are tested. The independent autonomous agent is still not complete.
 
-Do not describe Work/Chat tool use itself, or the current library-only core, as a completed independent autonomous agent.
+The remaining major gaps are a real hosted runtime that binds these provider-neutral adapters to authorized external tools, additional adapters for Supabase/Web/files/generation services, a scheduler/runtime host, secret and permission management for that host, and a configured 21:00 report data source/delivery destination. The repository itself does not automatically gain access to ChatGPT/Work connectors.
+
+Do not describe Work/Chat tool use or the current library components as a completed always-on independent autonomous agent.
 
 ## Next action
 
@@ -57,12 +60,12 @@ Continue the shared agent foundation while keeping keirin collection as a parall
 
 Next implementation slice:
 
-1. Add an explicit reconciliation model so a blocked step can be marked `not_applied`, `applied_and_verified`, or `needs_manual_action` without blindly rerunning it.
-2. Add a tool-adapter contract with capability names, required permissions, read/write classification and dry-run support, then implement a read-only GitHub adapter first.
-3. Add a small orchestration entry point that loads TaskSpec JSON, private state directory and registered adapters, then runs/resumes safely.
-4. Add an activity-summary/report contract. Revenue fields must support `unknown/unavailable` and must never default missing revenue to zero.
-5. Preserve the 21:00 Asia/Tokyo report requirement, but connect scheduling only after the sales source, accounting rules and delivery destination are known.
-6. Adapt one more real keirin development workflow to the shared runner after the GitHub adapter can verify repository/CI state without user screenshots.
+1. Add a provider-neutral runtime bridge contract so an external host can bind authorized connector calls to registered capabilities without placing credentials in task definitions or the repository.
+2. Add a read-only Supabase/status adapter contract and a generic file-artifact adapter contract, preserving explicit read/write classifications.
+3. Add a CLI/runtime entry point for loading TaskSpec JSON, private state location, adapter bindings and reconciliation decisions.
+4. Add a report-delivery interface that is separate from report generation. Do not configure a destination until the user chooses one.
+5. Keep the 21:00 Asia/Tokyo requirement as a scheduling contract, but do not schedule revenue delivery until the sales source, accounting rules and destination are known.
+6. Adapt a real keirin repository/CI status check to the shared runner through the external host so later verification can avoid repeated screenshots.
 
 Do not automatically return to asking the user for race screenshots or JSON when the next safe development step can be completed without user action.
 
