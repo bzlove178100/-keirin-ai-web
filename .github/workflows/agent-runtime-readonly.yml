@@ -1,0 +1,43 @@
+name: agent runtime read-only smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'agent_core/**'
+      - 'tools/agent_github_readonly_host.py'
+      - '.github/workflows/agent-runtime-readonly.yml'
+      - 'AI_AGENT_REQUIREMENTS.md'
+      - 'AGENTS.md'
+      - 'WORK_STATUS.md'
+  push:
+    branches:
+      - main
+    paths:
+      - 'agent_core/**'
+      - 'tools/agent_github_readonly_host.py'
+      - '.github/workflows/agent-runtime-readonly.yml'
+      - 'AI_AGENT_REQUIREMENTS.md'
+      - 'AGENTS.md'
+      - 'WORK_STATUS.md'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  readonly-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run shared agent with live read-only GitHub binding
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/agent_github_readonly_host.py
