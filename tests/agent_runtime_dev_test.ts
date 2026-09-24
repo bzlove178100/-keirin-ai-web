@@ -40,7 +40,6 @@ Deno.test('read-only task preflight is valid but blocked on missing host binding
   };
   const result = preflightTask(task, ['read']);
   assert(result.ok === true, 'task should pass structural preflight');
-  if (!result.ok) throw new Error(result.error);
   assert(result.ready === false, 'unbound host capabilities must prevent ready=true');
   assert(result.forbidden_access_actions.length === 0, 'read-only task should not violate access policy');
   assert(result.unbound_actions.includes('github.read_main'), 'missing GitHub read binding must be reported');
@@ -57,7 +56,6 @@ Deno.test('preflight blocks write capability under read-only access policy', () 
   };
   const result = preflightTask(task, ['read']);
   assert(result.ok === true, 'task should pass structural validation');
-  if (!result.ok) throw new Error(result.error);
   assert(result.ready === false, 'write action must not be ready under read-only policy');
   assert(result.forbidden_access_actions.includes('files.write_artifact'), 'write action must be reported as forbidden');
 });
@@ -92,7 +90,6 @@ Deno.test('task preflight rejects undeclared and unknown actions', () => {
   };
   const result = preflightTask(task, ['read']);
   assert(result.ok === true, 'structural preflight should return a detailed blocked result');
-  if (!result.ok) throw new Error(result.error);
   assert(result.ready === false, 'undeclared/unknown actions must prevent ready state');
   assert(result.undeclared_actions.includes('github.verify_ci'), 'undeclared action should be reported');
   assert(result.unknown_actions.includes('provider.does_not_exist'), 'unknown action should be reported');
