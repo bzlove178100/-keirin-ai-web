@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -158,6 +159,16 @@ class AgentCoreTest(unittest.TestCase):
             store = FileStateStore(tmp)
             with self.assertRaisesRegex(ValueError, "unsafe_task_id"):
                 store.load_state("../escape")
+
+    def test_keirin_adapter_is_valid_task_spec_and_round_trips(self):
+        path = ROOT / "agent_core" / "examples" / "keirin_dev_validation_task.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        spec = TaskSpec.from_dict(payload)
+        self.assertEqual(spec.task_id, "keirin-dev-validate-current-main")
+        self.assertFalse(spec.inputs["production_prediction_enabled"])
+        self.assertFalse(spec.inputs["db_write_enabled"])
+        self.assertFalse(spec.inputs["external_fetch_enabled"])
+        self.assertEqual(TaskSpec.from_dict(spec.to_dict()).to_dict(), spec.to_dict())
 
 
 if __name__ == "__main__":
