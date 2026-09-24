@@ -111,7 +111,9 @@ def patch(text: str) -> str:
         if FUNCTION_ANCHOR not in text:
             raise RuntimeError("anchor not found: refreshHistoryDatasetView")
         text = text.replace(FUNCTION_ANCHOR, FUNCTION_BLOCK + FUNCTION_ANCHOR, 1)
-    text = replace_once(text, REFRESH_ANCHOR, REFRESH_REPLACEMENT, "dataset refresh")
+    # Strict-readiness UI has its own refresh block. Do not reinsert the legacy count-only block.
+    if "collection.chronological_evaluation_may_run" not in text:
+        text = replace_once(text, REFRESH_ANCHOR, REFRESH_REPLACEMENT, "dataset refresh")
     return text
 
 
