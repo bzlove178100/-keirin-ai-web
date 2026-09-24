@@ -1,5 +1,5 @@
 export const AGENT_RUNTIME_SERVICE = 'agent-runtime-dev';
-export const AGENT_RUNTIME_VERSION = 'v2-owner-readonly-preflight-diagnostics';
+export const AGENT_RUNTIME_VERSION = 'v3-owner-preflight-general-capabilities';
 export const TASK_SCHEMA_VERSION = 'agent-task-v1';
 export const RUNTIME_BINDING_SCHEMA_VERSION = 'agent-runtime-bindings-v1';
 
@@ -86,12 +86,60 @@ export const RUNTIME_CAPABILITIES: RuntimeCapability[] = [
     description: 'External host binding required. Verify an explicit private artifact.',
   },
   {
+    action: 'research.web_search',
+    access: 'read',
+    required_permissions: ['public:web:read'],
+    bound: false,
+    supports_dry_run: true,
+    description: 'Collect public web information through an authorized research provider.',
+  },
+  {
+    action: 'text.generate',
+    access: 'execute',
+    required_permissions: ['ai:text:generate'],
+    bound: false,
+    supports_dry_run: false,
+    description: 'Generate or transform text. Delivery/publishing is a separate capability.',
+  },
+  {
+    action: 'image.generate',
+    access: 'execute',
+    required_permissions: ['ai:image:generate'],
+    bound: false,
+    supports_dry_run: false,
+    description: 'Generate an image artifact. Persistence/publishing is separate.',
+  },
+  {
+    action: 'video.generate',
+    access: 'execute',
+    required_permissions: ['ai:video:generate'],
+    bound: false,
+    supports_dry_run: false,
+    description: 'Generate a video artifact. Persistence/publishing is separate.',
+  },
+  {
+    action: 'code.generate',
+    access: 'execute',
+    required_permissions: ['ai:code:generate'],
+    bound: false,
+    supports_dry_run: false,
+    description: 'Generate or modify code in an isolated working context.',
+  },
+  {
+    action: 'code.test',
+    access: 'execute',
+    required_permissions: ['compute:test:execute'],
+    bound: false,
+    supports_dry_run: false,
+    description: 'Run code verification separately from generation or repository writes.',
+  },
+  {
     action: 'files.write_artifact',
     access: 'write',
     required_permissions: ['files:write'],
     bound: false,
     supports_dry_run: false,
-    description: 'External host binding required. No write binding is enabled in v2.',
+    description: 'Persist a generated artifact through an explicitly authorized destination.',
   },
   {
     action: 'report.deliver',
@@ -99,7 +147,7 @@ export const RUNTIME_CAPABILITIES: RuntimeCapability[] = [
     required_permissions: ['report:deliver'],
     bound: false,
     supports_dry_run: false,
-    description: 'Destination is intentionally not configured in v2.',
+    description: 'Deliver a rendered report to an explicitly configured destination.',
   },
 ];
 
