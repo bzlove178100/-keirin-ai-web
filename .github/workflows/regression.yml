@@ -32,6 +32,8 @@ jobs:
         run: node tests/test_web_capture.cjs
       - name: Run ML dataset safety checks
         run: python tests/test_ml_dataset.py
+      - name: Run collection readiness checks
+        run: python tests/test_collection_status.py
       - name: Run trifecta adapter checks
         run: python tests/test_trifecta_adapter.py
       - name: Set up Deno
