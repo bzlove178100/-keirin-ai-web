@@ -26,16 +26,19 @@ Updated: 2026-09-24 UTC.
 - PR #32 added `AI_AGENT_REQUIREMENTS.md`, made the broad autonomous-agent goal authoritative, and prevented keirin data collection from becoming the only development path.
 - PR #33 added the first shared runtime core: machine-readable `TaskSpec`, atomic private task-state persistence, append-only activity ledger, explicit allowed-action gates, stable per-step idempotency keys, verifier hooks, conservative blocked/failed resume semantics and separate artifact lifecycle stages.
 - PR #35 added explicit blocked-step reconciliation, capability/permission metadata, orchestration preflight, a read-only GitHub adapter contract, read-only keirin status task and Asia/Tokyo daily activity/revenue report contracts. Missing revenue is represented as `unknown` or `unavailable`, never silently as zero.
-- PR #37 (`d696542a5d23209644e45aee7bfb8c7a5c1e198e`) added a provider-neutral runtime bridge, strict credential-free runtime binding manifests, read-only Supabase/status and file-artifact adapter contracts, safe runtime/CLI utilities, report-delivery separation and a disabled-by-default 21:00 Asia/Tokyo schedule contract. Runtime manifests reject credential fields. All regression checks passed before merge.
-- PR #38 (`1bd193a614412c1f449f5296b6d999aaa16e3359`) added `supabase/functions/agent-runtime-dev`, an owner-only hosted runtime shell with preflight-only behavior. The first CI attempt exposed only a TypeScript test-narrowing issue; it was corrected and the full regression passed before merge.
-- `agent-runtime-dev` was deployed to Supabase project `keirin-ai-staging` as version 1 and verified `ACTIVE` with `verify_jwt=true`. The deployed files were read back and match the merged source. Hosted v1 does not execute tasks, persist state, perform provider writes, automatically fetch external data or deliver reports; all declared provider bindings remain unbound.
-- PR #40 (`8bc1306ea1820ef19fc0fc3740d9cfa2b9da53ac`) added the first **live provider binding** for the shared agent: a GitHub Actions-hosted read-only worker using the repository's ephemeral `GITHUB_TOKEN`. It binds `github.read_main` and `github.verify_ci`, verifies required repository files and existing main-branch CI through the shared `BoundRuntime`, and explicitly blocks write capabilities.
-- The new `agent runtime read-only smoke` workflow ran successfully on PR #40 with only `contents:read` and `actions:read` permissions. The ordinary keirin regression and collection-progress regression also passed before merge. This verifies a real external read-only tool path through the shared runtime without user screenshots or persistent credentials.
-- Stale PR #39 was closed rather than merged after `main` advanced; this status record replaces it from current `main`.
+- PR #37 (`d696542a5d23209644e45aee7bfb8c7a5c1e198e`) added a provider-neutral runtime bridge, strict credential-free runtime binding manifests, read-only Supabase/status and file-artifact adapter contracts, safe runtime/CLI utilities, report-delivery separation and a disabled-by-default 21:00 Asia/Tokyo schedule contract. Runtime manifests reject credential fields.
+- PR #38 (`1bd193a614412c1f449f5296b6d999aaa16e3359`) added `supabase/functions/agent-runtime-dev`, an owner-only hosted runtime shell with preflight-only behavior. The full regression passed before merge.
+- PR #40 (`8bc1306ea1820ef19fc0fc3740d9cfa2b9da53ac`) added the first live provider binding: a GitHub Actions-hosted read-only worker using the repository's ephemeral `GITHUB_TOKEN`. It binds `github.read_main` and `github.verify_ci`, verifies required repository files and existing main-branch CI through the shared `BoundRuntime`, and explicitly blocks write capabilities.
+- The `agent runtime read-only smoke` workflow has run successfully with only `contents:read` and `actions:read` permissions. This verifies a real external read-only tool path through the shared runtime without user screenshots or persistent credentials.
+- PR #42 (`874e4e10b836355b89dbb7ea61c9e0b6b58e3b59`) added the durable hosted task-state **design**: stable task IDs, queue states (`queued`, `running`, `blocked`, `completed`, `failed`), per-user idempotency keys, owner-scoped RLS and append-only task events. The SQL is outside `supabase/migrations` and wrapped in `BEGIN ... ROLLBACK`; it is not deployed and cannot persist changes as written. Regression locks that safety boundary.
+- PR #43 (`1484b1013dc85a47dc3682148625a5027d8d8d6c`) added hosted runtime capability diagnostics that explicitly distinguish `declared`, `bound`, `authorization_state`, `authorized`, `verified` and `last_error`. All provider bindings in the hosted Supabase shell remain unbound/unverified.
+- `agent-runtime-dev` has been redeployed to Supabase project `keirin-ai-staging` as version 2, verified `ACTIVE` with `verify_jwt=true`, and read back after deployment. The deployed v2 source matches `main` and exposes status/diagnostics plus preflight only.
+- The first v2 deployment attempt was rejected because the previous absolute import-map path was being carried into the new deployment. The cause was identified; redeployment with explicit `import_map_path="deno.json"` succeeded. No database or provider side effect occurred from the failed deployment attempt.
+- Stale PR #39 was closed rather than merged after `main` advanced; its intended status information has been superseded by current records.
 
 ## Validation
 
-CI now covers Web capture/cutoff checks, browser-local prospective tools, private-history bundle behavior, main-Web readiness, ML dataset safety, collection readiness, offline settlement, Phase32/training-input contracts, shared agent-core safety, orchestration/reporting, runtime bridge/delivery behavior, hosted runtime preflight/safety, and the live GitHub read-only host bridge.
+CI now covers Web capture/cutoff checks, browser-local prospective tools, private-history bundle behavior, main-Web readiness, ML dataset safety, collection readiness, offline settlement, Phase32/training-input contracts, shared agent-core safety, orchestration/reporting, runtime bridge/delivery behavior, hosted runtime preflight/safety, the live GitHub read-only host bridge, durable-state schema design safety and runtime diagnostic semantics.
 
 The shared agent tests verify:
 
@@ -48,15 +51,17 @@ The shared agent tests verify:
 - missing sales data never becomes `0` by default;
 - 21:00 Asia/Tokyo scheduling exists only as a disabled contract until data source and destination are configured;
 - hosted `agent-runtime-dev` keeps production prediction, DB writing, external automatic fetching, runtime execution and hosted persistence disabled;
-- the GitHub Actions live bridge can read required repository state and verify existing CI while failing closed if required workflows are missing and refusing write capabilities.
+- the GitHub Actions live bridge can read required repository state and verify existing CI while failing closed if required workflows are missing and refusing write capabilities;
+- the hosted-state SQL design is unapplied/rollback-only, owner-scoped, append-only for events and separate from keirin prediction tables;
+- hosted runtime diagnostics never claim an unbound capability is authorized or verified.
 
 ## Current agent state
 
-The project now has a tested generic runtime core, a real hosted Supabase preflight shell, and one verified live external-tool binding through GitHub Actions. This is no longer only a design/library exercise, but it is still not an always-on self-contained AI agent.
+The project now has a tested generic runtime core, a real hosted Supabase preflight/diagnostic shell, one verified live external-tool binding through GitHub Actions, and a reviewed durable-state schema design. This is no longer only a design/library exercise, but it is still not an always-on self-contained AI agent.
 
 Still missing for independent autonomous operation:
 
-- durable private task state outside one ephemeral Actions runner;
+- activation of durable private task state; the design exists but database writes are intentionally not enabled;
 - a secure runtime credential/permission store for provider bindings that require non-ephemeral authorization;
 - a queue/worker scheduler that can resume tasks without an active chat or one-off workflow run;
 - live bindings for Supabase/files/Web and later generation services;
@@ -71,13 +76,13 @@ Continue the shared agent foundation while preserving the keirin track in parall
 
 Next implementation slice:
 
-1. Design hosted task-state persistence and a queue/run schema with stable task IDs, idempotency keys and states (`queued`, `running`, `blocked`, `completed`, `failed`). Do not deploy database-writing behavior until that change is explicitly authorized because the current fixed condition keeps development DB writes off.
-2. Add runtime diagnostics that distinguish capability `declared`, `bound`, `authorized`, `verified` and `last_error`.
-3. Add another live **read-only** binding where authorization can be safely supplied by the host, with Supabase project/function status as the preferred next candidate.
+1. Keep the durable-state schema unapplied until database-writing activation is explicitly authorized. When authorized, convert the rollback-only design into a reviewed staging migration and run RLS/security/advisor checks before enabling hosted persistence.
+2. Add another live **read-only** binding where authorization can be safely supplied by the host. Supabase project/function status is preferred, but do not copy ChatGPT/Work connector credentials into the repository or hosted runtime.
+3. Add a queue/worker scheduler design that can operate against the durable-state contract later without enabling writes yet.
 4. Preserve the live GitHub worker as a read-only verification path so future repository/CI checks do not require screenshots.
 5. Keep the 21:00 Asia/Tokyo report scheduler disabled until sales source, accounting rules and delivery destination are explicitly resolved.
 6. Continue prospective keirin data collection when suitable races are available, but do not let it replace common agent-runtime development.
 
 ## Constraints
 
-Keep production prediction, development DB writing for keirin prediction flows and external automatic race-data fetching OFF. Scores remain uncalibrated; monetary EV and production promotion remain disabled. Do not commit private histories, snapshots, model artifacts, credentials, private file identifiers or personal data. Prefer current GitHub `main`, deployed function metadata and current tests to older handoff notes.
+Keep production prediction, development DB writing for keirin prediction flows and external automatic race-data fetching OFF. Hosted agent persistence is also OFF until separately authorized. Scores remain uncalibrated; monetary EV and production promotion remain disabled. Do not commit private histories, snapshots, model artifacts, credentials, private file identifiers or personal data. Prefer current GitHub `main`, deployed function metadata and current tests to older handoff notes.
