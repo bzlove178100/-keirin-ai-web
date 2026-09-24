@@ -6,11 +6,16 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from dataset import build_rows
+try:
+    from .dataset import build_rows
+except ImportError:
+    from dataset import build_rows
 
 
 def _records_from_json(data: Any) -> Iterable[dict[str, Any]]:
-    if isinstance(data, dict) and isinstance(data.get("records"), list):
+    if isinstance(data, dict) and data.get("mode") == "dry_run" and isinstance(data.get("payload"), dict):
+        yield from _records_from_json(data["payload"])
+    elif isinstance(data, dict) and isinstance(data.get("records"), list):
         for item in data["records"]:
             if isinstance(item, dict):
                 yield item

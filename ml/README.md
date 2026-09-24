@@ -113,3 +113,46 @@ The offline runtime also refuses artifacts whose feature schema or model version
 No production-sufficiency race count is asserted here. The trainer has a small technical minimum only to prevent malformed development runs; that threshold is **not** a claim that the resulting model is statistically ready for use.
 
 The next evidence gate is to accumulate genuine prospective, pre-result, settled records and report the observed sample size, class behavior, missing-feature coverage, chronological validation results, and comparison with the preserved Phase32 baseline. Promotion criteria should then be defined from those observed data rather than from an arbitrary race-count threshold.
+
+## Paired chronological evaluation
+
+Run from the repository root after installing `ml/requirements.txt`:
+
+```bash
+python -m ml.evaluate_offline path/to/history-json-dir \
+  --output /path/outside/repository/evaluation.json
+```
+
+Accepts individual history records, `records` datasets and the Web export
+`{"mode":"dry_run","payload":{"records":[...]}}`. Keep private input histories
+and evaluation output outside this public repository.
+
+The evaluator validates prospective eligibility, timezone-aware prediction and
+result timestamps, matching training-input capture time, seven distinct riders,
+and a complete normalized saved Phase32 baseline table. It rejects explicitly
+marked synthetic sources in normal CLI use, replay/legacy records, missing
+training inputs, conflicting duplicate snapshots and incompatible baseline
+versions. It cannot independently prove that supplied timestamps or provenance
+are authentic. Accepted records are user-provided history, not independently
+verified live performance evidence.
+
+It selects the latest eligible snapshot per race ID and splits distinct UTC
+prediction times approximately 60%/20%/20% into training, early-stopping
+validation, and untouched test periods. Simultaneous timestamps stay together.
+Training labels unavailable at the validation boundary, and validation labels
+unavailable at the test boundary, are purged. Five distinct prediction times
+and nonempty partitions are only technical requirements, not statistical
+sufficiency or promotion criteria. Preserve stable race IDs across exports.
+
+The same test races are scored by the candidate and their saved baseline.
+The report includes paired Top-1/3/5/10, reciprocal rank, clipped log loss
+(probability floor 1e-15), multiclass Brier sum, candidate-minus-baseline deltas,
+partition race IDs, exclusion reasons and missing-feature coverage. Lower log
+loss and Brier are better; higher rank metrics are better. No ROI or betting
+recommendation is inferred. Both probability tables remain uncalibrated.
+
+Insufficient eligible data produces a report with a blocked reason and exit
+code 2; no model is trained. The command does not save or promote model files,
+write a database, fetch external data, or change deployed functions. Repeatedly
+using this test period to choose models makes it development data; reserve a
+new untouched period for the next final evaluation.
