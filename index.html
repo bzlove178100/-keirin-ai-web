@@ -19,6 +19,7 @@ dl{margin:0}.status-row{padding:13px 0;border-bottom:1px solid var(--line)}dt{co
 .ok{color:#86efac}.pending{color:#fcd34d}.error{color:#fda4af}.notice{color:#fcd34d}.hidden{display:none!important}
 label{display:block;margin-top:12px;margin-bottom:5px;color:var(--muted)}
 input,textarea{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:10px;background:#0f172a;color:#fff;font-size:16px}
+input[type="checkbox"]{width:auto;margin-right:8px}
 textarea{min-height:220px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.5}
 button{width:100%;margin-top:16px;padding:14px;border:0;border-radius:11px;background:#2f6df6;color:#fff;font-size:16px;font-weight:700;cursor:pointer}
 button.secondary{background:#354158}button:disabled{background:#354158;color:#c8d0dd;cursor:not-allowed}
@@ -94,6 +95,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
   <label for="race-json">レースデータJSON</label>
   <textarea id="race-json" spellcheck="false" placeholder='{"race":{"date":"2026-09-15","venue":"伊東温泉","race_number":9},"players":[...],"odds":{"trifecta":{...}}}'></textarea>
 
+  <label for="scheduled-start">発走予定時刻（日本時間）</label>
+  <input id="scheduled-start" type="datetime-local" step="1">
+  <label><input id="prestart-confirmed" type="checkbox">このレースがまだ発走していないことを確認しました</label>
+  <p class="note">検証用の保存には、予定時刻と確認を入力してからdry-runを実行してください。予定時刻は自動取得しません。入力した時刻と端末の時計で判定します。</p>
   <button id="run-dry" type="button" disabled>Phase32でdry-run（保存なし）</button>
   <button id="save-snapshot" class="secondary" type="button" disabled>予測スナップショットをJSON保存</button>
   <p id="snapshot-note" class="note">dry-run成功後に、予測時点の入力・全確率・15点を端末へ保存できます。DBには保存しません。</p>
@@ -134,6 +139,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
   <label for="history-json">生成した履歴JSON</label>
   <textarea id="history-json" spellcheck="false" readonly placeholder="実行後に、backtest-engine-devへそのまま渡せるJSONを表示します。"></textarea>
   <p id="history-backtest-summary" class="note">バックテスト：未実行</p>
+  <p id="training-readiness" class="note">学習用データ：未生成</p>
 </section>
 
 
@@ -403,8 +409,8 @@ function downloadJson(filename, value) {
 }
 
 function savePredictionSnapshot() {
-  if (!lastDryRunSnapshot || lastDryRunSnapshot?.snapshot_eligibility?.prospective === false) {
-    show('snapshot-note','正式検証用として保存できません。結果確定前の当日または未来日のレースでdry-runしてください。','note error');
+  if (!lastDryRunSnapshot || historyEvaluationScope(lastDryRunSnapshot) !== 'prospective' || Date.now() >= Date.parse(lastDryRunSnapshot.snapshot_eligibility.scheduled_start)) {
+    show('snapshot-note','検証用として保存できません。発走予定時刻より前に、未発走を確認してdry-runしてください。','note error');
     return;
   }
   const race = lastDryRunSnapshot.race_data?.race || {};
@@ -482,12 +488,41 @@ function japanTodayString() {
   return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 }
 
-function prospectiveEligibility(raceData) {
+function prospectiveEligibility(raceData, scheduledStart, confirmed, now = new Date()) {
   const raceDate = raceData?.race?.date;
-  const today = japanTodayString();
   if (typeof raceDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raceDate)) return {prospective:false,reason:'race_date_invalid'};
-  if (raceDate < today) return {prospective:false,reason:'historical_race_date'};
-  return {prospective:true,reason:raceDate === today ? 'date_only_same_day' : 'future_race_date'};
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(scheduledStart || '')) return {prospective:false,reason:'scheduled_start_required'};
+  const start = new Date(scheduledStart + '+09:00');
+  const local = new Date(start.getTime() + 9*60*60*1000);
+  if (!Number.isFinite(start.getTime()) || local.toISOString().slice(0,16) !== scheduledStart.slice(0,16) || scheduledStart.slice(0,10) !== raceDate) return {prospective:false,reason:'scheduled_start_invalid'};
+  if (confirmed !== true) return {prospective:false,reason:'prestart_confirmation_required'};
+  if (now.getTime() >= start.getTime()) return {prospective:false,reason:'scheduled_start_passed'};
+  return {prospective:true,reason:'before_scheduled_start',scheduled_start:start.toISOString(),prestart_confirmed:true,clock_source:'client_unverified'};
+}
+
+function fullProbabilityTableValid(scores) {
+  if (!Array.isArray(scores) || scores.length !== 210) return false;
+  const keys = scores.map(x => x?.combo_key);
+  if (!keys.every(validOutcomeCombo) || new Set(keys).size !== 210) return false;
+  if (!scores.every(x => typeof x?.estimated_probability === 'number' && Number.isFinite(x.estimated_probability) && x.estimated_probability >= 0 && x.estimated_probability <= 1)) return false;
+  return Math.abs(scores.reduce((sum,x) => sum+x.estimated_probability,0)-1) <= 1e-6;
+}
+
+function trainingReadiness(record) {
+  const training = record?.training_input;
+  const meta = record?.metadata;
+  if (meta?.evaluation_scope !== 'prospective') return '再現・旧データのため学習対象外';
+  if (training?.schema_version !== 'keirin-training-input-v1') return '学習用入力が含まれていません';
+  if (meta?.training_eligibility?.supervised_training !== true || training?.evaluation_scope !== 'prospective') return '学習対象として確認できません';
+  const captured = Date.parse(training?.captured_at);
+  const predicted = Date.parse(record?.prediction_timestamp);
+  const settled = Date.parse(meta?.result_timestamp);
+  if (!Number.isFinite(captured) || captured !== predicted || !Number.isFinite(settled) || predicted >= settled) return '予測・結果時刻を確認してください';
+  if (!Array.isArray(training.players) || training.players.length !== 7 || !fullProbabilityTableValid(record?.trifecta_scores)) return '選手情報または全210通りの確率が不足しています';
+  const cars = training.players.map(p => p?.car_number);
+  if (new Set(cars).size !== 7 || !cars.every(n => Number.isInteger(n) && n >= 1 && n <= 7) || !training.players.every(p => ['逃','両','追'].includes(p?.style))) return '車番または脚質を確認してください';
+  if (meta?.engine_version !== 'phase32-hit-priority-all210-v1') return '比較対象の予測エンジンが一致しません';
+  return null;
 }
 
 async function runRealDryRun() {
@@ -505,6 +540,9 @@ async function runRealDryRun() {
   }
 
   const raceData = parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.race_data ? parsed.race_data : parsed;
+  const scheduledStart = element('scheduled-start').value;
+  const confirmed = element('prestart-confirmed').checked;
+  const inputAtRequest = element('race-json').value;
   button.disabled = true;
   resetDryRunResults('実行中…');
   show('run-dry-note','Phase32で実レースdry-runを実行しています。DB保存は行いません。','note pending');
@@ -534,6 +572,7 @@ async function runRealDryRun() {
       data?.saved === false &&
       data?.db_write_enabled === false &&
       data?.production_prediction_enabled === false &&
+      fullProbabilityTableValid(data?.prediction?.trifecta_scores) &&
       data?.prediction?.validation?.no_fallback_fill === true &&
       data?.prediction?.validation?.max_three_per_category === true &&
       data?.prediction?.validation?.unique_picks === data?.prediction?.validation?.total_picks &&
@@ -547,10 +586,12 @@ async function runRealDryRun() {
       return;
     }
 
-    const eligibility = prospectiveEligibility(raceData);
+    const capturedAt = new Date();
+    const inputUnchanged = element('race-json').value === inputAtRequest && element('scheduled-start').value === scheduledStart && element('prestart-confirmed').checked === confirmed;
+    const eligibility = inputUnchanged ? prospectiveEligibility(raceData, scheduledStart, confirmed, capturedAt) : {prospective:false,reason:'input_changed_during_request'};
     lastDryRunSnapshot = {
       schema_version:'prediction-snapshot-v1',
-      captured_at:new Date().toISOString(),
+      captured_at:capturedAt.toISOString(),
       validation_mode:'prospective-only',
       snapshot_eligibility:eligibility,
       race_data:raceData,
@@ -558,9 +599,9 @@ async function runRealDryRun() {
     };
     element('save-snapshot').disabled = !eligibility.prospective;
     if (eligibility.prospective) {
-      show('snapshot-note','dry-run成功。結果確定前の前向き検証スナップショットとして保存できます。','note ok');
+      show('snapshot-note','dry-run成功。入力した発走予定時刻より前です。検証用スナップショットを保存できます。','note ok');
     } else {
-      show('snapshot-note','過去日レースのため、正式な前向き検証スナップショット保存を停止しました。dry-run結果の確認だけ可能です。','note pending');
+      show('snapshot-note','検証用の保存には、レース日と一致する未来の発走予定時刻と未発走の確認が必要です。入力後にdry-runを再実行してください。','note pending');
     }
     renderDryRun(data);
   } catch (_) {
@@ -587,6 +628,8 @@ async function loadRaceFile(event) {
 
     // 新しい入力に切り替えた時、前回dry-runの結果を残さない。
     lastDryRunSnapshot = null;
+    element('prestart-confirmed').checked = false;
+    element('scheduled-start').value = '';
     element('save-snapshot').disabled = true;
     resetDryRunResults('未実行');
     show('input-quality','入力品質：未実行','note');
@@ -660,7 +703,11 @@ function validOutcomeCombo(value) {
 
 function historyEvaluationScope(snapshot) {
   const prospective = snapshot?.validation_mode === 'prospective-only' &&
-    snapshot?.snapshot_eligibility?.prospective === true;
+    snapshot?.snapshot_eligibility?.prospective === true &&
+    snapshot?.snapshot_eligibility?.reason === 'before_scheduled_start' &&
+    snapshot?.snapshot_eligibility?.prestart_confirmed === true &&
+    Number.isFinite(Date.parse(snapshot?.captured_at)) &&
+    Date.parse(snapshot.captured_at) < Date.parse(snapshot?.snapshot_eligibility?.scheduled_start);
   return prospective ? 'prospective' : 'replay_or_legacy';
 }
 
@@ -740,11 +787,12 @@ async function loadHistorySnapshotFile(event) {
       scores.length === 210 &&
       scoreSet.size === 210 &&
       scoreKeys.every(validOutcomeCombo) &&
-      Math.abs(probabilityMass - 1) <= 0.02 &&
+      fullProbabilityTableValid(scores) &&
       categoriesValid;
 
     if (!snapshotSafe) throw new Error('snapshot_invalid');
 
+    show('training-readiness','学習用データ：未生成','note');
     loadedHistorySnapshot = parsed;
     lastHistoryBacktestPayload = null;
     element('save-history').disabled = true;
@@ -810,6 +858,15 @@ async function runHistoryPipeline() {
     return;
   }
 
+  if (resultDate && resultDate.getTime() > Date.now()) {
+    show('history-note','結果確定時刻に未来の時刻は指定できません。','note error');
+    return;
+  }
+  if (evaluationScope === 'prospective' && resultDate.getTime() < Date.parse(loadedHistorySnapshot.snapshot_eligibility.scheduled_start)) {
+    show('history-note','結果確定時刻は発走予定時刻以降を指定してください。','note error');
+    return;
+  }
+  show('training-readiness','学習用データ：確認中','note');
   button.disabled = true;
   element('save-history').disabled = true;
   show('history-note','履歴生成 → バックテストを実行しています。DB保存は行いません。','note pending');
@@ -840,6 +897,7 @@ async function runHistoryPipeline() {
     if (!safe) {
       const details = Array.isArray(data?.validation_errors) ? data.validation_errors.join(' / ') : (data?.error || `HTTP ${response.status}`);
       show('history-note',`履歴生成できませんでした：${details}`,'note error');
+      show('training-readiness','学習用データ：未生成','note');
       show('history-backtest-summary','バックテスト：未実行','note error');
       return;
     }
@@ -847,6 +905,8 @@ async function runHistoryPipeline() {
     const backtestPayload = data.backtest_request?.mode === 'dry_run' && data.backtest_request?.payload
       ? data.backtest_request
       : {mode:'dry_run',payload:{records:[data.history_record]}};
+    const readinessIssue = trainingReadiness(data.history_record);
+    show('training-readiness', readinessIssue ? `学習用データ：${readinessIssue}` : '学習用データ：基本項目を確認しました。履歴JSONを保存してください。最終的な採否は比較処理で判定します。', readinessIssue ? 'note pending' : 'note ok');
     lastHistoryBacktestPayload = backtestPayload;
     element('history-json').value = JSON.stringify(backtestPayload,null,2);
     element('backtest-json').value = JSON.stringify(backtestPayload,null,2);
@@ -858,6 +918,7 @@ async function runHistoryPipeline() {
     const roi = bt?.selection_performance?.roi_multiple;
     show('history-backtest-summary',`バックテスト：${bt?.records ?? 0}レース / 買い目 ${bt?.selection_performance?.picks ?? 0}点 / 的中 ${bt?.selection_performance?.hits ?? 0} / ROI ${roi == null ? '-' : Number(roi).toFixed(3)+'倍'}`,'note ok');
   } catch (_) {
+    show('training-readiness','学習用データ：未生成（実行失敗）','note error');
     show('history-note','通信または実行エラーで履歴生成できませんでした。','note error');
     show('history-backtest-summary','バックテスト：実行失敗','note error');
   } finally {
@@ -881,7 +942,7 @@ function normalizeDatasetRecord(record) {
   if (!validOutcomeCombo(record.outcome_combo)) return null;
   if (!Number.isFinite(Number(record.settlement_odds)) || Number(record.settlement_odds) <= 0) return null;
   if (!record.selected_predictions?.categories || !Array.isArray(record.trifecta_scores)) return null;
-  if (record.trifecta_scores.length !== 210) return null;
+  if (!fullProbabilityTableValid(record.trifecta_scores)) return null;
   const scoreKeys = record.trifecta_scores.map(x => x?.combo_key);
   if (!scoreKeys.every(validOutcomeCombo) || new Set(scoreKeys).size !== 210) return null;
   const probabilityMass = record.trifecta_scores.reduce((sum,x)=>sum + Number(x?.estimated_probability || 0),0);
@@ -1138,6 +1199,13 @@ element('refresh').addEventListener('click',checkStatus);
 element('run-dry').addEventListener('click',runRealDryRun);
 element('save-snapshot').addEventListener('click',savePredictionSnapshot);
 element('race-file').addEventListener('change',loadRaceFile);
+for (const id of ['race-json','scheduled-start','prestart-confirmed']) {
+  element(id).addEventListener('input', () => {
+    lastDryRunSnapshot = null;
+    element('save-snapshot').disabled = true;
+    show('snapshot-note','入力が変わりました。保存前にdry-runを再実行してください。','note');
+  });
+}
 element('history-snapshot-file').addEventListener('change',loadHistorySnapshotFile);
 element('run-history').addEventListener('click',runHistoryPipeline);
 element('save-history').addEventListener('click',saveHistoryJson);
@@ -1151,4 +1219,3 @@ element('password').addEventListener('keydown',event=>{if(event.key==='Enter')lo
 </script>
 </body>
 </html>
-
