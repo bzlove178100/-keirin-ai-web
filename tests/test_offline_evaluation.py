@@ -74,7 +74,10 @@ class EvaluationTest(unittest.TestCase):
         self.assertEqual(len({x['prediction_time'] for x in selected}), 5)
         self.assertEqual(audit['purged_unsettled_at_boundary'], 0)
 
-    def test_readiness_protocol_matches_evaluator_preparation_and_split(self):
+    def test_evaluator_uses_shared_readiness_protocol_directly(self):
+        self.assertIs(prepare, protocol_prepare)
+        self.assertIs(split_records, protocol_split_records)
+
         records = [fixture(i) for i in range(10)]
         records[0]['metadata']['result_timestamp'] = records[8]['metadata']['result_timestamp']
         evaluator_selected, evaluator_quality = prepare(records, synthetic=True)
@@ -121,6 +124,7 @@ class EvaluationTest(unittest.TestCase):
         report = evaluate_records([fixture(i) for i in range(16)], synthetic=True)
         self.assertEqual(report['status'], 'completed_offline_holdout')
         self.assertEqual(report['evidence_scope'], 'synthetic_test_only')
+        self.assertEqual(report['protocol_source'], 'ml.evaluation_protocol')
         self.assertFalse(report['promotion_eligible'])
         self.assertEqual(report['test_races'], 4)
         self.assertEqual(report['split']['test_race_ids'], ['SYN-012', 'SYN-013', 'SYN-014', 'SYN-015'])
