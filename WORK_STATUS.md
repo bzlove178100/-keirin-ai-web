@@ -2,23 +2,22 @@
 
 Updated: 2026-09-24 UTC.
 
-## Current checkpoint
+## Verified progress
 
-- Offline LightGBM inference was merged in PR #8, main commit `b8d1f2d5b41ffa534a26c80575dfbfada1371892`. Both PR workflows passed.
-- Current work: `dev-offline-evaluation-v1`, paired chronological evaluation of new prospective history against its saved Phase32 baseline. Check live PR and CI state before resuming.
-- Added strict input/time/baseline checks, latest-snapshot deduplication, train/validation/test periods, boundary purging of unavailable labels, paired ranking/probability metrics, and missing-feature/exclusion reporting.
-- Fixed reading the Web's `mode=dry_run, payload.records` history export.
-- Local evaluation tests cover Web input, replay/synthetic rejection, invalid timestamps/probabilities, conflicting duplicates, UTC order, boundary leakage, known metric values and synthetic end-to-end evaluation. Synthetic success is not real-race accuracy.
-- Two existing saved `backtest-history-dataset-v1.json` variants were inspected. Both contain one old Ito race record and lack `training_input`; neither supports this new evaluation. No real-data accuracy result was generated.
+- PR #8: offline LightGBM inference merged.
+- PR #9: paired chronological evaluation merged at `e1ce9de4618cf8fb17f60333a2e3ec87c32b6264`; regression and ML evaluation checks passed.
+- Current branch: `dev-prospective-capture-checks-v1`. Adds Japanese-time scheduled start and explicit pre-start confirmation to Web snapshot capture, capture/save cutoff checks, future result-time rejection, training-input readiness feedback and full finite probability-table validation.
+- Date-only legacy snapshots remain available for replay diagnostics but are no longer classified as prospective by the Web. No Supabase functions are changed; these are client consistency checks, not server-attested timing or independent provenance checks.
+- Real-data accuracy remains unmeasured. Two old saved history variants lack training_input and cannot supply the new evaluation.
 
-## Next step
+## Validation
 
-After this branch passes CI and is merged, obtain new user-provided prospective settled history exports containing training_input, prediction/result timestamps and full baseline trifecta scores. Run `python -m ml.evaluate_offline ... --output ...` outside the public repository. Inspect exclusions and data coverage before interpreting any metrics. Do not request the unavailable old prediction snapshot again. Never substitute synthetic or replay results for prospective accuracy evidence.
+Run `node tests/test_web_capture.cjs` and existing regression checks. The Web test executes actual inline functions and covers scheduled cutoff, legacy scope, invalid probability tables, unavailable training inputs and future result submission. Check the final PR CI and GitHub Pages deployment before claiming public delivery. Owner-authenticated end-to-end execution still requires a real session and race input.
+
+## Next action
+
+Use a new, not-yet-started race input. Enter its scheduled start in Japan time, confirm it has not started, run dry-run and save the snapshot before the scheduled start. After the official result, enter confirmed outcome, odds and result timestamp; generate and save history. The Web displays whether basic training fields are present. Feed multiple eligible histories into `python -m ml.evaluate_offline ... --output ...` outside this public repository. Exclusions and technical minimums are not proof of statistical sufficiency. Do not ask for the unavailable old snapshot again.
 
 ## Constraints
 
-Production prediction, DB writing and external automatic data fetching remain OFF. Offline scores remain uncalibrated; monetary EV and promotion are disabled. This change does not deploy Supabase functions or change the public Web UI. Do not commit private histories, model artifacts or evaluation reports. Timestamp validation checks supplied data consistency, not independent provenance.
-
-## Resume
-
-Read this file and current GitHub state. Prefer current repository evidence over the old external handoff, which predates merged development PRs. Verify current branch/commit and tests before changing code.
+Keep production prediction, DB writing and external automatic fetching OFF. Scores remain uncalibrated; monetary EV and promotion remain disabled. Do not commit private histories, model artifacts or evaluation reports. Prefer current GitHub state to older external handoff notes.

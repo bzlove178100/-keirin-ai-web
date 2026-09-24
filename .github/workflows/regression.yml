@@ -24,6 +24,12 @@ jobs:
           python-version: '3.12'
       - name: Run web and safety regression checks
         run: python tests/test_regression.py
+      - name: Set up Node for Web capture checks
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run Web capture checks
+        run: node tests/test_web_capture.cjs
       - name: Run ML dataset safety checks
         run: python tests/test_ml_dataset.py
       - name: Run trifecta adapter checks
