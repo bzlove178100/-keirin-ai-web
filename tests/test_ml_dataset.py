@@ -45,6 +45,17 @@ def prospective_record(timestamp: str = "2026-09-16T14:24:00+09:00") -> dict:
     }
 
 
+def with_schedule(record: dict, *, scheduled: str, result: str, race_scheduled: str | None = None) -> dict:
+    record = copy.deepcopy(record)
+    record["metadata"]["result_timestamp"] = result
+    record["metadata"]["source_snapshot"] = {
+        "snapshot_eligibility": {"scheduled_start": scheduled}
+    }
+    if race_scheduled is not None:
+        record["training_input"]["race"]["scheduled_start_jst"] = race_scheduled
+    return record
+
+
 def test_only_prospective_pre_result_records_are_training_eligible():
     record = prospective_record()
     assert supervised_eligibility(record) == (True, "eligible")
@@ -59,6 +70,38 @@ def test_only_prospective_pre_result_records_are_training_eligible():
     late["metadata"]["temporal_order"] = "snapshot_at_or_after_result"
     late["metadata"]["training_eligibility"]["supervised_training"] = False
     assert supervised_eligibility(late)[0] is False
+
+
+def test_schedule_order_is_checked_when_snapshot_schedule_exists():
+    valid = with_schedule(
+        prospective_record("2026-09-16T14:24:00+09:00"),
+        scheduled="2026-09-16T15:00:00+09:00",
+        result="2026-09-16T15:10:00+09:00",
+        race_scheduled="2026-09-16T15:00:00+09:00",
+    )
+    assert supervised_eligibility(valid) == (True, "eligible")
+
+    too_early = with_schedule(
+        prospective_record("2026-09-16T14:24:00+09:00"),
+        scheduled="2026-09-16T15:00:00+09:00",
+        result="2026-09-16T14:50:00+09:00",
+    )
+    assert supervised_eligibility(too_early) == (False, "invalid_schedule_order")
+
+    post_start_capture = with_schedule(
+        prospective_record("2026-09-16T15:01:00+09:00"),
+        scheduled="2026-09-16T15:00:00+09:00",
+        result="2026-09-16T15:10:00+09:00",
+    )
+    assert supervised_eligibility(post_start_capture) == (False, "invalid_schedule_order")
+
+    mismatch = with_schedule(
+        prospective_record("2026-09-16T14:24:00+09:00"),
+        scheduled="2026-09-16T15:00:00+09:00",
+        result="2026-09-16T15:10:00+09:00",
+        race_scheduled="2026-09-16T15:01:00+09:00",
+    )
+    assert supervised_eligibility(mismatch) == (False, "scheduled_start_mismatch")
 
 
 def test_rider_rows_create_position_targets_without_using_settlement_as_feature():
@@ -104,6 +147,7 @@ def test_9999_9_marker_is_rejected_if_it_ever_reaches_dataset_builder():
 
 if __name__ == "__main__":
     test_only_prospective_pre_result_records_are_training_eligible()
+    test_schedule_order_is_checked_when_snapshot_schedule_exists()
     test_rider_rows_create_position_targets_without_using_settlement_as_feature()
     test_latest_eligible_snapshot_is_selected_once_per_race()
     test_9999_9_marker_is_rejected_if_it_ever_reaches_dataset_builder()
