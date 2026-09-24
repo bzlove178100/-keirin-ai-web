@@ -1,0 +1,37 @@
+{
+  "schema_version": "agent-runtime-bindings-v1",
+  "bindings": [
+    {
+      "provider": "github",
+      "action": "github.read_main",
+      "access": "read",
+      "required_permissions": ["contents:read"],
+      "supports_dry_run": true,
+      "description": "Read required repository files through an authorized external host."
+    },
+    {
+      "provider": "github",
+      "action": "github.verify_ci",
+      "access": "read",
+      "required_permissions": ["actions:read"],
+      "supports_dry_run": true,
+      "description": "Verify an existing CI state without starting a workflow."
+    },
+    {
+      "provider": "supabase",
+      "action": "supabase.project_status",
+      "access": "read",
+      "required_permissions": ["supabase:project:read"],
+      "supports_dry_run": true,
+      "description": "Read project status without changing configuration."
+    },
+    {
+      "provider": "files",
+      "action": "files.read_artifact",
+      "access": "read",
+      "required_permissions": ["files:read"],
+      "supports_dry_run": true,
+      "description": "Read an explicitly selected private artifact."
+    }
+  ]
+}
