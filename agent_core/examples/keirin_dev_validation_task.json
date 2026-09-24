@@ -1,0 +1,61 @@
+{
+  "schema_version": "agent-task-v1",
+  "task_id": "keirin-dev-validate-current-main",
+  "title": "競輪AI 現行main安全検証",
+  "goal": "競輪AIの固定安全条件を変更せず、現行mainの回帰テストと状態記録を実行する",
+  "allowed_actions": [
+    "github.read_main",
+    "ci.run_regression",
+    "ci.verify_regression",
+    "activity.record_status"
+  ],
+  "inputs": {
+    "repository": "bzlove178100/-keirin-ai-web",
+    "production_prediction_enabled": false,
+    "db_write_enabled": false,
+    "external_fetch_enabled": false
+  },
+  "steps": [
+    {
+      "step_id": "read-main",
+      "action": "github.read_main",
+      "args": {
+        "required_files": [
+          "AI_AGENT_REQUIREMENTS.md",
+          "AGENTS.md",
+          "WORK_STATUS.md"
+        ]
+      },
+      "retry_safe": true,
+      "max_attempts": 2
+    },
+    {
+      "step_id": "run-regression",
+      "action": "ci.run_regression",
+      "args": {
+        "mode": "read_only_validation"
+      },
+      "verify_action": "ci.verify_regression",
+      "retry_safe": false,
+      "max_attempts": 1
+    },
+    {
+      "step_id": "record-status",
+      "action": "activity.record_status",
+      "args": {
+        "record_artifact_stages_separately": true,
+        "do_not_mark_unverified_as_complete": true
+      },
+      "retry_safe": true,
+      "max_attempts": 2
+    }
+  ],
+  "completion_conditions": [
+    "current main was read",
+    "regression result was independently verified",
+    "activity/status record was written",
+    "production prediction remains off",
+    "development DB writes remain off",
+    "external automatic fetching remains off"
+  ]
+}
