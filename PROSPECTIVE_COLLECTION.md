@@ -10,9 +10,39 @@ For each race:
 2. Enter the scheduled start in Japan time and explicitly confirm the race has not started.
 3. Run owner-only Phase32 dry-run and save the prediction snapshot before scheduled start.
 4. Do not edit the saved snapshot after the race.
-5. After the official result is available, enter the confirmed trifecta outcome, settlement odds and result timestamp.
-6. Generate history through `history-pipeline-dev` and save the history JSON.
-7. Confirm the generated record is prospective and supervised-training eligible before adding it to the evaluation dataset.
+5. After the official result is available, confirm the trifecta outcome and settlement odds.
+6. Record a timezone-aware timestamp for when that confirmed result was observed/recorded. Do not label this as an official publication timestamp unless an authoritative source supplies that exact timestamp.
+7. Generate history either through the owner Web/history pipeline or with the local offline builder described below.
+8. Confirm the generated record is prospective and supervised-training eligible before adding it to the evaluation dataset.
+
+## Local/offline settlement
+
+`ml.settle_snapshot` provides a network-free fallback for converting a saved prospective snapshot into the same canonical history shape used by offline ML. It performs no database writes and does not enable production prediction or external fetching.
+
+Example:
+
+```bash
+python -m ml.settle_snapshot \
+  phase32-snapshot-2026-09-24-race-1.json \
+  --outcome 3-4-7 \
+  --odds 39.3 \
+  --result-timestamp 2026-09-24T17:31:54+09:00 \
+  --output backtest-history-2026-09-24-race-1.json
+```
+
+The result timestamp in this workflow means the time the already-confirmed result was observed/recorded. It is not automatically an official finish time or official publication time.
+
+The builder validates the prospective flag, pre-start confirmation, seven riders, current Phase32 engine version, full 210-combination probability table, category structure and timestamp ordering before it emits a supervised-training-eligible record. Prediction-time partial odds are preserved exactly; unknown odds are not inferred.
+
+## Collection readiness
+
+Use the local readiness command on private history files or a private directory:
+
+```bash
+python -m ml.collection_status /path/to/private/histories --require-ready
+```
+
+It reports eligible unique races, distinct prediction times, how many additional distinct times remain before the evaluator's five-time technical minimum, and the known trifecta-odds counts. A passing collection threshold only means the chronological evaluator may be able to form partitions; it is not evidence of statistical sufficiency, accuracy, calibration or profitability.
 
 ## Chronological minimum
 
