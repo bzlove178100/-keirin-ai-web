@@ -32,6 +32,8 @@ jobs:
         run: node tests/test_web_capture.cjs
       - name: Run browser-local prospective tools checks
         run: node tests/test_prospective_tools.cjs
+      - name: Run private history bundle checks
+        run: node tests/test_prospective_history_bundle.cjs
       - name: Run ML dataset safety checks
         run: python tests/test_ml_dataset.py
       - name: Run collection readiness checks
