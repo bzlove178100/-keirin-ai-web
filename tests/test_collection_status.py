@@ -1,7 +1,12 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import sys
 import unittest
 
-from ml.collection_status import MIN_DISTINCT_PREDICTION_TIMES, collection_status
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "ml"))
+
+from collection_status import MIN_DISTINCT_PREDICTION_TIMES, collection_status  # noqa: E402
 
 
 def record(i: int, *, race_id: str | None = None, odds_count: int = 72):
@@ -24,7 +29,7 @@ def record(i: int, *, race_id: str | None = None, odds_count: int = 72):
             "evaluation_scope": "prospective",
             "captured_at": predicted.isoformat(),
             "players": players,
-            "odds": {"trifecta": {f"1-2-{car}": float(car) for car in range(3, 3 + odds_count)}},
+            "odds": {"trifecta": {f"known-{n}": float(n + 1) for n in range(odds_count)}},
         },
     }
 
