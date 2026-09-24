@@ -104,7 +104,7 @@ def history(i: int):
         snap,
         outcome_combo=outcome,
         settlement_odds=float(20 + i),
-        result_timestamp=(captured + timedelta(minutes=10)).isoformat(),
+        result_timestamp=(captured + timedelta(minutes=40)).isoformat(),
     )
 
 
