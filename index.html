@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://omamgmyyqnawlagbemcm.supabase.co; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://omamgmyyqnawlagbemcm.supabase.co; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; upgrade-insecure-requests">
 <title>競輪AI予想</title>
 <style>
 :root{color-scheme:dark;--bg:#0b1020;--card:#151c2f;--line:#2a3550;--muted:#b2bdd0}
@@ -193,6 +193,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
 <footer class="note">競輪AI・個人利用版 開発中<br>データ取得・予想・保存・表示を分離し、後から機能追加できる構造で開発しています。</footer>
 </main>
 
+<script src="prospective-tools-core.js"></script>
 <script>
 'use strict';
 
@@ -975,24 +976,21 @@ function timezoneAwarePredictionTimestamp(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function prospectiveCollectionEligible(record) {
-  const metadata = record?.metadata || {};
-  const eligibility = metadata?.training_eligibility || {};
-  const training = record?.training_input;
-  return metadata?.evaluation_scope === 'prospective' &&
-    metadata?.temporal_order === 'prediction_before_result' &&
-    eligibility?.supervised_training === true &&
-    training && typeof training === 'object' && !Array.isArray(training) &&
-    training?.schema_version === 'keirin-training-input-v1' &&
-    training?.evaluation_scope === 'prospective' &&
-    Array.isArray(training?.players) && training.players.length >= 4 &&
-    validOutcomeCombo(record?.outcome_combo);
-}
-
-function prospectiveCollectionStatus(records) {
+function fallbackProspectiveCollectionStatus(records) {
   const latestByRace = new Map();
   for (const record of Array.isArray(records) ? records : []) {
-    if (!prospectiveCollectionEligible(record)) continue;
+    const metadata = record?.metadata || {};
+    const eligibility = metadata?.training_eligibility || {};
+    const training = record?.training_input;
+    const eligible = metadata?.evaluation_scope === 'prospective' &&
+      metadata?.temporal_order === 'prediction_before_result' &&
+      eligibility?.supervised_training === true &&
+      training && typeof training === 'object' && !Array.isArray(training) &&
+      training?.schema_version === 'keirin-training-input-v1' &&
+      training?.evaluation_scope === 'prospective' &&
+      Array.isArray(training?.players) && training.players.length >= 4 &&
+      validOutcomeCombo(record?.outcome_combo);
+    if (!eligible) continue;
     const raceId = String(record?.race_id || '').trim();
     if (!raceId) continue;
     const candidateTime = timezoneAwarePredictionTimestamp(record?.prediction_timestamp);
@@ -1004,28 +1002,27 @@ function prospectiveCollectionStatus(records) {
   }
 
   const distinctTimes = new Set();
-  let eligibleUniqueRaces = 0;
-  let invalidPredictionTimes = 0;
   for (const record of latestByRace.values()) {
     const predicted = timezoneAwarePredictionTimestamp(record?.prediction_timestamp);
-    if (predicted == null) {
-      invalidPredictionTimes++;
-      continue;
-    }
-    eligibleUniqueRaces++;
-    distinctTimes.add(predicted);
+    if (predicted != null) distinctTimes.add(predicted);
   }
-
   const distinctCount = distinctTimes.size;
-  const remaining = Math.max(0, COLLECTION_MIN_DISTINCT_PREDICTION_TIMES - distinctCount);
   return {
-    eligible_unique_races: eligibleUniqueRaces,
+    eligible_unique_races: latestByRace.size,
     distinct_prediction_times: distinctCount,
     minimum_distinct_prediction_times: COLLECTION_MIN_DISTINCT_PREDICTION_TIMES,
-    remaining_distinct_prediction_times: remaining,
-    collection_threshold_met: remaining === 0,
-    invalid_prediction_times: invalidPredictionTimes
+    remaining_distinct_prediction_times: Math.max(0, COLLECTION_MIN_DISTINCT_PREDICTION_TIMES - distinctCount),
+    collection_threshold_met: distinctCount >= COLLECTION_MIN_DISTINCT_PREDICTION_TIMES,
+    chronological_evaluation_may_run: false,
+    blocked_reason: 'strict_validator_unavailable',
+    validation_source: 'fallback_count_only'
   };
+}
+
+function prospectiveCollectionStatus(records) {
+  const strict = globalThis.ProspectiveTools?.collectionStatus;
+  if (typeof strict !== 'function') return fallbackProspectiveCollectionStatus(records);
+  return {...strict(Array.isArray(records) ? records : []), validation_source:'prospective-tools-core'};
 }
 
 function refreshHistoryDatasetView(message = '') {
@@ -1035,12 +1032,22 @@ function refreshHistoryDatasetView(message = '') {
   show('dataset-record-count',`${historyDatasetRecords.length}件`);
   show('dataset-duplicate-count',`${historyDatasetDuplicateCount}件`);
   const collection = prospectiveCollectionStatus(historyDatasetRecords);
+  const strictReady = collection.chronological_evaluation_may_run === true;
+  const timeMinimum = collection.collection_threshold_met === true;
   show('dataset-prospective-count',`${collection.distinct_prediction_times}/${collection.minimum_distinct_prediction_times}件`);
   show(
     'dataset-prospective-remaining',
-    collection.collection_threshold_met ? '最低条件到達' : `あと${collection.remaining_distinct_prediction_times}件`,
-    collection.collection_threshold_met ? 'ok' : ''
+    strictReady ? '時系列分割 準備可' : timeMinimum ? '5時点到達・分割未達' : `あと${collection.remaining_distinct_prediction_times}時点`,
+    strictReady ? 'ok' : 'pending'
   );
+  const readinessDetail = collection.validation_source === 'fallback_count_only'
+    ? '厳密な前向き検証器を読み込めませんでした。件数表示は参考値です。'
+    : strictReady
+      ? '厳密な前向き検証で時系列分割の技術条件を確認しました。統計的な十分性・モデル優位性・収益性を意味しません。'
+      : timeMinimum
+        ? `5つの異なる適格予測時刻には到達していますが、時系列分割は未達です（${collection.blocked_reason || '要追加データ'}）。`
+        : `厳密な前向き検証で、最低5つの異なる適格予測時刻まであと${collection.remaining_distinct_prediction_times}時点です。`;
+  show('dataset-collection-detail',readinessDetail,strictReady ? 'note ok' : timeMinimum ? 'note pending' : 'note');
   element('save-dataset').disabled = historyDatasetRecords.length === 0;
   const backtestReady = currentSession && element('backtest-engine-status').classList.contains('ok');
   element('run-dataset-backtest').disabled = !(historyDatasetRecords.length && backtestReady);
