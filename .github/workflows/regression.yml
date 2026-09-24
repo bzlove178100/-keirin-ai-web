@@ -26,6 +26,8 @@ jobs:
         run: python tests/test_regression.py
       - name: Run shared agent core safety checks
         run: python tests/test_agent_core.py
+      - name: Run agent orchestration and reporting checks
+        run: python tests/test_agent_orchestration.py
       - name: Set up Node for Web capture checks
         uses: actions/setup-node@v4
         with:
