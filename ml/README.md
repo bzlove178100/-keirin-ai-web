@@ -69,7 +69,7 @@ python ml/build_training_dataset.py path/to/history-json-dir \
   --output artifacts/training-riders.csv \
   --summary artifacts/training-summary.json
 
-python ml/train_position_models.py artifacts/training-riders.csv \
+python -m ml.train_position_models artifacts/training-riders.csv \
   --output-dir artifacts/lightgbm-position-models-v1
 ```
 
@@ -80,7 +80,7 @@ The trainer currently uses rider performance, line, recent-form, condition, bank
 `predict_position_models.py` loads the three saved model files and runs the same rider-feature extraction used by the training dataset. This reduces training-serving skew before any API integration is attempted.
 
 ```bash
-python ml/predict_position_models.py path/to/pre-race.json \
+python -m ml.predict_position_models path/to/pre-race.json \
   --model-dir artifacts/lightgbm-position-models-v1 \
   --output artifacts/offline-prediction.json
 ```
