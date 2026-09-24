@@ -9,6 +9,9 @@ import unittest
 from ml_position_smoke import make_record
 from ml.build_training_dataset import load_records
 from ml.evaluate_offline import BASELINE, evaluate_records, prepare, score, split_records, timestamp
+from ml.evaluation_protocol import prepare as protocol_prepare
+from ml.evaluation_protocol import readiness as protocol_readiness
+from ml.evaluation_protocol import split_records as protocol_split_records
 
 
 def fixture(i):
@@ -70,6 +73,25 @@ class EvaluationTest(unittest.TestCase):
         self.assertGreaterEqual(len(test), 1)
         self.assertEqual(len({x['prediction_time'] for x in selected}), 5)
         self.assertEqual(audit['purged_unsettled_at_boundary'], 0)
+
+    def test_readiness_protocol_matches_evaluator_preparation_and_split(self):
+        records = [fixture(i) for i in range(10)]
+        records[0]['metadata']['result_timestamp'] = records[8]['metadata']['result_timestamp']
+        evaluator_selected, evaluator_quality = prepare(records, synthetic=True)
+        protocol_selected, protocol_quality = protocol_prepare(records, synthetic=True)
+        self.assertEqual(
+            [x['race_id'] for x in protocol_selected],
+            [x['race_id'] for x in evaluator_selected],
+        )
+        self.assertEqual(protocol_quality, evaluator_quality)
+
+        e_train, e_valid, e_test, e_audit = split_records(evaluator_selected)
+        p_train, p_valid, p_test, p_audit = protocol_split_records(protocol_selected)
+        self.assertEqual([x['race_id'] for x in p_train], [x['race_id'] for x in e_train])
+        self.assertEqual([x['race_id'] for x in p_valid], [x['race_id'] for x in e_valid])
+        self.assertEqual([x['race_id'] for x in p_test], [x['race_id'] for x in e_test])
+        self.assertEqual(p_audit, e_audit)
+        self.assertTrue(protocol_readiness(records, synthetic=True)['chronological_partitions_ready'])
 
     def test_utc_order_and_boundary_purge(self):
         records = [fixture(i) for i in range(10)]
