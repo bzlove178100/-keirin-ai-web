@@ -572,6 +572,7 @@ async function runRealDryRun() {
       data?.saved === false &&
       data?.db_write_enabled === false &&
       data?.production_prediction_enabled === false &&
+      fullProbabilityTableValid(data?.prediction?.trifecta_scores) &&
       data?.prediction?.validation?.no_fallback_fill === true &&
       data?.prediction?.validation?.max_three_per_category === true &&
       data?.prediction?.validation?.unique_picks === data?.prediction?.validation?.total_picks &&
