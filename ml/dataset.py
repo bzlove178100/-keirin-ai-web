@@ -3,16 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Iterable
 
+try:
+    from .feature_extraction import extract_player_model_fields, num
+except ImportError:  # Support `python ml/build_training_dataset.py ...`.
+    from feature_extraction import extract_player_model_fields, num
+
 TRAINING_SCHEMA = "keirin-training-input-v1"
-
-
-def _num(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _time_key(value: Any) -> float:
@@ -69,17 +65,6 @@ def select_latest_eligible_per_race(records: Iterable[dict[str, Any]]) -> tuple[
     return list(selected.values()), excluded
 
 
-def _current_meet_avg(player: dict[str, Any]) -> float | None:
-    results = ((player.get("current_meet") or {}).get("results") or [])
-    finishes: list[float] = []
-    for item in results:
-        raw = item.get("finish") if isinstance(item, dict) else item
-        value = _num(raw)
-        if value is not None and value > 0:
-            finishes.append(value)
-    return sum(finishes) / len(finishes) if finishes else None
-
-
 def rider_rows(record: dict[str, Any]) -> list[dict[str, Any]]:
     ok, reason = supervised_eligibility(record)
     if not ok:
@@ -92,46 +77,22 @@ def rider_rows(record: dict[str, Any]) -> list[dict[str, Any]]:
         raise ValueError("outcome_combo must contain three distinct riders")
 
     known_odds = ((training.get("odds") or {}).get("trifecta") or {})
-    if any(_num(v) == 9999.9 for v in known_odds.values()):
+    if any(num(v) == 9999.9 for v in known_odds.values()):
         raise ValueError("training input contains K-Dreams 9999.9 no-ticket marker")
 
     rows: list[dict[str, Any]] = []
     for player in training["players"]:
         if not isinstance(player, dict):
             continue
-        car = int(player["car_number"])
-        recent = player.get("recent_form") or {}
-        factors = ((player.get("comments") or {}).get("parsed_factors") or {})
-        line_position = _num(player.get("line_position"))
+        features = extract_player_model_fields(player)
+        car = int(features["car_number"])
         row = {
             "race_id": record.get("race_id"),
             "date": race.get("date"),
             "venue": race.get("venue"),
             "race_number": race.get("race_number"),
             "prediction_timestamp": record.get("prediction_timestamp"),
-            "car_number": car,
-            "style": player.get("style"),
-            "race_score": _num(player.get("race_score")),
-            "S": _num(player.get("S")),
-            "H": _num(player.get("H")),
-            "B": _num(player.get("B")),
-            "line_id": player.get("line_id"),
-            "line_position": line_position,
-            "line_length": _num(player.get("line_length")),
-            "is_line_leader": 1 if line_position == 1 else 0,
-            "recent_win_rate": _num(recent.get("win_rate")),
-            "recent_top2_rate": _num(recent.get("top2_rate")),
-            "recent_top3_rate": _num(recent.get("top3_rate")),
-            "recent_avg_finish": _num(recent.get("avg_finish")),
-            "current_meet_avg_finish": _current_meet_avg(player),
-            "condition_score": _num((player.get("condition") or {}).get("score")),
-            "bank_fit_score": _num((player.get("bank_fit") or {}).get("score")),
-            "comment_condition": _num(factors.get("condition")),
-            "comment_training": _num(factors.get("training")),
-            "comment_equipment": _num(factors.get("equipment")),
-            "comment_confidence": _num(factors.get("confidence")),
-            "comment_motivation": _num(factors.get("motivation")),
-            "comment_fatigue": _num(factors.get("fatigue")),
+            **features,
             "known_trifecta_odds_count": len(known_odds),
             "target_first": 1 if car == outcome[0] else 0,
             "target_second": 1 if car == outcome[1] else 0,

@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from ml.dataset import build_rows
+from ml.predict_position_models import predict_race
 from ml.train_position_models import train
 
 
@@ -71,7 +72,8 @@ def make_record(index: int) -> dict:
 
 
 def main() -> None:
-    rider_rows, summary = build_rows([make_record(i) for i in range(16)])
+    records = [make_record(i) for i in range(16)]
+    rider_rows, summary = build_rows(records)
     assert summary['eligible_unique_races'] == 16
     assert len(rider_rows) == 112
 
@@ -97,7 +99,44 @@ def main() -> None:
         assert (output_dir / 'feature_schema.json').exists()
         assert (output_dir / 'metrics.json').exists()
 
-    print('LightGBM position-model smoke training: PASS')
+        source = records[-1]['training_input']
+        race_data = {
+            'race': source['race'],
+            'players': source['players'],
+            'odds': {
+                'trifecta': {
+                    '1-4-5': 12.3,
+                    '2-6-3': 9999.9,
+                    '1-2-3': 'NaN',
+                    '1-2-4': 'Infinity',
+                    '1-2-5': True,
+                    '1-1-2': 12.0,
+                    '1-2-9': 15.0,
+                    'invalid': 20.0,
+                }
+            },
+            'prediction_context': {'source': 'K-Dreams'},
+        }
+        prediction = predict_race(race_data, output_dir)
+        scores = prediction['trifecta_scores']
+        assert prediction['success'] is True
+        assert prediction['mode'] == 'offline_inference_only'
+        assert prediction['production_prediction_enabled'] is False
+        assert prediction['db_write_enabled'] is False
+        assert prediction['external_fetch_enabled'] is False
+        assert prediction['probability_calibration_status'] == 'uncalibrated'
+        assert prediction['monetary_ev_enabled'] is False
+        assert prediction['odds_used_as_model_feature'] is False
+        assert len(scores) == 210
+        assert len({row['combo_key'] for row in scores}) == 210
+        assert abs(sum(float(row['estimated_probability']) for row in scores) - 1.0) <= 1e-12
+        assert prediction['odds_sanitization']['ignored_combos'] == ['2-6-3']
+        assert prediction['input_quality']['known_trifecta_odds_count'] == 1
+        assert next(row for row in scores if row['combo_key'] == '2-6-3')['odds'] is None
+        assert next(row for row in scores if row['combo_key'] == '1-4-5')['odds'] == 12.3
+        assert all(row['monetary_expected_value'] is None for row in scores)
+
+    print('LightGBM position-model train + offline inference smoke: PASS')
 
 
 if __name__ == '__main__':
