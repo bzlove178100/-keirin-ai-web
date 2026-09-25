@@ -1,32 +1,37 @@
 import {
   AGENT_RUNTIME_VERSION,
+  CHECKPOINT_MODES,
   RUNTIME_CAPABILITIES,
   SAFETY_STATE,
   capabilityDiagnostics,
   findForbiddenSecretPath,
   preflightTask,
+  validateCheckpointCreate,
+  validateCheckpointSave,
+  validateTaskId,
 } from '../supabase/functions/agent-runtime-dev/contract.ts';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-Deno.test('hosted agent runtime version exposes general capability contracts', () => {
-  assert(
-    AGENT_RUNTIME_VERSION === 'v3-owner-preflight-general-capability-contracts',
-    'runtime version changed unexpectedly',
-  );
-});
-
-Deno.test('hosted agent runtime keeps all side-effect switches disabled', () => {
+Deno.test('hosted agent runtime version enables owner checkpoint persistence only', () => {
+  assert(AGENT_RUNTIME_VERSION === 'v4-owner-checkpoint-persistence', 'runtime version changed unexpectedly');
   assert(SAFETY_STATE.production_prediction_enabled === false, 'production prediction must remain off');
-  assert(SAFETY_STATE.db_write_enabled === false, 'database writing must remain off');
+  assert(SAFETY_STATE.db_write_enabled === false, 'keirin database writing must remain off');
   assert(SAFETY_STATE.external_automatic_fetch_enabled === false, 'external automatic fetching must remain off');
-  assert(SAFETY_STATE.runtime_task_execution_enabled === false, 'runtime task execution must remain off in v3');
-  assert(SAFETY_STATE.persistence_enabled === false, 'hosted task persistence must remain off in v3');
+  assert(SAFETY_STATE.runtime_task_execution_enabled === false, 'runtime task execution must remain off in v4');
+  assert(SAFETY_STATE.persistence_enabled === true, 'agent checkpoint persistence must be enabled in v4');
+  assert(SAFETY_STATE.checkpoint_persistence_scope === 'agent_only', 'persistence scope must remain agent-only');
 });
 
-Deno.test('all external capabilities start explicitly unbound', () => {
+Deno.test('checkpoint modes are explicit and do not include task execution', () => {
+  const expected = ['checkpoint_create', 'checkpoint_get', 'checkpoint_list', 'checkpoint_save'];
+  assert(expected.every((mode) => CHECKPOINT_MODES.includes(mode)), 'checkpoint modes missing');
+  assert(!CHECKPOINT_MODES.includes('execute'), 'checkpoint modes must not enable task execution');
+});
+
+Deno.test('all external provider capabilities remain explicitly unbound', () => {
   assert(RUNTIME_CAPABILITIES.length >= 13, 'expected shared runtime capability declarations');
   assert(RUNTIME_CAPABILITIES.every((cap) => cap.bound === false), 'no provider capability may be silently bound');
   const delivery = RUNTIME_CAPABILITIES.find((cap) => cap.action === 'report.deliver');
@@ -52,17 +57,110 @@ Deno.test('broad agent capabilities are declared but not authorized or enabled',
   }
 });
 
-Deno.test('capability diagnostics distinguish declared bound authorized verified and last error', () => {
+Deno.test('capability diagnostics do not confuse checkpoint persistence with provider authorization', () => {
   const diagnostics = capabilityDiagnostics();
   assert(diagnostics.length === RUNTIME_CAPABILITIES.length, 'every declared capability needs a diagnostic');
   for (const diagnostic of diagnostics) {
     assert(diagnostic.declared === true, 'capability must be explicitly declared');
-    assert(diagnostic.bound === false, 'hosted v3 has no provider binding');
-    assert(diagnostic.authorization_state === 'not_bound', 'unbound capability must report not_bound authorization state');
+    assert(diagnostic.bound === false, 'external provider binding must remain false');
+    assert(diagnostic.authorization_state === 'not_bound', 'unbound capability must report not_bound');
     assert(diagnostic.authorized === false, 'unbound capability must not claim authorization');
     assert(diagnostic.verified === false, 'unbound capability must not claim verification');
     assert(diagnostic.last_error === null, 'unattempted capability must not invent an error');
   }
+});
+
+Deno.test('checkpoint create validates identity status fingerprint and secret boundary', () => {
+  const fingerprint = `sha256-v1:${'a'.repeat(64)}`;
+  const valid = validateCheckpointCreate({
+    task: {
+      schema_version: 'agent-task-v1',
+      task_id: 'agent-checkpoint-create-test',
+      title: 'test',
+      goal: 'test',
+      allowed_actions: ['github.read_main'],
+      steps: [{ step_id: 'one', action: 'github.read_main' }],
+    },
+    state: {
+      schema_version: 'agent-task-state-v1',
+      task_id: 'agent-checkpoint-create-test',
+      spec_fingerprint: fingerprint,
+      status: 'pending',
+    },
+  });
+  assert(valid.ok === true, 'valid checkpoint create should pass');
+  if (valid.ok) assert(valid.idempotency_key === 'agent-checkpoint-create-test', 'task id should default idempotency key');
+
+  const badStatus = validateCheckpointCreate({
+    task: { schema_version: 'agent-task-v1', task_id: 'agent-checkpoint-create-test' },
+    state: {
+      schema_version: 'agent-task-state-v1',
+      task_id: 'agent-checkpoint-create-test',
+      spec_fingerprint: fingerprint,
+      status: 'running',
+    },
+  });
+  assert(badStatus.ok === false, 'new checkpoint must start pending');
+
+  const secret = validateCheckpointCreate({
+    task: { schema_version: 'agent-task-v1', task_id: 'agent-secret-test', inputs: { api_key: 'nope' } },
+    state: {
+      schema_version: 'agent-task-state-v1',
+      task_id: 'agent-secret-test',
+      spec_fingerprint: fingerprint,
+      status: 'pending',
+    },
+  });
+  assert(secret.ok === false, 'secret-shaped task input must be rejected');
+});
+
+Deno.test('checkpoint save requires CAS revision and matching durable state', () => {
+  const fingerprint = `sha256-v1:${'b'.repeat(64)}`;
+  const valid = validateCheckpointSave({
+    task_id: 'agent-checkpoint-save-test',
+    expected_revision: 3,
+    status: 'blocked',
+    state: {
+      schema_version: 'agent-task-state-v1',
+      task_id: 'agent-checkpoint-save-test',
+      spec_fingerprint: fingerprint,
+      status: 'blocked',
+      blocked_reason: 'manual_auth_required',
+    },
+  });
+  assert(valid.ok === true, 'valid checkpoint save should pass');
+
+  const staleShape = validateCheckpointSave({
+    task_id: 'agent-checkpoint-save-test',
+    expected_revision: -1,
+    status: 'blocked',
+    state: {
+      schema_version: 'agent-task-state-v1',
+      task_id: 'agent-checkpoint-save-test',
+      spec_fingerprint: fingerprint,
+      status: 'blocked',
+    },
+  });
+  assert(staleShape.ok === false, 'negative revisions must fail validation');
+
+  const mismatch = validateCheckpointSave({
+    task_id: 'agent-checkpoint-save-test',
+    expected_revision: 3,
+    status: 'completed',
+    state: {
+      schema_version: 'agent-task-state-v1',
+      task_id: 'agent-checkpoint-save-test',
+      spec_fingerprint: fingerprint,
+      status: 'running',
+    },
+  });
+  assert(mismatch.ok === false, 'status mismatch must fail validation');
+});
+
+Deno.test('task id validation matches database format contract', () => {
+  assert(validateTaskId('Task_1.ok-yes') === 'Task_1.ok-yes', 'valid task id rejected');
+  assert(validateTaskId('../escape') === null, 'path-like task id must be rejected');
+  assert(validateTaskId('') === null, 'empty task id must be rejected');
 });
 
 Deno.test('read-only task preflight is valid but blocked on missing host bindings', () => {
@@ -119,11 +217,7 @@ Deno.test('task preflight rejects secret-shaped fields recursively', () => {
     schema_version: 'agent-task-v1',
     task_id: 'secret-test',
     allowed_actions: ['github.read_main'],
-    inputs: {
-      nested: {
-        api_key: 'must-not-be-sent',
-      },
-    },
+    inputs: { nested: { api_key: 'must-not-be-sent' } },
     steps: [{ step_id: 'read', action: 'github.read_main' }],
   };
   const path = findForbiddenSecretPath(task);
