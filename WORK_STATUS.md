@@ -75,7 +75,7 @@ Current agent storage:
 
 Direct rollback tests in staging verified owner access, non-owner and anonymous denial, duplicate idempotency rejection, CAS success/stale-conflict behavior, completed-state immutability, append-only events, task DELETE denial and atomic checkpoint/event behavior. RPC tests also verified create/save behavior and `blocked_reason` / `last_error` synchronization. A staging event append/read round-trip was also verified after the activity migration.
 
-The queue-lease implementation passed all current PR workflows, including the isolated PostgreSQL 17 contract, general regression, runtime smoke and Web collection regression. Staging now exposes all six queue metadata columns and all three queue RPCs, while `race_predictions` remains at zero rows. The migration is active; an always-on worker is still not activated.
+The queue-lease implementation passed all current PR workflows, including the isolated PostgreSQL 17 contract, general regression, runtime smoke and Web collection regression. Staging exposes all six queue metadata columns and all three queue RPCs, while `race_predictions` remains at zero rows. The migration is active; an always-on worker is still not activated.
 
 The performance advisor no longer reports agent-table RLS init-plan warnings after the follow-up migration. The remaining `user_profiles_select_own` performance warning predates this activation. Security advisor findings remain unrelated existing items: `race_predictions` RLS has no policy, and leaked-password protection is disabled.
 
@@ -85,7 +85,7 @@ The performance advisor no longer reports agent-table RLS init-plan warnings aft
 
 After PR #56 it was deployed as Supabase Edge Function **version 5**, status **ACTIVE**. The v5 service contract is `v5-owner-checkpoint-activity-persistence`.
 
-The queue-lease branch defines the next v6 contract with queue claim/save/reconcile endpoints while retaining `runtime_task_execution_enabled=false`. Its CI is green. Deploy v6 next, then read back the deployed function before wiring any worker.
+The queue-lease branch defines the next v6 contract with queue claim/save/reconcile endpoints while retaining `runtime_task_execution_enabled=false`. Its final PR head passed all workflows. Deploy v6 next, then read back the deployed function before wiring any worker.
 
 Hosted persistence modes include checkpoint create/get/list/save plus activity append/list. Queue coordination is storage/lease control, not task execution.
 
