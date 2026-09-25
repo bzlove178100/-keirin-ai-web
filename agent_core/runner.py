@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from copy import deepcopy
+import json
 from typing import Any, Callable, Mapping
 
 from .model import ActionResult, ArtifactUpdate, StepSpec, TaskSpec, TaskState
@@ -98,14 +100,26 @@ class AgentRunner:
         )
 
     def run(self, spec: TaskSpec, *, context: dict[str, Any] | None = None) -> RunOutcome:
+        # Detach mutable args/inputs from the caller before binding and execution.
+        spec = TaskSpec.from_dict(json.loads(json.dumps(spec.to_dict(), allow_nan=False)))
         spec.validate()
         with self.store.task_lock(spec.task_id):
             return self._run_locked(spec, context=context)
 
     def _run_locked(self, spec: TaskSpec, *, context: dict[str, Any] | None = None) -> RunOutcome:
+        existed = self.store.state_path(spec.task_id).exists()
         state = self.store.load_state(spec.task_id)
         if state.task_id != spec.task_id:
             raise ValueError("task_state_id_mismatch")
+
+        fingerprint = spec.fingerprint()
+        if existed and state.spec_fingerprint is None:
+            raise ValueError("legacy_task_spec_requires_review")
+        if state.spec_fingerprint is not None and state.spec_fingerprint != fingerprint:
+            raise ValueError("task_spec_changed")
+        if not existed:
+            state.spec_fingerprint = fingerprint
+            self.store.save_state(state)
 
         if state.status in self.TERMINAL:
             self.store.append_event(
@@ -155,6 +169,7 @@ class AgentRunner:
 
             step_context = {
                 **base_context,
+                "task_inputs": deepcopy(spec.inputs),
                 "step_id": step.step_id,
                 "idempotency_key": f"{spec.task_id}:{step.step_id}",
             }
@@ -172,7 +187,7 @@ class AgentRunner:
                     data={"attempt": attempt, "retry_safe": step.retry_safe},
                 )
                 try:
-                    result = self._normalise_action_result(action(dict(step.args), step_context))
+                    result = self._normalise_action_result(action(deepcopy(step.args), deepcopy(step_context)))
                     break
                 except BlockedAction as exc:
                     self._block(state, f"action_blocked:{exc}", step=step)
@@ -220,7 +235,7 @@ class AgentRunner:
                     return self._outcome(state, executed=executed, skipped=skipped)
                 verify_args = {
                     "step_action": step.action,
-                    "step_args": dict(step.args),
+                    "step_args": deepcopy(step.args),
                     "action_result": {
                         "message": result.message,
                         "data": dict(result.data),
