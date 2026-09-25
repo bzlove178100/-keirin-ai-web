@@ -75,7 +75,7 @@ Current agent storage:
 
 Direct rollback tests in staging verified owner access, non-owner and anonymous denial, duplicate idempotency rejection, CAS success/stale-conflict behavior, completed-state immutability, append-only events, task DELETE denial and atomic checkpoint/event behavior. RPC tests also verified create/save behavior and `blocked_reason` / `last_error` synchronization. A staging event append/read round-trip was also verified after the activity migration.
 
-The queue-lease implementation passed real PostgreSQL 17 CI coverage for atomic claiming, fencing, stale worker/revision rejection, attempt budgeting and explicit expired-lease reconciliation before staging migration application. The migration is applied; an always-on worker is still not activated.
+The queue-lease implementation passed real PostgreSQL 17 CI coverage for atomic claiming, fencing, stale worker/revision rejection, attempt budgeting and explicit expired-lease reconciliation before staging migration application. The migration is now applied in staging. This is queue-state coordination only; an always-on worker is still not activated.
 
 The performance advisor no longer reports agent-table RLS init-plan warnings after the follow-up migration. The remaining `user_profiles_select_own` performance warning predates this activation. Security advisor findings remain unrelated existing items: `race_predictions` RLS has no policy, and leaked-password protection is disabled.
 
@@ -85,7 +85,7 @@ The performance advisor no longer reports agent-table RLS init-plan warnings aft
 
 After PR #56 it was deployed as Supabase Edge Function **version 5**, status **ACTIVE**. The v5 service contract is `v5-owner-checkpoint-activity-persistence`.
 
-The current queue-lease branch defines the next v6 contract with queue claim/save/reconcile endpoints while retaining `runtime_task_execution_enabled=false`. Deploy v6 only after current-branch CI is green and source/state alignment is confirmed.
+The current queue-lease branch defines the next v6 contract with queue claim/save/reconcile endpoints while retaining `runtime_task_execution_enabled=false`. Deploy v6 only after the current branch CI is green and source/state alignment is confirmed.
 
 Hosted persistence modes include checkpoint create/get/list/save plus activity append/list. Queue coordination is storage/lease control, not task execution.
 
