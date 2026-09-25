@@ -6,6 +6,7 @@ explicit and testable.
 """
 
 from .adapters import Capability, CallableReadOnlyGitHubAdapter, ToolRegistry
+from .capability_catalog import CapabilityContract, capability_by_action, capability_catalog
 from .delivery import BridgeReportDelivery, DeliveryResult, ReportDelivery
 from .model import (
     ActionResult,
@@ -37,6 +38,7 @@ __all__ = [
     "BridgeToolAdapter",
     "CallableReadOnlyGitHubAdapter",
     "Capability",
+    "CapabilityContract",
     "DAILY_REPORT_2100_JST",
     "DailyActivityReport",
     "DailySchedule",
@@ -56,4 +58,6 @@ __all__ = [
     "TaskState",
     "ToolRegistry",
     "build_activity_report",
+    "capability_by_action",
+    "capability_catalog",
 ]
