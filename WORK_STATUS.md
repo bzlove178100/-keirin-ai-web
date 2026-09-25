@@ -41,6 +41,8 @@ Merged and verified:
 - PR #50: hosted runtime message cleanup plus `deno check` for the Edge Function entrypoint.
 - PR #51: status refreshed before persistence activation.
 - PR #52 (`ac4d529c72d91f992685c8bffc1af9363a65ec74`): authorized owner-only hosted agent checkpoint persistence, migration records, RLS/CAS safety tests, v4 checkpoint runtime contract and create/get/list/save endpoints. All PR CI workflows passed before merge.
+- PR #53 (`4d9f29dfbb5184cc70d857a34cd21a6db7e852f6`): documentation aligned with the activated staging persistence state and explicit remaining verification boundaries.
+- PR #54 (`cd8e87ff66c517f1eaaab6acdb94e13215a119e1`): strict provider-neutral `HostedCheckpointClient` for create/get/list/save. It recomputes the canonical Python TaskSpec fingerprint and fails closed on changed task definitions, corrupted fingerprints, invalid status/revision state or stale CAS writes. All PR workflows passed before merge.
 
 ### Hosted persistence activation
 
@@ -93,6 +95,23 @@ Hosted v4 safety state:
 
 The database/RLS/RPC path is verified and the v4 source passed CI/type-checking before merge. The function was read back ACTIVE after deployment. An end-to-end request through the deployed Edge Function using the user's real browser owner JWT has not yet been performed in this chat; do not mark that specific browser-to-Edge path verified until it is tested.
 
+### Hosted checkpoint client
+
+`agent_core.hosted_checkpoint.HostedCheckpointClient` is now the strict host-side mapping layer between shared `TaskSpec` / `TaskState` and the hosted checkpoint API. It owns no authentication or HTTP credentials; the host injects a transport.
+
+Before accepting remote state for resume it verifies:
+
+- remote task ID matches the requested TaskSpec;
+- stored TaskSpec parses and exactly matches the requested TaskSpec;
+- the canonical Python `sha256-v1` TaskSpec fingerprint matches both the row and stored state;
+- state/task IDs and status mapping match;
+- revision is a non-negative integer;
+- create starts from `pending`/DB `queued`;
+- save increments exactly one revision;
+- stale revision conflicts are surfaced distinctly.
+
+This closes the model-to-checkpoint integrity contract, but it does **not** yet turn `AgentRunner` into a distributed hosted worker. Queue claims, leases/fencing, activity-event transport and distributed locking remain separate work.
+
 ## Validation
 
 CI currently covers:
@@ -106,6 +125,7 @@ CI currently covers:
 - live GitHub read-only host bridge;
 - broad capability contracts;
 - activated hosted checkpoint migration safety plus archived rollback-only designs;
+- strict hosted checkpoint client integrity/CAS behavior;
 - Web/prospective/ML regression;
 - Phase32/training-input contracts;
 - hosted runtime checkpoint contract tests;
@@ -123,6 +143,7 @@ The project now has:
 - a queue-planning contract;
 - **durable owner-only agent checkpoint/activity storage active in staging**;
 - a hosted Supabase persistence/preflight shell;
+- a strict hosted checkpoint client with TaskSpec fingerprint verification;
 - a verified live GitHub read-only provider path;
 - broad capability contracts for research/text/image/video/code/learning/report generation.
 
@@ -130,23 +151,24 @@ It is still **not** an always-on self-contained autonomous agent.
 
 Major remaining gaps:
 
-1. the shared runtime's state-store abstraction is not yet bound end-to-end to the hosted checkpoint API;
-2. no hosted queue claim/lease/fencing worker is activated;
-3. Supabase/files/Web/model-provider live bindings are not yet broadly connected;
-4. text/image/video/code capabilities are declared but provider-unbound;
-5. sales source, accounting rules and report destination are unresolved;
-6. 21:00 report generation/delivery is not scheduled live.
+1. the strict checkpoint client is not yet wired into `AgentRunner` as a distributed state store because no claim/lease/fencing primitive exists yet;
+2. hosted activity events beyond automatic checkpoint audit events are not yet exposed through a host transport;
+3. no hosted queue claim/lease/fencing worker is activated;
+4. Supabase/files/Web/model-provider live bindings are not yet broadly connected;
+5. text/image/video/code capabilities are declared but provider-unbound;
+6. sales source, accounting rules and report destination are unresolved;
+7. 21:00 report generation/delivery is not scheduled live.
 
 ## Next action
 
 Continue without asking for race screenshots unless a race-data step genuinely requires user input.
 
-Next implementation slice:
+Next safe implementation slice:
 
-1. add a hosted checkpoint store/adapter contract that maps shared `TaskSpec` / `TaskState` to `checkpoint_create/get/list/save` while recomputing/verifying the canonical TaskSpec fingerprint before resume;
-2. add integration tests using a fake hosted transport, including stale revision conflicts, interrupted resumes and immutable definitions;
+1. add owner-only append/read activity-event endpoints and a provider-neutral activity client so execution/recovery/report events can survive the host process;
+2. add fake-transport and isolated PostgreSQL tests for activity-event append-only semantics and owner isolation;
 3. test one real authenticated owner browser-to-Edge checkpoint flow when an owner session is available, without storing the token;
-4. only after hosted persistence integration is stable, implement atomic queue claim/lease/fencing and crash-recovery tests; do not activate an always-on worker yet;
+4. design and test atomic queue claim/lease/fencing plus crash recovery before wiring `AgentRunner` to hosted state; do not activate an always-on worker yet;
 5. add safe read-only Supabase/files/Web bindings where host authorization is available;
 6. keep provider generation bindings and report delivery as separate authorization/configuration steps.
 
