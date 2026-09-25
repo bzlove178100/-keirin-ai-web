@@ -66,5 +66,7 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      - name: Type-check hosted runtime entrypoint
+        run: deno check supabase/functions/agent-runtime-dev/index.ts
       - name: Run engine, training-input, and hosted runtime contract tests
         run: deno test tests/phase32_contract_test.ts tests/training_input_test.ts tests/agent_runtime_dev_test.ts
