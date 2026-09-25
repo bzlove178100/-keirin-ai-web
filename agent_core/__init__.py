@@ -29,6 +29,12 @@ from .hosted_queue import (
     HostedQueueIntegrityError,
     HostedQueueLease,
 )
+from .hosted_readonly_worker import (
+    HostedExecutionNotAuthorized,
+    HostedLeaseStateStore,
+    HostedReadOnlyWorker,
+    HostedReadOnlyWorkerResult,
+)
 from .hosted_worker import HostedWorkerCoordinator, HostedWorkerDecision
 from .model import (
     ActionResult,
@@ -77,11 +83,15 @@ __all__ = [
     "HostedCheckpointIntegrityError",
     "HostedCheckpointRecord",
     "HostedCheckpointSummary",
+    "HostedExecutionNotAuthorized",
+    "HostedLeaseStateStore",
     "HostedQueueClient",
     "HostedQueueConflict",
     "HostedQueueError",
     "HostedQueueIntegrityError",
     "HostedQueueLease",
+    "HostedReadOnlyWorker",
+    "HostedReadOnlyWorkerResult",
     "HostedWorkerCoordinator",
     "HostedWorkerDecision",
     "PreflightReport",
