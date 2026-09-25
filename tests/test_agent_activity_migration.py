@@ -5,7 +5,7 @@ import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase" / "migrations" / "20260925112600_agent_runtime_activity_event_rpc.sql"
+MIGRATION = ROOT / "supabase" / "migrations" / "20260925115914_agent_runtime_activity_event_rpc.sql"
 
 
 class AgentActivityMigrationTest(unittest.TestCase):
@@ -52,6 +52,10 @@ class AgentActivityMigrationTest(unittest.TestCase):
             self.normalized,
         )
         self.assertNotIn("grant all", self.normalized)
+
+    def test_repo_filename_matches_applied_staging_migration(self):
+        self.assertEqual(MIGRATION.name, "20260925115914_agent_runtime_activity_event_rpc.sql")
+        self.assertIn("Applied to keirin-ai-staging as migration 20260925115914", self.sql)
 
 
 if __name__ == "__main__":
