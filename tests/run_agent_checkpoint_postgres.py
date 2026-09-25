@@ -28,7 +28,7 @@ def main():
     for name in ("agent_runtime_state_v1.sql", "agent_runtime_checkpoints_v2.sql"):
         parts.append(design_body(ROOT / "supabase/schema" / name))
     parts.append(
-        (ROOT / "supabase/migrations/20260925121000_agent_runtime_queue_lease.sql").read_text(
+        (ROOT / "supabase/migrations/20260925122122_agent_runtime_queue_lease.sql").read_text(
             encoding="utf-8"
         )
     )
