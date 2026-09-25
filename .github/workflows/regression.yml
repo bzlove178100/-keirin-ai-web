@@ -50,6 +50,8 @@ jobs:
         run: python tests/test_hosted_activity_client.py
       - name: Verify hosted queue lease and fencing client behavior
         run: python tests/test_hosted_queue_client.py
+      - name: Verify fail-closed hosted worker coordination
+        run: python tests/test_hosted_worker_coordinator.py
       - name: Set up Node for Web capture checks
         uses: actions/setup-node@v4
       - name: Run Web capture checks
