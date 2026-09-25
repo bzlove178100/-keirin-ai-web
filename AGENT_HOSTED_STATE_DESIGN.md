@@ -1,112 +1,119 @@
-# Hosted agent state design v1
+# Hosted agent state design
 
-Status: **design only / not deployed**
+Status: **agent-only checkpoint persistence active in staging**
 
-## Checkpoint implementation prepared (v2)
+The original rollback-only designs remain archived at:
 
-`supabase/schema/agent_runtime_checkpoints_v2.sql` extends the v1 design. Both
-remain rollback-only and outside migrations. v2 adds immutable task identity,
-monotonic revisions, a compare-and-swap checkpoint function, explicit grants and
-an audit trigger in the same transaction as every state write. The function uses
-SECURITY INVOKER and auth.uid(); existing owner RLS still applies. No credentials
-or real user/race data are part of the files.
+- `supabase/schema/agent_runtime_state_v1.sql`
+- `supabase/schema/agent_runtime_checkpoints_v2.sql`
 
-`agent_save_checkpoint` is a state-saving operation, not a task claim or worker
-authorization. It does not provide leases, worker fencing, provider bindings or a
-scheduler. Authenticated owners have direct table writes subject to RLS/triggers;
-the trusted host must enforce TaskSpec validity, transitions and reconciliation.
-The supplied fingerprint is format-checked and immutable, not recomputed in SQL;
-the full stored specification is also immutable. The host computes/verifies the
-Python canonical fingerprint before binding a task to execution.
+They are still intentionally non-deployable reference designs. The authorized staging activation is now recorded separately under `supabase/migrations`.
 
-The ledger is append-only for the authenticated role; it is not a cryptographic
-audit trail and direct authorized inserts are possible. A checkpoint write that
-cannot append its event fails atomically. Deletes are not granted. Completed
-checkpoints cannot be overwritten. Neither schema is a migration for existing
-tasks; the current staging project was checked and has neither agent table.
+## Activated scope
 
-The PostgreSQL 17 CI service uses only synthetic owners and data in a rollback
-transaction. It tests owner isolation, non-owner/anonymous denial, duplicate
-identity rejection, immutable definitions, stale revisions, append-only events,
-audit failure rollback and completed-state protection. It does not validate the
-actual Supabase JWT gateway, deployed profile policies, concurrent worker claims
-or end-to-end hosted resume. Deployment/advisor checks are still required later.
+On 2026-09-25 the user explicitly authorized AI-agent-only task/activity persistence in `keirin-ai-staging`. The activation does **not** authorize keirin prediction DB writes, production prediction, automatic external race-data fetching, provider writes/generation, hosted task execution, report delivery, or the 21:00 schedule.
 
-Activation scope for a later explicit authorization: create only the dedicated
-agent task/event storage and checkpoint function in staging after converting the
-reviewed designs into a migration. Do not enable prediction writes, task execution,
-external race fetching or the 21:00 schedule. The activation process must verify
-current profile authorization/grants, RLS and security advisors before connecting
-the owner-only hosted shell to persistence.
+Applied staging migrations:
 
-Sources checked for v2: Supabase database functions and RLS documentation:
-https://supabase.com/docs/guides/database/functions
-https://supabase.com/docs/guides/database/postgres/row-level-security
+1. `20260925103650_agent_runtime_checkpoints_activation`
+   - creates `public.agent_tasks` and `public.agent_task_events`;
+   - owner-scoped RLS through `user_profiles(role='owner', plan='owner')`;
+   - immutable task identity and `spec_fingerprint`;
+   - monotonic `revision`;
+   - compare-and-swap `agent_save_checkpoint`;
+   - automatic `checkpoint_saved` audit events;
+   - completed-state mutation protection;
+   - no authenticated DELETE grant for tasks and no UPDATE/DELETE grant for event rows.
+2. `20260925110207_agent_runtime_checkpoint_rpc_and_rls_optimization`
+   - adds owner-derived `agent_create_checkpoint` so callers do not supply a user ID;
+   - preserves SECURITY INVOKER semantics;
+   - synchronizes `blocked_reason` and `last_error` during checkpoint saves;
+   - rewrites agent RLS predicates to `(select auth.uid())` to avoid per-row auth-function re-evaluation.
 
-The shared agent can currently persist state locally inside a host process, and the live GitHub Actions worker proves one read-only provider binding. The hosted Supabase `agent-runtime-dev` shell remains preflight-only. The next architectural requirement is durable private task state so work can survive a chat, browser, or one-off runner ending.
+These migrations operate only on agent task/activity state. They do not write `race_predictions`, prospective race histories, model artifacts, settlement data, or `user_profiles`.
 
-This document defines that state contract without enabling database writes.
+## Current hosted runtime
 
-## Why this is separate from the keirin prediction database
+`supabase/functions/agent-runtime-dev` is now the owner-only hosted checkpoint shell. Its service contract is `v4-owner-checkpoint-persistence`, deployed as Supabase Edge Function version 4 with `verify_jwt=true` and ACTIVE status.
 
-Durable agent state is operational control data, not race prediction output. It must not be mixed into `race_predictions`, prospective race history, model artifacts, or settlement data. The draft uses dedicated tables:
+Available hosted modes:
 
-- `public.agent_tasks` — one current durable state per user/task ID.
-- `public.agent_task_events` — append-only activity/recovery ledger.
+- `preflight`
+- `checkpoint_create`
+- `checkpoint_get`
+- `checkpoint_list`
+- `checkpoint_save`
 
-The executable SQL draft is `supabase/schema/agent_runtime_state_v1.sql`. It is deliberately outside `supabase/migrations` and wraps all DDL in `BEGIN ... ROLLBACK`, so it is not a deployment migration.
+The runtime still reports:
 
-## Task state
+- production prediction: OFF;
+- keirin prediction DB writing: OFF;
+- automatic external keirin race-data fetching: OFF;
+- hosted task execution: OFF;
+- checkpoint persistence scope: `agent_only`;
+- external provider generation/write bindings: unbound;
+- report delivery: disabled/unconfigured.
+
+The checkpoint routes reuse the authenticated owner JWT and the project's publishable/anon key so PostgreSQL RLS remains the authorization boundary. No service-role bypass is part of the runtime path.
+
+## Verified database properties
+
+Direct staging validation has confirmed:
+
+- RLS enabled on both agent tables;
+- owner can create and update own checkpoint state;
+- duplicate per-owner idempotency keys are rejected;
+- compare-and-swap revision updates succeed only with the expected revision;
+- stale revisions fail;
+- completed checkpoints cannot be mutated;
+- event rows cannot be updated by the authenticated owner role;
+- task deletion is denied to the authenticated owner role;
+- a different authenticated user cannot read the owner's task or insert agent state;
+- anonymous table access is denied;
+- checkpoint writes and their audit events are atomic;
+- create/save RPC behavior and `blocked_reason` / `last_error` synchronization work in rollback tests.
+
+The self-tests used temporary rows inside transactions and rolled them back. They did not leave test task/event data behind.
+
+## Advisor state
+
+After the agent RLS optimization, Supabase's performance advisor no longer reports init-plan warnings for the agent tables. An existing warning remains for `public.user_profiles.user_profiles_select_own`; that is outside this activation.
+
+Security advisor findings are also pre-existing/non-agent-specific: `race_predictions` has RLS enabled with no policies, and leaked-password protection is disabled. The agent persistence activation did not introduce a new security-advisor finding.
+
+## Task state contract
 
 A hosted task stores:
 
 - stable `task_id`;
 - schema version;
-- queue status: `queued`, `running`, `blocked`, `completed`, `failed`;
-- stable idempotency key;
-- immutable task specification JSON;
+- status: `queued`, `running`, `blocked`, `completed`, `failed`;
+- stable per-owner idempotency key;
+- immutable TaskSpec JSON;
 - current runtime state JSON;
+- immutable TaskSpec fingerprint;
+- monotonic revision;
 - block/error information;
 - create/update timestamps.
 
-The `(user_id, task_id)` pair is the primary key. `(user_id, idempotency_key)` is unique. This prevents a second logical task from silently reusing the same idempotency key for the same user.
+`(user_id, task_id)` is the primary key and `(user_id, idempotency_key)` is unique.
+
+`agent_save_checkpoint` is a checkpoint operation, not a queue claim or worker authorization. It does not create leases, worker fencing, provider authorization, or a scheduler. Those remain separate future gates.
+
+The supplied `sha256-v1` fingerprint is format-checked and immutable in PostgreSQL; SQL does not recompute Python's canonical TaskSpec fingerprint. A future host adapter must recompute/verify the canonical fingerprint when binding stored state back to TaskSpec execution.
 
 ## Activity ledger
 
-`agent_task_events` is append-only by policy in v1. It records event type, optional step ID, structured payload and timestamp. No UPDATE or DELETE RLS policy is defined for event rows. This keeps a trace of retries, blocks, reconciliation and completion rather than rewriting history.
+`agent_task_events` is append-only for the authenticated owner role. Checkpoint triggers append `checkpoint_saved` in the same transaction as the task-state write. This is an operational audit/recovery ledger, not a cryptographically tamper-proof audit log.
 
-## Access model
+## Remaining verification boundary
 
-The draft enables RLS on both tables and limits direct authenticated access to:
+The database/RLS/RPC path has been validated directly and the v4 Edge Function source passed repository regression/type-checking before merge and was read back ACTIVE after deployment.
 
-1. rows whose `user_id = auth.uid()`; and
-2. a matching `user_profiles` row with `role=owner` and `plan=owner`.
+An authenticated end-to-end call through the deployed Edge Function using the user's real browser owner session has **not** yet been executed in this chat. Do not describe that specific browser-to-Edge path as verified until such a call is made.
 
-No service-role bypass, secret, token, password or credential is included in the schema design. A future hosted runtime write path must continue to verify owner authorization before writing.
+## Next architecture step
 
-## Activation boundary
+The next safe implementation work is to connect the shared agent runtime/store abstraction to these hosted checkpoint endpoints while task execution remains OFF. After that, add queue claim/lease/fencing and crash-recovery integration tests before considering any always-on worker activation.
 
-The schema is **not active** and `agent-runtime-dev` must keep:
-
-- `runtime_task_execution_enabled=false`;
-- `persistence_enabled=false`;
-- production prediction OFF;
-- keirin prediction DB writes OFF;
-- external automatic race-data fetching OFF.
-
-Before activation, create a real migration from the draft, review it, run it against the staging project, inspect RLS/security advisors, and add end-to-end tests proving one owner can only read/write their own task state. That activation changes the current no-write runtime behavior and therefore is intentionally left for a separate explicit authorization.
-
-## First activation test plan
-
-When authorized later:
-
-1. Apply only the dedicated agent-state migration to staging.
-2. Confirm `agent_tasks` and `agent_task_events` have RLS enabled.
-3. Confirm an unauthenticated client cannot read or write them.
-4. Confirm a non-owner authenticated profile cannot read or write them.
-5. Confirm the owner can create one queued task with a stable idempotency key.
-6. Attempt the same idempotency key twice and verify the second insert is rejected.
-7. Append an event, then verify direct UPDATE/DELETE of that event is rejected.
-8. Resume the task from the hosted runtime and verify already completed steps are not repeated.
-9. Run Supabase security/performance advisors.
-10. Only after all checks pass, consider enabling hosted persistence; task execution and provider writes remain separate gates.
+Provider bindings, text/image/video/code generation, report delivery, and the 21:00 schedule remain independent authorization/configuration steps.
