@@ -23,6 +23,9 @@ Updated: 2026-09-25 UTC.
 
 ### Shared autonomous-agent foundation
 
+- Bound new local task states to a versioned fingerprint of the complete TaskSpec before execution. Reusing a task ID with changed input/actions/permissions/retry rules now fails without overwriting state, including after completion or interruption. Nested action arguments and task inputs are detached from callers and subsequent steps. Existing state without an identity fingerprint requires review; automatic legacy migration is intentionally absent.
+- Added five task-identity tests; all 50 agent tests and existing regression checks pass locally. CI now includes task-identity coverage. Hosted persistence and distributed claim activation remain disabled.
+
 - Fixed a local runner interruption gap: a process exit after a provider call but before completion persistence could previously repeat the operation on resume. Any attempted but incomplete step now blocks for explicit reconciliation before further tool calls. A shared nonblocking POSIX per-task file lock also prevents competing local runners/reconciliation from entering the same task. Distributed claims and durable hosted state remain unimplemented/disabled.
 - Added five interruption/concurrency regression cases, including actual SystemExit during action/verification, two competing runner instances, reconciliation exclusion, between-step resume and an unresolved step omitted from the new specification. These tests do not prove distributed locking or provider idempotency.
 
