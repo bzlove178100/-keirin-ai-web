@@ -4,6 +4,7 @@ import {
   AGENT_RUNTIME_SERVICE,
   AGENT_RUNTIME_VERSION,
   CHECKPOINT_MODES,
+  QUEUE_MODES,
   RUNTIME_BINDING_SCHEMA_VERSION,
   RUNTIME_CAPABILITIES,
   SAFETY_STATE,
@@ -13,6 +14,9 @@ import {
   validateActivityList,
   validateCheckpointCreate,
   validateCheckpointSave,
+  validateQueueClaim,
+  validateQueueReconcileExpired,
+  validateQueueSave,
   validateTaskId,
 } from './contract.ts';
 
@@ -28,6 +32,12 @@ const CHECKPOINT_SELECT = [
   'last_error',
   'revision',
   'spec_fingerprint',
+  'not_before',
+  'attempt_count',
+  'max_attempts',
+  'lease_owner',
+  'lease_generation',
+  'lease_expires_at',
   'created_at',
   'updated_at',
 ].join(',');
@@ -141,6 +151,14 @@ async function checkpointPersistenceHealth(owner: OwnerContext, authHeader: stri
   return response.ok;
 }
 
+async function queuePersistenceHealth(owner: OwnerContext, authHeader: string) {
+  const response = await fetch(
+    `${owner.url}/rest/v1/agent_tasks?select=task_id,lease_generation,lease_expires_at&limit=0`,
+    { headers: providerHeaders(owner, authHeader) },
+  );
+  return response.ok;
+}
+
 async function activityPersistenceHealth(owner: OwnerContext, authHeader: string) {
   const response = await fetch(
     `${owner.url}/rest/v1/agent_task_events?select=event_id&limit=0`,
@@ -171,6 +189,33 @@ async function getActivityEvent(owner: OwnerContext, authHeader: string, taskId:
   return { ok: true as const, row: rows.length === 1 ? rows[0] : null };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+async function verifyQueueRow(
+  owner: OwnerContext,
+  authHeader: string,
+  raw: unknown,
+  expected?: { revision?: number; lease_generation?: number; status?: string; lease_owner?: string | null },
+) {
+  const row = asRecord(raw);
+  if (!row || typeof row.task_id !== 'string') return { ok: false as const, error: 'Queue RPC returned invalid row' };
+  const fetched = await getCheckpoint(owner, authHeader, row.task_id);
+  if (!fetched.ok || !fetched.row) return { ok: false as const, error: 'Queue state could not be read back' };
+  const verified = fetched.row as Record<string, unknown>;
+  if (Number(verified.revision) !== Number(row.revision)) return { ok: false as const, error: 'Queue revision read-back mismatch' };
+  if (Number(verified.lease_generation) !== Number(row.lease_generation)) return { ok: false as const, error: 'Queue fence read-back mismatch' };
+  if (verified.status !== row.status || verified.lease_owner !== row.lease_owner) return { ok: false as const, error: 'Queue lease identity read-back mismatch' };
+  if (expected?.revision !== undefined && Number(verified.revision) !== expected.revision) return { ok: false as const, error: 'Unexpected queue revision' };
+  if (expected?.lease_generation !== undefined && Number(verified.lease_generation) !== expected.lease_generation) return { ok: false as const, error: 'Unexpected queue generation' };
+  if (expected?.status !== undefined && verified.status !== expected.status) return { ok: false as const, error: 'Unexpected queue status' };
+  if (expected && 'lease_owner' in expected && verified.lease_owner !== expected.lease_owner) return { ok: false as const, error: 'Unexpected queue lease owner' };
+  return { ok: true as const, row: verified };
+}
+
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get('Origin') ?? '';
   const headers = headersFor(origin);
@@ -192,9 +237,10 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  const [checkpointVerified, activityVerified] = await Promise.all([
+  const [checkpointVerified, activityVerified, queueVerified] = await Promise.all([
     checkpointPersistenceHealth(owner, auth),
     activityPersistenceHealth(owner, auth),
+    queuePersistenceHealth(owner, auth),
   ]);
   const diagnostics = capabilityDiagnostics();
   const base = {
@@ -209,17 +255,19 @@ Deno.serve(async (req: Request) => {
     safety: SAFETY_STATE,
     checkpoint_modes: CHECKPOINT_MODES,
     activity_modes: ACTIVITY_MODES,
+    queue_modes: QUEUE_MODES,
     capabilities: RUNTIME_CAPABILITIES,
     diagnostics: {
-      runtime_mode: 'owner_checkpoint_activity_persistence',
+      runtime_mode: 'owner_queue_persistence_no_execution',
       execution_enabled: false,
       persistence_enabled: true,
       persistence_verified: checkpointVerified,
       activity_persistence_verified: activityVerified,
+      queue_coordination_verified: queueVerified,
       capability_status: diagnostics,
     },
     message:
-      'Owner-only hosted runtime. Agent checkpoint and append-only activity persistence are enabled; task execution, provider writes, automatic keirin race-data fetching, and report delivery remain disabled.',
+      'Owner-only hosted runtime. Durable checkpoint/activity persistence plus queue lease/fencing coordination are enabled; task execution, provider writes, automatic keirin race-data fetching, and report delivery remain disabled.',
   };
 
   if (req.method === 'GET') return reply(base);
@@ -256,11 +304,14 @@ Deno.serve(async (req: Request) => {
     return reply({ ...base, mode, preflight: result, executed: false, saved: false, state_persisted: false });
   }
 
-  if (CHECKPOINT_MODES.includes(mode as never) && !checkpointVerified) {
+  if ((CHECKPOINT_MODES as readonly string[]).includes(mode) && !checkpointVerified) {
     return reply({ ...base, success: false, mode, error: 'Agent checkpoint storage is unavailable' }, 503);
   }
-  if (ACTIVITY_MODES.includes(mode as never) && !activityVerified) {
+  if ((ACTIVITY_MODES as readonly string[]).includes(mode) && !activityVerified) {
     return reply({ ...base, success: false, mode, error: 'Agent activity storage is unavailable' }, 503);
+  }
+  if ((QUEUE_MODES as readonly string[]).includes(mode) && !queueVerified) {
+    return reply({ ...base, success: false, mode, error: 'Agent queue coordination storage is unavailable' }, 503);
   }
 
   if (mode === 'checkpoint_create') {
@@ -312,7 +363,7 @@ Deno.serve(async (req: Request) => {
 
   if (mode === 'checkpoint_save') {
     const valid = validateCheckpointSave(requestBody);
-    if (!valid.ok) return reply({ ...base, success: false, mode, error: valid.error }, 422);
+    if (!valid.ok) return reply({ ...base, success: false, mode, error: valid.error, ...('secret_path' in valid ? { secret_path: valid.secret_path } : {}) }, 422);
     const response = await fetch(`${owner.url}/rest/v1/rpc/agent_save_checkpoint`, {
       method: 'POST',
       headers: providerHeaders(owner, auth),
@@ -374,11 +425,91 @@ Deno.serve(async (req: Request) => {
     return reply({ ...base, mode, events: Array.isArray(data) ? data : [], activity_persisted: true });
   }
 
+  if (mode === 'queue_claim') {
+    const valid = validateQueueClaim(requestBody);
+    if (!valid.ok) return reply({ ...base, success: false, mode, error: valid.error }, 422);
+    const response = await fetch(`${owner.url}/rest/v1/rpc/agent_claim_next_task`, {
+      method: 'POST',
+      headers: providerHeaders(owner, auth),
+      body: JSON.stringify({
+        p_worker_id: valid.worker_id,
+        p_lease_seconds: valid.lease_seconds,
+      }),
+    });
+    const data = await readJson(response);
+    if (!response.ok) return reply({ ...base, ...persistenceError(data, response.status), mode }, response.status);
+    if (data === null) return reply({ ...base, mode, claimed: false, lease: null, executed: false });
+    const raw = asRecord(data);
+    if (!raw) return reply({ ...base, success: false, mode, error: 'Queue claim returned invalid row' }, 500);
+    const verified = await verifyQueueRow(owner, auth, raw, {
+      status: 'running',
+      lease_owner: valid.worker_id,
+      lease_generation: Number(raw.lease_generation),
+      revision: Number(raw.revision),
+    });
+    if (!verified.ok) return reply({ ...base, success: false, mode, error: verified.error }, 500);
+    return reply({ ...base, mode, claimed: true, lease: verified.row, executed: false, queue_state_persisted: true }, 201);
+  }
+
+  if (mode === 'queue_save') {
+    const valid = validateQueueSave(requestBody);
+    if (!valid.ok) return reply({ ...base, success: false, mode, error: valid.error, ...('secret_path' in valid ? { secret_path: valid.secret_path } : {}) }, 422);
+    const response = await fetch(`${owner.url}/rest/v1/rpc/agent_save_leased_checkpoint`, {
+      method: 'POST',
+      headers: providerHeaders(owner, auth),
+      body: JSON.stringify({
+        p_task_id: valid.task_id,
+        p_expected_revision: valid.expected_revision,
+        p_worker_id: valid.worker_id,
+        p_lease_generation: valid.lease_generation,
+        p_status: valid.status,
+        p_state: valid.state,
+        p_lease_seconds: valid.lease_seconds,
+      }),
+    });
+    const data = await readJson(response);
+    if (!response.ok) return reply({ ...base, ...persistenceError(data, response.status), mode }, response.status);
+    const expectedOwner = valid.status === 'running' ? valid.worker_id : null;
+    const verified = await verifyQueueRow(owner, auth, data, {
+      revision: valid.expected_revision + 1,
+      lease_generation: valid.lease_generation,
+      status: valid.status,
+      lease_owner: expectedOwner,
+    });
+    if (!verified.ok) return reply({ ...base, success: false, mode, error: verified.error }, 500);
+    return reply({ ...base, mode, lease: verified.row, saved: true, executed: false, queue_state_persisted: true });
+  }
+
+  if (mode === 'queue_reconcile_expired') {
+    const valid = validateQueueReconcileExpired(requestBody);
+    if (!valid.ok) return reply({ ...base, success: false, mode, error: valid.error, ...('secret_path' in valid ? { secret_path: valid.secret_path } : {}) }, 422);
+    const response = await fetch(`${owner.url}/rest/v1/rpc/agent_reconcile_expired_lease`, {
+      method: 'POST',
+      headers: providerHeaders(owner, auth),
+      body: JSON.stringify({
+        p_task_id: valid.task_id,
+        p_expected_revision: valid.expected_revision,
+        p_lease_generation: valid.lease_generation,
+        p_state: valid.state,
+      }),
+    });
+    const data = await readJson(response);
+    if (!response.ok) return reply({ ...base, ...persistenceError(data, response.status), mode }, response.status);
+    const verified = await verifyQueueRow(owner, auth, data, {
+      revision: valid.expected_revision + 1,
+      lease_generation: valid.lease_generation,
+      status: 'blocked',
+      lease_owner: null,
+    });
+    if (!verified.ok) return reply({ ...base, success: false, mode, error: verified.error }, 500);
+    return reply({ ...base, mode, lease: verified.row, reconciled: true, executed: false, queue_state_persisted: true });
+  }
+
   return reply(
     {
       ...base,
       success: false,
-      error: `mode must be preflight or one of: ${[...CHECKPOINT_MODES, ...ACTIVITY_MODES].join(', ')}`,
+      error: `mode must be preflight or one of: ${[...CHECKPOINT_MODES, ...ACTIVITY_MODES, ...QUEUE_MODES].join(', ')}`,
     },
     400,
   );

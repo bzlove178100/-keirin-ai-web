@@ -48,6 +48,8 @@ jobs:
         run: python tests/test_hosted_checkpoint_client.py
       - name: Verify hosted activity ledger client behavior
         run: python tests/test_hosted_activity_client.py
+      - name: Verify hosted queue lease and fencing client behavior
+        run: python tests/test_hosted_queue_client.py
       - name: Set up Node for Web capture checks
         uses: actions/setup-node@v4
       - name: Run Web capture checks
