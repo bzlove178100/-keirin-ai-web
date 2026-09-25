@@ -243,7 +243,7 @@ begin
     raise exception 'blocked_state_required' using errcode = '22023';
   end if;
 
-  v_reason := pg_catalog.coalesce(
+  v_reason := coalesce(
     nullif(p_state->>'blocked_reason',''),
     'expired_lease_requires_reconciliation'
   );
