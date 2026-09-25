@@ -1,5 +1,5 @@
 export const AGENT_RUNTIME_SERVICE = 'agent-runtime-dev';
-export const AGENT_RUNTIME_VERSION = 'v2-owner-readonly-preflight-diagnostics';
+export const AGENT_RUNTIME_VERSION = 'v3-owner-preflight-general-capability-contracts';
 export const TASK_SCHEMA_VERSION = 'agent-task-v1';
 export const RUNTIME_BINDING_SCHEMA_VERSION = 'agent-runtime-bindings-v1';
 
@@ -91,7 +91,63 @@ export const RUNTIME_CAPABILITIES: RuntimeCapability[] = [
     required_permissions: ['files:write'],
     bound: false,
     supports_dry_run: false,
-    description: 'External host binding required. No write binding is enabled in v2.',
+    description: 'External host binding required. No write binding is enabled in v3.',
+  },
+  {
+    action: 'research.read_public_sources',
+    access: 'read',
+    required_permissions: ['research:read'],
+    bound: false,
+    supports_dry_run: true,
+    description: 'Read public research sources through a separately authorized host binding.',
+  },
+  {
+    action: 'text.generate',
+    access: 'execute',
+    required_permissions: ['text:generate'],
+    bound: false,
+    supports_dry_run: false,
+    description: 'Generate or transform text through a separately authorized model provider.',
+  },
+  {
+    action: 'image.generate',
+    access: 'execute',
+    required_permissions: ['image:generate'],
+    bound: false,
+    supports_dry_run: false,
+    description: 'Generate or edit images through a separately authorized image provider.',
+  },
+  {
+    action: 'video.generate',
+    access: 'execute',
+    required_permissions: ['video:generate'],
+    bound: false,
+    supports_dry_run: false,
+    description: 'Generate video through a separately authorized video provider.',
+  },
+  {
+    action: 'code.generate',
+    access: 'execute',
+    required_permissions: ['code:generate'],
+    bound: false,
+    supports_dry_run: false,
+    description: 'Generate program text without applying repository writes by itself.',
+  },
+  {
+    action: 'learning.evaluate',
+    access: 'execute',
+    required_permissions: ['learning:evaluate'],
+    bound: false,
+    supports_dry_run: true,
+    description: 'Evaluate models or tasks using explicit inputs and verification criteria.',
+  },
+  {
+    action: 'report.generate',
+    access: 'execute',
+    required_permissions: ['report:generate'],
+    bound: false,
+    supports_dry_run: true,
+    description: 'Generate a report from available state without delivering it.',
   },
   {
     action: 'report.deliver',
@@ -99,7 +155,7 @@ export const RUNTIME_CAPABILITIES: RuntimeCapability[] = [
     required_permissions: ['report:deliver'],
     bound: false,
     supports_dry_run: false,
-    description: 'Destination is intentionally not configured in v2.',
+    description: 'Destination is intentionally not configured in v3.',
   },
 ];
 
