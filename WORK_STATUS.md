@@ -23,6 +23,9 @@ Updated: 2026-09-25 UTC.
 
 ### Shared autonomous-agent foundation
 
+- Fixed a local runner interruption gap: a process exit after a provider call but before completion persistence could previously repeat the operation on resume. Any attempted but incomplete step now blocks for explicit reconciliation before further tool calls. A shared nonblocking POSIX per-task file lock also prevents competing local runners/reconciliation from entering the same task. Distributed claims and durable hosted state remain unimplemented/disabled.
+- Added five interruption/concurrency regression cases, including actual SystemExit during action/verification, two competing runner instances, reconciliation exclusion, between-step resume and an unresolved step omitted from the new specification. These tests do not prove distributed locking or provider idempotency.
+
 - Added a pure queue planner and worker lifecycle contract (`AGENT_QUEUE_DESIGN.md`). It proposes owner-scoped FIFO claims with revision expectations, due-time/attempt/capacity checks, skips terminal tasks and requires reconciliation for missing/expired running leases. It does not claim tasks, perform I/O or enable hosted execution/persistence. The existing rollback-only schema still needs reviewed lease/revision fields and atomic claim operations before activation.
 - Seven queue-planner regression cases cover stable ordering/no mutation, terminal skips, ambiguous lease recovery, due times/budgets, owner isolation/duplicate rejection, invalid inputs and timezone/capacity behavior. CI runs this suite alongside existing safety checks.
 

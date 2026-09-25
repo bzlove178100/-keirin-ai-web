@@ -26,6 +26,8 @@ jobs:
         run: python tests/test_regression.py
       - name: Run shared agent core safety checks
         run: python tests/test_agent_core.py
+      - name: Run interrupted and competing runner checks
+        run: python tests/test_agent_interruptions.py
       - name: Run agent orchestration and reporting checks
         run: python tests/test_agent_orchestration.py
       - name: Run queue planning and interrupted-worker safety checks

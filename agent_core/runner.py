@@ -99,6 +99,10 @@ class AgentRunner:
 
     def run(self, spec: TaskSpec, *, context: dict[str, Any] | None = None) -> RunOutcome:
         spec.validate()
+        with self.store.task_lock(spec.task_id):
+            return self._run_locked(spec, context=context)
+
+    def _run_locked(self, spec: TaskSpec, *, context: dict[str, Any] | None = None) -> RunOutcome:
         state = self.store.load_state(spec.task_id)
         if state.task_id != spec.task_id:
             raise ValueError("task_state_id_mismatch")
@@ -109,6 +113,16 @@ class AgentRunner:
                 event_type="terminal_resume_skipped",
                 message=f"task already {state.status}; no action repeated",
             )
+            return self._outcome(state)
+
+        # Attempts are persisted before invoking a provider. If execution was
+        # interrupted before completion was saved, the external outcome is unknown
+        # even when the action is retry-safe: its verifier may have been interrupted.
+        # Check the whole state before executing any earlier/new step in the spec.
+        unresolved = sorted(step_id for step_id, count in state.attempts.items()
+                            if count > 0 and step_id not in state.completed_steps)
+        if unresolved:
+            self._block(state, "interrupted_step_requires_reconciliation:" + ",".join(unresolved))
             return self._outcome(state)
 
         state.status = "running"

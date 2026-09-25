@@ -4,6 +4,7 @@ import json
 import os
 import re
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,26 @@ class FileStateStore:
 
     def state_path(self, task_id: str) -> Path:
         return self.states_dir / f"{self._safe_task_id(task_id)}.json"
+
+    @contextmanager
+    def task_lock(self, task_id: str):
+        """Nonblocking single-host POSIX lock shared by runners/reconciliation.
+
+        Lock files must not be removed: unlinking would permit a second inode and
+        two simultaneous holders. This is not a distributed lease or DB lock.
+        """
+        import fcntl
+
+        path = self.states_dir / f".{self._safe_task_id(task_id)}.lock"
+        with path.open("a", encoding="utf-8") as handle:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise RuntimeError("task_already_running") from exc
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def load_state(self, task_id: str) -> TaskState:
         path = self.state_path(task_id)
@@ -71,6 +92,21 @@ class FileStateStore:
         return existing
 
     def reconcile_blocked_step(
+        self,
+        task_id: str,
+        *,
+        step_id: str,
+        resolution: str,
+        note: str,
+        artifact_updates: tuple[ArtifactUpdate, ...] = (),
+    ) -> TaskState:
+        with self.task_lock(task_id):
+            return self._reconcile_blocked_step_locked(
+                task_id, step_id=step_id, resolution=resolution, note=note,
+                artifact_updates=artifact_updates,
+            )
+
+    def _reconcile_blocked_step_locked(
         self,
         task_id: str,
         *,
