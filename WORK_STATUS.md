@@ -26,24 +26,23 @@ Relevant merged work includes offline LightGBM inference/evaluation, strict pros
 
 ### Runtime core and recovery
 
-Merged and verified:
+Verified implementation history:
 
-- PR #32: broad autonomous-agent goal made authoritative.
-- PR #33: machine-readable `TaskSpec`, local/private task state, activity ledger, allowed-action gates, idempotency keys, verification hooks and artifact lifecycle separation.
-- PR #35: explicit reconciliation, capability/permission metadata, orchestration preflight, read-only GitHub adapter contract and Asia/Tokyo reporting contracts. Missing revenue remains `unknown/unavailable`, never silently zero.
-- PR #37: credential-free runtime binding manifests, provider-neutral runtime bridge, read-only Supabase/file adapter contracts, CLI/runtime utilities, report-delivery separation and disabled-by-default 21:00 scheduling contract.
-- PR #40: first live external provider path through a GitHub Actions read-only worker using ephemeral `GITHUB_TOKEN`; repository/CI verification works without screenshots and write capabilities are blocked.
-- PR #45: pure owner-scoped queue planner / worker-lifecycle contract. It does not claim tasks or perform hosted I/O.
-- PR #46: interruption safety prevents automatic repetition after an attempted-but-incomplete side effect and adds nonblocking local per-task locking.
-- PR #47: task state is bound to an immutable fingerprint of the complete TaskSpec so a reused task ID with changed inputs/actions/permissions/retry rules cannot silently resume.
-- PR #48: rollback-only hosted checkpoint v2 preparation with immutable task definition, revision CAS, owner-role grants, atomic checkpoint/audit writes and PostgreSQL 17 isolation tests.
-- PR #49: broad capability contracts for public research, text/image/video/code generation, learning evaluation and report generation. These provider capabilities remain declared but unbound.
-- PR #50: hosted runtime message cleanup plus `deno check` for the Edge Function entrypoint.
-- PR #51: status refreshed before persistence activation.
-- PR #52 (`ac4d529c72d91f992685c8bffc1af9363a65ec74`): authorized owner-only hosted agent checkpoint persistence, migration records, RLS/CAS safety tests, v4 checkpoint runtime contract and create/get/list/save endpoints. All PR CI workflows passed before merge.
-- PR #53 (`4d9f29dfbb5184cc70d857a34cd21a6db7e852f6`): documentation aligned with the activated staging persistence state and explicit remaining verification boundaries.
-- PR #54 (`cd8e87ff66c517f1eaaab6acdb94e13215a119e1`): strict provider-neutral `HostedCheckpointClient` for create/get/list/save. It recomputes the canonical Python TaskSpec fingerprint and fails closed on changed task definitions, corrupted fingerprints, invalid status/revision state or stale CAS writes. All PR workflows passed before merge.
-- PR #56 (`94c98cb10cc7324dbcd16dae1cdb9f35ef7c4e45`): owner-only append/read activity persistence, strict provider-neutral `HostedActivityClient`, secret-shaped payload rejection and Edge runtime v5 activity modes. All PR CI workflows passed. Staging migration and v5 deployment were verified before merge.
+- PR #32 made the broad autonomous-agent goal authoritative.
+- PR #33 added machine-readable `TaskSpec`, local/private task state, activity ledger, allowed-action gates, idempotency keys, verification hooks and artifact lifecycle separation.
+- PR #35 added explicit reconciliation, capability/permission metadata, orchestration preflight, read-only GitHub adapter contracts and Asia/Tokyo reporting contracts. Missing revenue remains `unknown/unavailable`, never silently zero.
+- PR #37 added credential-free runtime binding manifests, a provider-neutral runtime bridge, read-only Supabase/file adapter contracts, CLI/runtime utilities, report-delivery separation and a disabled-by-default 21:00 scheduling contract.
+- PR #40 added the first live external provider path through a GitHub Actions read-only worker using ephemeral `GITHUB_TOKEN`; repository/CI verification works without screenshots and write capabilities are blocked.
+- PR #45 added the pure owner-scoped queue planner / worker-lifecycle contract.
+- PR #46 added interruption safety and nonblocking local per-task locking.
+- PR #47 bound durable state to the immutable fingerprint of the complete TaskSpec.
+- PR #48 prepared rollback-only hosted checkpoint v2 with PostgreSQL 17 isolation tests.
+- PR #49 declared broad public-research/text/image/video/code/learning/report capabilities while leaving providers unbound.
+- PR #52 activated authorized owner-only hosted checkpoint persistence in staging.
+- PR #54 added the strict provider-neutral `HostedCheckpointClient`.
+- PR #56 (`94c98cb10cc7324dbcd16dae1cdb9f35ef7c4e45`) added owner-only append/read activity persistence and `HostedActivityClient`; all PR workflows passed and runtime v5 was deployed before merge.
+- PR #57 (`6600d8174bc52f6dd3937e8f5a4acccd05871261`) added crash-safe queue lease/fencing, bounded attempts, strict `HostedQueueClient`, explicit expired-lease reconciliation and PostgreSQL 17 fencing tests. All PR workflows passed before merge.
+- PR #58 adds a fail-closed `HostedWorkerCoordinator` that composes queue claim, ToolRegistry preflight and activity logging without invoking provider actions. Every inspected claim is durably released as blocked while hosted task execution remains unactivated.
 
 ### Hosted persistence activation
 
@@ -56,15 +55,14 @@ Applied staging migrations in `keirin-ai-staging`:
 - `20260925115914_agent_runtime_activity_event_rpc`
 - `20260925122122_agent_runtime_queue_lease`
 
-Current agent storage:
+Current agent storage and coordination:
 
 - `public.agent_tasks`
 - `public.agent_task_events`
-- owner-derived `agent_create_checkpoint(...)`
-- revision-CAS `agent_save_checkpoint(...)`
-- owner-derived `agent_append_event(...)`
-- queue coordination columns for not-before time, attempt budget, lease owner/generation/expiry
-- atomic `agent_claim_next_task(...)` using `FOR UPDATE SKIP LOCKED`
+- owner-derived checkpoint create/save RPCs with revision CAS
+- owner-derived activity append RPC
+- queue metadata for not-before time, attempt budget, lease owner/generation/expiry
+- atomic FIFO `agent_claim_next_task(...)` using `FOR UPDATE SKIP LOCKED`
 - fenced `agent_save_leased_checkpoint(...)`
 - explicit `agent_reconcile_expired_lease(...)` that blocks ambiguous expired work instead of silently retrying it
 - owner-only RLS using `user_profiles(role='owner', plan='owner')`
@@ -73,25 +71,28 @@ Current agent storage:
 - append-only event access for authenticated owner role
 - no authenticated task DELETE grant
 
-Direct rollback tests in staging verified owner access, non-owner and anonymous denial, duplicate idempotency rejection, CAS success/stale-conflict behavior, completed-state immutability, append-only events, task DELETE denial and atomic checkpoint/event behavior. RPC tests also verified create/save behavior and `blocked_reason` / `last_error` synchronization. A staging event append/read round-trip was also verified after the activity migration.
+Staging verification confirms all six queue metadata columns and all three queue RPCs exist. `race_predictions` remains at zero rows. The queue schema is active, but no always-on worker is activated.
 
-The queue-lease implementation passed all current PR workflows, including the isolated PostgreSQL 17 contract, general regression, runtime smoke and Web collection regression. Staging exposes all six queue metadata columns and all three queue RPCs, while `race_predictions` remains at zero rows. The migration is active; an always-on worker is still not activated.
-
-The performance advisor no longer reports agent-table RLS init-plan warnings after the follow-up migration. The remaining `user_profiles_select_own` performance warning predates this activation. Security advisor findings remain unrelated existing items: `race_predictions` RLS has no policy, and leaked-password protection is disabled.
+Security advisor findings remain unrelated existing items: `race_predictions` has RLS enabled with no policy, and leaked-password protection is disabled. The performance advisor still reports the pre-existing `user_profiles_select_own` auth init-plan warning. Newly created queue indexes may appear as unused before worker load; that is not treated as proof they should be removed.
 
 ### Hosted runtime
 
 `supabase/functions/agent-runtime-dev` is owner-only and protected with `verify_jwt=true`.
 
-After PR #56 it was deployed as Supabase Edge Function **version 5**, status **ACTIVE**. The v5 service contract is `v5-owner-checkpoint-activity-persistence`.
+After PR #57, the function was deployed and read back as **version 6 / ACTIVE**, with service contract `v6-owner-queue-lease-fencing`.
 
-The queue-lease branch defines the next v6 contract with queue claim/save/reconcile endpoints while retaining `runtime_task_execution_enabled=false`. Its final PR head passed all workflows. Deploy v6 next, then read back the deployed function before wiring any worker.
+Hosted modes include:
 
-Hosted persistence modes include checkpoint create/get/list/save plus activity append/list. Queue coordination is storage/lease control, not task execution.
+- checkpoint create/get/list/save;
+- activity append/list;
+- queue claim/save/reconcile-expired.
 
-Current safety state remains:
+The deployed source verifies queue RPC results by reading durable state back before returning success. Queue responses still report `executed:false` and the runtime safety contract keeps `runtime_task_execution_enabled=false`.
+
+Current safety state:
 
 - agent checkpoint/activity persistence: **ON, agent-only**;
+- queue coordination: **ON, agent-only**;
 - hosted task execution: **OFF**;
 - production prediction: **OFF**;
 - keirin prediction DB writes: **OFF**;
@@ -99,72 +100,41 @@ Current safety state remains:
 - external provider generation/write bindings: **unbound**;
 - report delivery: **OFF / unconfigured**.
 
+A real request through the deployed Edge Function using the user's browser owner JWT has not yet been performed in this chat; do not mark that browser-to-Edge path verified until it is actually tested.
+
 ## Validation
 
-CI currently covers:
+CI covers shared agent core safety, interrupted/competing runner behavior, immutable task identity, orchestration/reporting, queue planning, runtime bridge/delivery, live GitHub read-only host bridge, broad capability contracts, hosted checkpoint/activity/queue clients, migration safety, isolated PostgreSQL 17 queue fencing/crash cases, Web/prospective/ML regression, Phase32/training-input contracts and hosted runtime type/contract checks.
 
-- shared agent core safety;
-- interrupted/competing runner cases;
-- immutable task identity;
-- orchestration/reporting;
-- queue planning;
-- runtime bridge/delivery;
-- live GitHub read-only host bridge;
-- broad capability contracts;
-- activated hosted checkpoint/activity migration safety;
-- strict hosted checkpoint/activity clients;
-- queue lease/fencing migration safety and isolated PostgreSQL 17 crash/fencing tests;
-- Web/prospective/ML regression;
-- Phase32/training-input contracts;
-- hosted runtime contract tests and entrypoint type-checking.
+PR #58 additionally tests that the hosted worker coordinator never invokes provider actions, fails closed on missing or forbidden capabilities, releases an inspected lease as blocked, and does not report release success when durable queue save fails.
 
 The design still separates `created`, `verified`, `persistent_saved`, `device_saved` and `ui_loaded` artifact states and does not treat Work/Chat execution as proof of an independent always-on agent.
 
 ## Current agent state
 
-The project now has:
+The project now has a tested generic task/runtime core, safe resume/reconciliation semantics, durable owner-only checkpoint/activity storage, crash-safe queue lease/fencing, strict hosted persistence clients, a deployed v6 coordination runtime, a verified live GitHub read-only provider path and broad provider-neutral capability contracts.
 
-- a tested generic task/runtime core;
-- safe resume/reconciliation semantics;
-- a queue-planning contract;
-- durable owner-only agent checkpoint/activity storage active in staging;
-- queue lease/fencing schema active in staging, without an active worker;
-- a hosted Supabase persistence/preflight shell;
-- strict hosted checkpoint/activity clients;
-- a verified live GitHub read-only provider path;
-- broad capability contracts for research/text/image/video/code/learning/report generation.
-
-It is still **not** an always-on self-contained autonomous agent.
+It is still **not** an always-on self-contained autonomous agent. The current worker coordinator is intentionally non-executing.
 
 Major remaining gaps:
 
-1. queue lease/fencing must be exposed and verified through the deployed v6 hosted runtime before wiring a distributed worker;
-2. `AgentRunner` is not yet wired to hosted checkpoint/activity/queue state;
-3. no always-on worker or scheduler host is activated;
-4. Supabase/files/Web/model-provider live bindings are not yet broadly connected;
-5. text/image/video/code capabilities are declared but provider-unbound;
-6. sales source, accounting rules and report destination are unresolved;
+1. prove the fail-closed hosted worker coordinator through CI and merge it;
+2. test one real authenticated owner browser-to-Edge persistence/queue flow when an owner session is available, without storing the token;
+3. design the explicit execution-host activation boundary before wiring `AgentRunner` or provider actions to claimed leases;
+4. connect additional safe read-only Supabase/files/Web bindings where host authorization exists;
+5. text/image/video/code capabilities remain provider-unbound;
+6. sales source, accounting rules and report destination remain unresolved;
 7. 21:00 report generation/delivery is not scheduled live.
 
 ## Next action
 
 Continue without asking for race screenshots unless a race-data step genuinely requires user input.
 
-Next safe implementation slice:
-
-1. deploy and verify hosted runtime v6 for queue claim/save/reconcile while task execution stays disabled;
-2. add a strict hosted worker coordinator that composes queue claim + preflight + checkpoint/activity clients but does not yet invoke write/execute provider actions;
-3. test crash recovery and stale-worker fencing through the hosted transport;
-4. wire a read-only first worker task (repository/CI status) only after the coordinator proves fail-closed behavior;
-5. keep provider generation bindings and report delivery as separate authorization/configuration steps.
+After the fail-closed coordinator is merged, prepare a read-only first-worker execution design around repository/CI status. Do not activate hosted task execution, an always-on scheduler, provider generation/write bindings or report delivery without the corresponding explicit authorization/configuration step.
 
 ## 21:00 report requirement
 
-The product requirement remains daily 21:00 Asia/Tokyo reporting of:
-
-- daily sales;
-- monthly sales;
-- activity report: work executed, results, failures/incomplete work and next actions.
+The product requirement remains daily 21:00 Asia/Tokyo reporting of daily sales, monthly sales and the activity report (work executed, results, failures/incomplete work and next actions).
 
 Sales source, accounting rules and delivery destination are still unresolved. Missing sales values must not be shown as zero. Report delivery/scheduling stays disabled until those inputs are defined.
 
