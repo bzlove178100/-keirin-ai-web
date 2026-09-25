@@ -18,6 +18,20 @@ An interrupted attempted step without saved completion blocks before any further
 tool call, including when the step was marked retry-safe. Explicit reconciliation
 is required. Already completed steps and unstarted next steps can still resume.
 This local protection does not replace a hosted atomic claim/lease mechanism.
+
+The local state now binds a versioned SHA-256 fingerprint of the complete JSON
+TaskSpec before the first action. Changed specs with the same task ID are rejected
+without overwriting state, including completed tasks. JSON key order is ignored;
+inputs, actions, permissions, retries and verification definitions are included.
+Task inputs/arguments are copied so an adapter cannot mutate a later step's input.
+The fingerprint is an integrity comparison, not authentication or encryption;
+host-supplied runtime context and provider permissions must still be authorized.
+
+Legacy state without a fingerprint fails with `legacy_task_spec_requires_review`.
+Do not silently attach the current spec, delete state or use a new task ID to retry
+unknown effects. A future explicit migration must compare the original task
+definition and completed/attempted-step evidence before binding it. That migration
+is not implemented here. New tasks and already-bound states need no migration.
 Completed, blocked and failed tasks are never automatically enqueued again.
 Running tasks with missing/expired leases require explicit reconciliation of
 external effects; lease expiry alone is not evidence that a tool did nothing.
