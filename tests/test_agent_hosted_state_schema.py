@@ -60,6 +60,16 @@ class HostedAgentStateSchemaDesignTest(unittest.TestCase):
         self.assertNotIn("insert into public.user_profiles", self.normalized)
         self.assertNotIn("update public.user_profiles", self.normalized)
 
+    def test_checkpoint_design_keeps_activation_boundary(self):
+        sql = (ROOT / "supabase/schema/agent_runtime_checkpoints_v2.sql").read_text().lower()
+        self.assertIn("design only / not deployed", sql)
+        self.assertRegex(sql, r"(?m)^begin;$")
+        self.assertRegex(sql, r"(?m)^rollback;$")
+        self.assertNotRegex(sql, r"\bcommit;")
+        self.assertNotIn("security definer", sql)
+        self.assertNotIn("race_predictions", sql)
+        self.assertIn("checkpoint_conflict_or_not_accessible", sql)
+
 
 if __name__ == "__main__":
     unittest.main()

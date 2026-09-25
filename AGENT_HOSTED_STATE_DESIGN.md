@@ -2,6 +2,47 @@
 
 Status: **design only / not deployed**
 
+## Checkpoint implementation prepared (v2)
+
+`supabase/schema/agent_runtime_checkpoints_v2.sql` extends the v1 design. Both
+remain rollback-only and outside migrations. v2 adds immutable task identity,
+monotonic revisions, a compare-and-swap checkpoint function, explicit grants and
+an audit trigger in the same transaction as every state write. The function uses
+SECURITY INVOKER and auth.uid(); existing owner RLS still applies. No credentials
+or real user/race data are part of the files.
+
+`agent_save_checkpoint` is a state-saving operation, not a task claim or worker
+authorization. It does not provide leases, worker fencing, provider bindings or a
+scheduler. Authenticated owners have direct table writes subject to RLS/triggers;
+the trusted host must enforce TaskSpec validity, transitions and reconciliation.
+The supplied fingerprint is format-checked and immutable, not recomputed in SQL;
+the full stored specification is also immutable. The host computes/verifies the
+Python canonical fingerprint before binding a task to execution.
+
+The ledger is append-only for the authenticated role; it is not a cryptographic
+audit trail and direct authorized inserts are possible. A checkpoint write that
+cannot append its event fails atomically. Deletes are not granted. Completed
+checkpoints cannot be overwritten. Neither schema is a migration for existing
+tasks; the current staging project was checked and has neither agent table.
+
+The PostgreSQL 17 CI service uses only synthetic owners and data in a rollback
+transaction. It tests owner isolation, non-owner/anonymous denial, duplicate
+identity rejection, immutable definitions, stale revisions, append-only events,
+audit failure rollback and completed-state protection. It does not validate the
+actual Supabase JWT gateway, deployed profile policies, concurrent worker claims
+or end-to-end hosted resume. Deployment/advisor checks are still required later.
+
+Activation scope for a later explicit authorization: create only the dedicated
+agent task/event storage and checkpoint function in staging after converting the
+reviewed designs into a migration. Do not enable prediction writes, task execution,
+external race fetching or the 21:00 schedule. The activation process must verify
+current profile authorization/grants, RLS and security advisors before connecting
+the owner-only hosted shell to persistence.
+
+Sources checked for v2: Supabase database functions and RLS documentation:
+https://supabase.com/docs/guides/database/functions
+https://supabase.com/docs/guides/database/postgres/row-level-security
+
 The shared agent can currently persist state locally inside a host process, and the live GitHub Actions worker proves one read-only provider binding. The hosted Supabase `agent-runtime-dev` shell remains preflight-only. The next architectural requirement is durable private task state so work can survive a chat, browser, or one-off runner ending.
 
 This document defines that state contract without enabling database writes.

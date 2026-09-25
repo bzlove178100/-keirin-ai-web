@@ -1,0 +1,43 @@
+name: agent checkpoint PostgreSQL contract
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checkpoint-contract:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: agent_checkpoint_ci
+          POSTGRES_USER: postgres
+          # Disposable CI service only; never a project credential.
+          POSTGRES_PASSWORD: ephemeral-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test isolated checkpoint schema with PostgreSQL 17
+        env:
+          AGENT_EPHEMERAL_DB_TEST: '1'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGDATABASE: agent_checkpoint_ci
+          PGUSER: postgres
+          PGPASSWORD: ephemeral-ci-only
+        run: python tests/run_agent_checkpoint_postgres.py
