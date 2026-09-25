@@ -8,6 +8,12 @@ explicit and testable.
 from .adapters import Capability, CallableReadOnlyGitHubAdapter, ToolRegistry
 from .capability_catalog import CapabilityContract, capability_by_action, capability_catalog
 from .delivery import BridgeReportDelivery, DeliveryResult, ReportDelivery
+from .hosted_activity import (
+    HostedActivityClient,
+    HostedActivityError,
+    HostedActivityEvent,
+    HostedActivityIntegrityError,
+)
 from .hosted_checkpoint import (
     HostedCheckpointClient,
     HostedCheckpointConflict,
@@ -53,6 +59,10 @@ __all__ = [
     "DeliveryResult",
     "FileArtifactAdapter",
     "FileStateStore",
+    "HostedActivityClient",
+    "HostedActivityError",
+    "HostedActivityEvent",
+    "HostedActivityIntegrityError",
     "HostedCheckpointClient",
     "HostedCheckpointConflict",
     "HostedCheckpointError",
