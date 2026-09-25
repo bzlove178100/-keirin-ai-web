@@ -20,7 +20,7 @@ Verified current state:
 - Real prospective collection remains 1 eligible distinct prediction time. Four more distinct eligible times are required to reach the evaluator's five-time technical minimum; boundary purging can require more. Five is not evidence of accuracy or profitability.
 - Two older history variants without `training_input` are not eligible for the current paired evaluation.
 
-Relevant merged work includes offline LightGBM inference/evaluation, strict prospective capture and chronology, private history bundling, readiness UI and the unified strict chronological split protocol (through PR #31).
+Relevant merged work includes offline LightGBM inference/evaluation, strict prospective capture and chronology, private history bundling, readiness UI and the unified strict chronological split protocol through PR #31.
 
 ## Shared autonomous-agent foundation
 
@@ -29,36 +29,69 @@ Relevant merged work includes offline LightGBM inference/evaluation, strict pros
 Merged and verified:
 
 - PR #32: broad autonomous-agent goal made authoritative.
-- PR #33: machine-readable `TaskSpec`, private task state, activity ledger, allowed-action gates, idempotency keys, verification hooks and artifact lifecycle separation.
+- PR #33: machine-readable `TaskSpec`, local/private task state, activity ledger, allowed-action gates, idempotency keys, verification hooks and artifact lifecycle separation.
 - PR #35: explicit reconciliation, capability/permission metadata, orchestration preflight, read-only GitHub adapter contract and Asia/Tokyo reporting contracts. Missing revenue remains `unknown/unavailable`, never silently zero.
 - PR #37: credential-free runtime binding manifests, provider-neutral runtime bridge, read-only Supabase/file adapter contracts, CLI/runtime utilities, report-delivery separation and disabled-by-default 21:00 scheduling contract.
 - PR #40: first live external provider path through a GitHub Actions read-only worker using ephemeral `GITHUB_TOKEN`; repository/CI verification works without screenshots and write capabilities are blocked.
 - PR #45: pure owner-scoped queue planner / worker-lifecycle contract. It does not claim tasks or perform hosted I/O.
 - PR #46: interruption safety prevents automatic repetition after an attempted-but-incomplete side effect and adds nonblocking local per-task locking.
 - PR #47: task state is bound to an immutable fingerprint of the complete TaskSpec so a reused task ID with changed inputs/actions/permissions/retry rules cannot silently resume.
-- PR #48 (`b5112df4f60d003daed2eb92706d156bc81aebed`): rollback-only hosted checkpoint v2 preparation with immutable task definition, revision compare-and-swap, owner-role grants, atomic checkpoint/audit writes and PostgreSQL 17 isolation tests. This is validated preparation only; hosted persistence is still not activated.
+- PR #48: rollback-only hosted checkpoint v2 preparation with immutable task definition, revision CAS, owner-role grants, atomic checkpoint/audit writes and PostgreSQL 17 isolation tests.
+- PR #49: broad capability contracts for public research, text/image/video/code generation, learning evaluation and report generation. These provider capabilities remain declared but unbound.
+- PR #50: hosted runtime message cleanup plus `deno check` for the Edge Function entrypoint.
+- PR #51: status refreshed before persistence activation.
+- PR #52 (`ac4d529c72d91f992685c8bffc1af9363a65ec74`): authorized owner-only hosted agent checkpoint persistence, migration records, RLS/CAS safety tests, v4 checkpoint runtime contract and create/get/list/save endpoints. All PR CI workflows passed before merge.
+
+### Hosted persistence activation
+
+The user explicitly authorized **AI-agent-only task/activity persistence in staging**. That authorization did not extend to keirin prediction writes, production prediction, automatic race-data fetching, provider writes/generation, hosted task execution or report delivery.
+
+Applied staging migrations in `keirin-ai-staging`:
+
+- `20260925103650_agent_runtime_checkpoints_activation`
+- `20260925110207_agent_runtime_checkpoint_rpc_and_rls_optimization`
+
+Current agent storage:
+
+- `public.agent_tasks`
+- `public.agent_task_events`
+- owner-derived `agent_create_checkpoint(...)`
+- revision-CAS `agent_save_checkpoint(...)`
+- owner-only RLS using `user_profiles(role='owner', plan='owner')`
+- immutable task definition/fingerprint after creation
+- completed-state protection
+- append-only event access for authenticated owner role
+- no authenticated task DELETE grant
+
+Direct rollback tests in staging verified owner access, non-owner and anonymous denial, duplicate idempotency rejection, CAS success/stale-conflict behavior, completed-state immutability, append-only events, task DELETE denial and atomic checkpoint/event behavior. RPC tests also verified create/save behavior and `blocked_reason` / `last_error` synchronization.
+
+The performance advisor no longer reports agent-table RLS init-plan warnings after the follow-up migration. The remaining `user_profiles_select_own` performance warning predates this activation. Security advisor findings remain unrelated existing items: `race_predictions` RLS has no policy, and leaked-password protection is disabled.
 
 ### Hosted runtime
 
-- `supabase/functions/agent-runtime-dev` is an owner-only hosted shell protected with `verify_jwt=true`.
-- PR #43 added capability diagnostics: `declared`, `bound`, `authorization_state`, `authorized`, `verified`, `last_error`.
-- PR #49 (`9a591bc3fbe2ff5df60db0d903ccaeec5c3e6c89`) added explicit broad capability contracts for:
-  - `research.read_public_sources`
-  - `text.generate`
-  - `image.generate`
-  - `video.generate`
-  - `code.generate`
-  - `learning.evaluate`
-  - `report.generate`
-- Those capabilities are declarations only. They remain **unbound**, **unauthorized** and **unverified** in the hosted runtime.
-- PR #50 (`455a289c4652e4b95be62261c0f3a3f604b3852a`) aligned hosted v3 messages and added `deno check` for the Edge Function entrypoint before deployment.
-- `agent-runtime-dev` was deployed after PR #50 as **version 3**, verified `ACTIVE` with `verify_jwt=true`, and read back from Supabase.
-- Hosted v3 still has:
-  - task execution: **OFF**
-  - hosted persistence: **OFF**
-  - provider writes: **OFF / unbound**
-  - automatic keirin race-data fetching: **OFF**
-  - report delivery: **OFF / unconfigured**
+`supabase/functions/agent-runtime-dev` is owner-only and protected with `verify_jwt=true`.
+
+After PR #52 it was deployed as Supabase Edge Function **version 4**, status **ACTIVE**. The service contract is `v4-owner-checkpoint-persistence`.
+
+Hosted modes now include:
+
+- `preflight`
+- `checkpoint_create`
+- `checkpoint_get`
+- `checkpoint_list`
+- `checkpoint_save`
+
+Hosted v4 safety state:
+
+- agent checkpoint persistence: **ON, agent-only**;
+- hosted task execution: **OFF**;
+- production prediction: **OFF**;
+- keirin prediction DB writes: **OFF**;
+- automatic external keirin race-data fetching: **OFF**;
+- external provider generation/write bindings: **unbound**;
+- report delivery: **OFF / unconfigured**.
+
+The database/RLS/RPC path is verified and the v4 source passed CI/type-checking before merge. The function was read back ACTIVE after deployment. An end-to-end request through the deployed Edge Function using the user's real browser owner JWT has not yet been performed in this chat; do not mark that specific browser-to-Edge path verified until it is tested.
 
 ## Validation
 
@@ -72,14 +105,14 @@ CI currently covers:
 - runtime bridge/delivery;
 - live GitHub read-only host bridge;
 - broad capability contracts;
-- rollback-only hosted state schema safety;
+- activated hosted checkpoint migration safety plus archived rollback-only designs;
 - Web/prospective/ML regression;
 - Phase32/training-input contracts;
-- hosted runtime contract tests;
+- hosted runtime checkpoint contract tests;
 - hosted runtime entrypoint type-checking;
 - isolated PostgreSQL 17 checkpoint/RLS/CAS tests.
 
-The current design explicitly separates `created`, `verified`, `persistent_saved`, `device_saved` and `ui_loaded` artifact states and does not treat Work/Chat execution as proof of an independent always-on agent.
+The design still separates `created`, `verified`, `persistent_saved`, `device_saved` and `ui_loaded` artifact states and does not treat Work/Chat execution as proof of an independent always-on agent.
 
 ## Current agent state
 
@@ -88,36 +121,34 @@ The project now has:
 - a tested generic task/runtime core;
 - safe resume/reconciliation semantics;
 - a queue-planning contract;
-- a real Supabase hosted preflight/diagnostic shell;
+- **durable owner-only agent checkpoint/activity storage active in staging**;
+- a hosted Supabase persistence/preflight shell;
 - a verified live GitHub read-only provider path;
-- a validated but unapplied durable checkpoint schema;
-- explicit broad capability contracts for research/text/image/video/code/learning/report generation.
+- broad capability contracts for research/text/image/video/code/learning/report generation.
 
 It is still **not** an always-on self-contained autonomous agent.
 
 Major remaining gaps:
 
-1. durable hosted task/activity persistence is prepared but intentionally OFF;
-2. no hosted queue/lease worker is activated;
+1. the shared runtime's state-store abstraction is not yet bound end-to-end to the hosted checkpoint API;
+2. no hosted queue claim/lease/fencing worker is activated;
 3. Supabase/files/Web/model-provider live bindings are not yet broadly connected;
 4. text/image/video/code capabilities are declared but provider-unbound;
 5. sales source, accounting rules and report destination are unresolved;
 6. 21:00 report generation/delivery is not scheduled live.
 
-## Next action / authorization boundary
+## Next action
 
-The next irreversible boundary is **activating AI-agent-only hosted task/activity persistence in the staging Supabase project**.
+Continue without asking for race screenshots unless a race-data step genuinely requires user input.
 
-Do **not** activate it without explicit user authorization. If authorized:
+Next implementation slice:
 
-1. convert the reviewed rollback-only checkpoint design into a staging migration;
-2. apply it only to agent-specific tables/functions, not keirin prediction tables;
-3. run RLS/security/advisor checks;
-4. verify owner isolation, compare-and-swap, completed-state protection and rollback/failure behavior;
-5. only then connect hosted checkpoint persistence to the runtime;
-6. keep production prediction, keirin prediction DB writes and automatic external keirin data fetching OFF unless separately authorized.
-
-Until that authorization is given, continue only reversible/no-persistence work such as capability contracts, read-only bindings, tests, provider adapters and documentation.
+1. add a hosted checkpoint store/adapter contract that maps shared `TaskSpec` / `TaskState` to `checkpoint_create/get/list/save` while recomputing/verifying the canonical TaskSpec fingerprint before resume;
+2. add integration tests using a fake hosted transport, including stale revision conflicts, interrupted resumes and immutable definitions;
+3. test one real authenticated owner browser-to-Edge checkpoint flow when an owner session is available, without storing the token;
+4. only after hosted persistence integration is stable, implement atomic queue claim/lease/fencing and crash-recovery tests; do not activate an always-on worker yet;
+5. add safe read-only Supabase/files/Web bindings where host authorization is available;
+6. keep provider generation bindings and report delivery as separate authorization/configuration steps.
 
 ## 21:00 report requirement
 
