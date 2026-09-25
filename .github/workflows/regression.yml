@@ -28,6 +28,8 @@ jobs:
         run: python tests/test_agent_core.py
       - name: Run interrupted and competing runner checks
         run: python tests/test_agent_interruptions.py
+      - name: Run immutable task identity checks
+        run: python tests/test_agent_task_identity.py
       - name: Run agent orchestration and reporting checks
         run: python tests/test_agent_orchestration.py
       - name: Run queue planning and interrupted-worker safety checks
