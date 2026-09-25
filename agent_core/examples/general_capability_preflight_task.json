@@ -1,0 +1,69 @@
+{
+  "schema_version": "agent-task-v1",
+  "task_id": "general-capability-preflight-example",
+  "title": "共通AIエージェント能力の事前確認",
+  "goal": "文章・画像・動画・コード生成能力が明示的な権限とホスト接続なしに実行されないことを確認する",
+  "allowed_actions": [
+    "text.generate",
+    "image.generate",
+    "video.generate",
+    "code.generate",
+    "learning.evaluate",
+    "report.generate"
+  ],
+  "inputs": {
+    "production_prediction_enabled": false,
+    "keirin_db_write_enabled": false,
+    "keirin_external_auto_fetch_enabled": false
+  },
+  "steps": [
+    {
+      "step_id": "text",
+      "action": "text.generate",
+      "args": {"purpose": "preflight only"},
+      "retry_safe": false,
+      "max_attempts": 1
+    },
+    {
+      "step_id": "image",
+      "action": "image.generate",
+      "args": {"purpose": "preflight only"},
+      "retry_safe": false,
+      "max_attempts": 1
+    },
+    {
+      "step_id": "video",
+      "action": "video.generate",
+      "args": {"purpose": "preflight only"},
+      "retry_safe": false,
+      "max_attempts": 1
+    },
+    {
+      "step_id": "code",
+      "action": "code.generate",
+      "args": {"purpose": "preflight only"},
+      "retry_safe": false,
+      "max_attempts": 1
+    },
+    {
+      "step_id": "learning",
+      "action": "learning.evaluate",
+      "args": {"purpose": "preflight only"},
+      "retry_safe": true,
+      "max_attempts": 1
+    },
+    {
+      "step_id": "report",
+      "action": "report.generate",
+      "args": {"purpose": "preflight only"},
+      "retry_safe": true,
+      "max_attempts": 1
+    }
+  ],
+  "completion_conditions": [
+    "capabilities remain provider-unbound until separately authorized",
+    "production prediction remains off",
+    "keirin development database writes remain off",
+    "automatic keirin race-data fetching remains off"
+  ]
+}
