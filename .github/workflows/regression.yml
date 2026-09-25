@@ -28,6 +28,8 @@ jobs:
         run: python tests/test_agent_core.py
       - name: Run agent orchestration and reporting checks
         run: python tests/test_agent_orchestration.py
+      - name: Run queue planning and interrupted-worker safety checks
+        run: python tests/test_agent_queue_planner.py
       - name: Run runtime bridge and delivery checks
         run: python tests/test_agent_runtime_bridge.py
       - name: Run live GitHub host bridge unit checks
