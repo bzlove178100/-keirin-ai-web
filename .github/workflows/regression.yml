@@ -40,12 +40,12 @@ jobs:
         run: python tests/test_agent_github_readonly_host.py
       - name: Verify broad agent capability contracts
         run: python tests/test_agent_capability_catalog.py
-      - name: Verify hosted state schema design is unapplied and owner-scoped
+      - name: Verify hosted state schema activation contract
         run: python tests/test_agent_hosted_state_schema.py
+      - name: Verify hosted checkpoint client integrity and CAS behavior
+        run: python tests/test_hosted_checkpoint_client.py
       - name: Set up Node for Web capture checks
         uses: actions/setup-node@v4
-        with:
-          node-version: '22'
       - name: Run Web capture checks
         run: node tests/test_web_capture.cjs
       - name: Run browser-local prospective tools checks
