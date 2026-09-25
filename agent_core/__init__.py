@@ -35,6 +35,7 @@ from .hosted_readonly_worker import (
     HostedReadOnlyWorker,
     HostedReadOnlyWorkerResult,
 )
+from .hosted_transport import HostedTransportError, SupabaseEdgeTransport
 from .hosted_worker import HostedWorkerCoordinator, HostedWorkerDecision
 from .model import (
     ActionResult,
@@ -92,6 +93,7 @@ __all__ = [
     "HostedQueueLease",
     "HostedReadOnlyWorker",
     "HostedReadOnlyWorkerResult",
+    "HostedTransportError",
     "HostedWorkerCoordinator",
     "HostedWorkerDecision",
     "PreflightReport",
@@ -103,6 +105,7 @@ __all__ = [
     "RuntimeBridge",
     "RuntimeManifest",
     "StepSpec",
+    "SupabaseEdgeTransport",
     "TaskSpec",
     "TaskState",
     "ToolRegistry",
