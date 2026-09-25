@@ -29,6 +29,7 @@ from .hosted_queue import (
     HostedQueueIntegrityError,
     HostedQueueLease,
 )
+from .hosted_worker import HostedWorkerCoordinator, HostedWorkerDecision
 from .model import (
     ActionResult,
     ArtifactState,
@@ -81,6 +82,8 @@ __all__ = [
     "HostedQueueError",
     "HostedQueueIntegrityError",
     "HostedQueueLease",
+    "HostedWorkerCoordinator",
+    "HostedWorkerDecision",
     "PreflightReport",
     "ReadOnlySupabaseStatusAdapter",
     "ReportDelivery",
