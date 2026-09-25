@@ -1,5 +1,5 @@
 export const AGENT_RUNTIME_SERVICE = 'agent-runtime-dev';
-export const AGENT_RUNTIME_VERSION = 'v5-owner-checkpoint-activity-persistence';
+export const AGENT_RUNTIME_VERSION = 'v6-owner-queue-lease-fencing';
 export const TASK_SCHEMA_VERSION = 'agent-task-v1';
 export const TASK_STATE_SCHEMA_VERSION = 'agent-task-state-v1';
 export const RUNTIME_BINDING_SCHEMA_VERSION = 'agent-runtime-bindings-v1';
@@ -37,6 +37,7 @@ export const SAFETY_STATE = Object.freeze({
   persistence_enabled: true,
   checkpoint_persistence_scope: 'agent_only',
   activity_persistence_enabled: true,
+  queue_coordination_enabled: true,
 });
 
 export const CHECKPOINT_MODES = Object.freeze([
@@ -49,6 +50,12 @@ export const CHECKPOINT_MODES = Object.freeze([
 export const ACTIVITY_MODES = Object.freeze([
   'event_append',
   'event_list',
+]);
+
+export const QUEUE_MODES = Object.freeze([
+  'queue_claim',
+  'queue_save',
+  'queue_reconcile_expired',
 ]);
 
 export const RUNTIME_CAPABILITIES: RuntimeCapability[] = [
@@ -106,7 +113,7 @@ export const RUNTIME_CAPABILITIES: RuntimeCapability[] = [
     required_permissions: ['files:write'],
     bound: false,
     supports_dry_run: false,
-    description: 'External host binding required. No file-write binding is enabled in v5.',
+    description: 'External host binding required. No file-write binding is enabled in v6.',
   },
   {
     action: 'research.read_public_sources',
@@ -170,7 +177,7 @@ export const RUNTIME_CAPABILITIES: RuntimeCapability[] = [
     required_permissions: ['report:deliver'],
     bound: false,
     supports_dry_run: false,
-    description: 'Destination is intentionally not configured in v5.',
+    description: 'Destination is intentionally not configured in v6.',
   },
 ];
 
@@ -203,6 +210,7 @@ const FORBIDDEN_SECRET_KEYS = new Set([
 ]);
 
 const TASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const WORKER_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const FINGERPRINT_RE = /^sha256-v1:[0-9a-f]{64}$/;
 const SAVE_STATUSES = new Set(['running', 'blocked', 'completed', 'failed']);
 
@@ -249,6 +257,16 @@ export function validateTaskId(value: unknown): string | null {
   return typeof value === 'string' && TASK_ID_RE.test(value) ? value : null;
 }
 
+export function validateWorkerId(value: unknown): string | null {
+  return typeof value === 'string' && WORKER_ID_RE.test(value) ? value : null;
+}
+
+export function validateLeaseSeconds(value: unknown): number | null {
+  return Number.isSafeInteger(value) && (value as number) >= 15 && (value as number) <= 3600
+    ? value as number
+    : null;
+}
+
 export function validateCheckpointCreate(input: unknown) {
   const body = asObject(input);
   if (!body) return { ok: false, error: 'request must be an object' } as const;
@@ -277,7 +295,8 @@ export function validateCheckpointSave(input: unknown) {
   const taskId = validateTaskId(body.task_id);
   const state = asObject(body.state);
   if (!taskId || !state) return { ok: false, error: 'valid task_id and state are required' } as const;
-  if (findForbiddenSecretPath(state)) return { ok: false, error: 'state contains a forbidden secret field' } as const;
+  const secretPath = findForbiddenSecretPath(state);
+  if (secretPath) return { ok: false, error: 'state contains a forbidden secret field', secret_path: secretPath } as const;
   if (state.schema_version !== TASK_STATE_SCHEMA_VERSION || state.task_id !== taskId) {
     return { ok: false, error: 'state identity/schema mismatch' } as const;
   }
@@ -331,6 +350,66 @@ export function validateActivityList(input: unknown) {
     afterEventId = body.after_event_id as number;
   }
   return { ok: true, task_id: taskId, limit: rawLimit as number, after_event_id: afterEventId } as const;
+}
+
+export function validateQueueClaim(input: unknown) {
+  const body = asObject(input);
+  if (!body) return { ok: false, error: 'request must be an object' } as const;
+  const workerId = validateWorkerId(body.worker_id);
+  const leaseSeconds = validateLeaseSeconds(body.lease_seconds);
+  if (!workerId) return { ok: false, error: 'valid worker_id is required' } as const;
+  if (leaseSeconds === null) return { ok: false, error: 'lease_seconds must be an integer from 15 to 3600' } as const;
+  return { ok: true, worker_id: workerId, lease_seconds: leaseSeconds } as const;
+}
+
+export function validateQueueSave(input: unknown) {
+  const checkpoint = validateCheckpointSave(input);
+  if (!checkpoint.ok) return checkpoint;
+  const body = asObject(input)!;
+  const workerId = validateWorkerId(body.worker_id);
+  const leaseSeconds = validateLeaseSeconds(body.lease_seconds);
+  const generation = body.lease_generation;
+  if (!workerId) return { ok: false, error: 'valid worker_id is required' } as const;
+  if (!Number.isSafeInteger(generation) || (generation as number) < 1) {
+    return { ok: false, error: 'lease_generation must be a positive integer' } as const;
+  }
+  if (leaseSeconds === null) return { ok: false, error: 'lease_seconds must be an integer from 15 to 3600' } as const;
+  return {
+    ...checkpoint,
+    worker_id: workerId,
+    lease_generation: generation as number,
+    lease_seconds: leaseSeconds,
+  } as const;
+}
+
+export function validateQueueReconcileExpired(input: unknown) {
+  const body = asObject(input);
+  if (!body) return { ok: false, error: 'request must be an object' } as const;
+  const taskId = validateTaskId(body.task_id);
+  const state = asObject(body.state);
+  if (!taskId || !state) return { ok: false, error: 'valid task_id and state are required' } as const;
+  const secretPath = findForbiddenSecretPath(state);
+  if (secretPath) return { ok: false, error: 'state contains a forbidden secret field', secret_path: secretPath } as const;
+  if (state.schema_version !== TASK_STATE_SCHEMA_VERSION || state.task_id !== taskId || state.status !== 'blocked') {
+    return { ok: false, error: 'blocked state identity/schema mismatch' } as const;
+  }
+  const fingerprint = typeof state.spec_fingerprint === 'string' ? state.spec_fingerprint : '';
+  if (!FINGERPRINT_RE.test(fingerprint)) return { ok: false, error: 'valid state spec_fingerprint is required' } as const;
+  const revision = body.expected_revision;
+  if (!Number.isSafeInteger(revision) || (revision as number) < 0) {
+    return { ok: false, error: 'expected_revision must be a non-negative safe integer' } as const;
+  }
+  const generation = body.lease_generation;
+  if (!Number.isSafeInteger(generation) || (generation as number) < 1) {
+    return { ok: false, error: 'lease_generation must be a positive integer' } as const;
+  }
+  return {
+    ok: true,
+    task_id: taskId,
+    state,
+    expected_revision: revision as number,
+    lease_generation: generation as number,
+  } as const;
 }
 
 export function preflightTask(taskInput: unknown, allowedAccessInput: unknown = ['read']) {
