@@ -1,6 +1,6 @@
 # Work status
 
-Updated: 2026-09-24 UTC.
+Updated: 2026-09-25 UTC.
 
 ## Product direction
 
@@ -22,6 +22,9 @@ Updated: 2026-09-24 UTC.
 - Two old saved history variants lack `training_input` and cannot supply the current paired evaluation.
 
 ### Shared autonomous-agent foundation
+
+- Added a pure queue planner and worker lifecycle contract (`AGENT_QUEUE_DESIGN.md`). It proposes owner-scoped FIFO claims with revision expectations, due-time/attempt/capacity checks, skips terminal tasks and requires reconciliation for missing/expired running leases. It does not claim tasks, perform I/O or enable hosted execution/persistence. The existing rollback-only schema still needs reviewed lease/revision fields and atomic claim operations before activation.
+- Seven queue-planner regression cases cover stable ordering/no mutation, terminal skips, ambiguous lease recovery, due times/budgets, owner isolation/duplicate rejection, invalid inputs and timezone/capacity behavior. CI runs this suite alongside existing safety checks.
 
 - PR #32 added `AI_AGENT_REQUIREMENTS.md`, made the broad autonomous-agent goal authoritative, and prevented keirin data collection from becoming the only development path.
 - PR #33 added the first shared runtime core: machine-readable `TaskSpec`, atomic private task-state persistence, append-only activity ledger, explicit allowed-action gates, stable per-step idempotency keys, verifier hooks, conservative blocked/failed resume semantics and separate artifact lifecycle stages.
@@ -78,7 +81,7 @@ Next implementation slice:
 
 1. Keep the durable-state schema unapplied until database-writing activation is explicitly authorized. When authorized, convert the rollback-only design into a reviewed staging migration and run RLS/security/advisor checks before enabling hosted persistence.
 2. Add another live **read-only** binding where authorization can be safely supplied by the host. Supabase project/function status is preferred, but do not copy ChatGPT/Work connector credentials into the repository or hosted runtime.
-3. Add a queue/worker scheduler design that can operate against the durable-state contract later without enabling writes yet.
+3. Implement the future atomic claim/lease adapter only after the durable-state activation boundary is resolved. The pure queue planner and worker design now exist; concurrency, fencing and crash-recovery integration tests remain required before any hosted activation.
 4. Preserve the live GitHub worker as a read-only verification path so future repository/CI checks do not require screenshots.
 5. Keep the 21:00 Asia/Tokyo report scheduler disabled until sales source, accounting rules and delivery destination are explicitly resolved.
 6. Continue prospective keirin data collection when suitable races are available, but do not let it replace common agent-runtime development.
