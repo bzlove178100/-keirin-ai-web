@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+import hashlib
+import json
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -60,6 +62,12 @@ class TaskSpec:
     inputs: dict[str, Any] = field(default_factory=dict)
     completion_conditions: tuple[str, ...] = field(default_factory=tuple)
     schema_version: str = TASK_SCHEMA_VERSION
+
+    def fingerprint(self) -> str:
+        """Versioned digest of the complete JSON task definition, not a credential."""
+        encoded = json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"),
+                             ensure_ascii=False, allow_nan=False).encode("utf-8")
+        return "sha256-v1:" + hashlib.sha256(encoded).hexdigest()
 
     def validate(self) -> None:
         if self.schema_version != TASK_SCHEMA_VERSION:
@@ -178,6 +186,7 @@ class TaskState:
     reconciliations: list[dict[str, Any]] = field(default_factory=list)
     updated_at: str = field(default_factory=utc_now_iso)
     schema_version: str = STATE_SCHEMA_VERSION
+    spec_fingerprint: str | None = None
 
     def touch(self) -> None:
         self.updated_at = utc_now_iso()
@@ -206,4 +215,5 @@ class TaskState:
             reconciliations=list(payload.get("reconciliations") or []),
             updated_at=str(payload.get("updated_at") or utc_now_iso()),
             schema_version=str(payload.get("schema_version")),
+            spec_fingerprint=payload.get("spec_fingerprint"),
         )
