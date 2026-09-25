@@ -27,10 +27,19 @@ def main():
     parts = ["begin;", (ROOT / "tests/agent_checkpoint_bootstrap.sql").read_text()]
     for name in ("agent_runtime_state_v1.sql", "agent_runtime_checkpoints_v2.sql"):
         parts.append(design_body(ROOT / "supabase/schema" / name))
-    parts += [(ROOT / "tests/agent_checkpoint_cases.sql").read_text(), "rollback;"]
+    parts.append(
+        (ROOT / "supabase/migrations/20260925121000_agent_runtime_queue_lease.sql").read_text(
+            encoding="utf-8"
+        )
+    )
+    parts += [
+        (ROOT / "tests/agent_checkpoint_cases.sql").read_text(),
+        (ROOT / "tests/agent_queue_lease_cases.sql").read_text(),
+        "rollback;",
+    ]
     subprocess.run(["psql", "-X", "--set", "ON_ERROR_STOP=1", "--quiet"],
                    input="\n".join(parts), text=True, check=True)
-    print("PostgreSQL checkpoint isolation, identity, CAS and audit rollback: PASS")
+    print("PostgreSQL checkpoint/RLS/CAS plus queue lease fencing and crash recovery: PASS")
 
 
 if __name__ == "__main__":
