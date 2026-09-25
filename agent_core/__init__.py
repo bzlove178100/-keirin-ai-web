@@ -22,6 +22,13 @@ from .hosted_checkpoint import (
     HostedCheckpointRecord,
     HostedCheckpointSummary,
 )
+from .hosted_queue import (
+    HostedQueueClient,
+    HostedQueueConflict,
+    HostedQueueError,
+    HostedQueueIntegrityError,
+    HostedQueueLease,
+)
 from .model import (
     ActionResult,
     ArtifactState,
@@ -69,6 +76,11 @@ __all__ = [
     "HostedCheckpointIntegrityError",
     "HostedCheckpointRecord",
     "HostedCheckpointSummary",
+    "HostedQueueClient",
+    "HostedQueueConflict",
+    "HostedQueueError",
+    "HostedQueueIntegrityError",
+    "HostedQueueLease",
     "PreflightReport",
     "ReadOnlySupabaseStatusAdapter",
     "ReportDelivery",
