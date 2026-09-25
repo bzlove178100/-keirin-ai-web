@@ -1,5 +1,5 @@
 export const AGENT_RUNTIME_SERVICE = 'agent-runtime-dev';
-export const AGENT_RUNTIME_VERSION = 'v4-owner-checkpoint-persistence';
+export const AGENT_RUNTIME_VERSION = 'v5-owner-checkpoint-activity-persistence';
 export const TASK_SCHEMA_VERSION = 'agent-task-v1';
 export const TASK_STATE_SCHEMA_VERSION = 'agent-task-state-v1';
 export const RUNTIME_BINDING_SCHEMA_VERSION = 'agent-runtime-bindings-v1';
@@ -36,6 +36,7 @@ export const SAFETY_STATE = Object.freeze({
   runtime_task_execution_enabled: false,
   persistence_enabled: true,
   checkpoint_persistence_scope: 'agent_only',
+  activity_persistence_enabled: true,
 });
 
 export const CHECKPOINT_MODES = Object.freeze([
@@ -43,6 +44,11 @@ export const CHECKPOINT_MODES = Object.freeze([
   'checkpoint_get',
   'checkpoint_list',
   'checkpoint_save',
+]);
+
+export const ACTIVITY_MODES = Object.freeze([
+  'event_append',
+  'event_list',
 ]);
 
 export const RUNTIME_CAPABILITIES: RuntimeCapability[] = [
@@ -100,7 +106,7 @@ export const RUNTIME_CAPABILITIES: RuntimeCapability[] = [
     required_permissions: ['files:write'],
     bound: false,
     supports_dry_run: false,
-    description: 'External host binding required. No file-write binding is enabled in v4.',
+    description: 'External host binding required. No file-write binding is enabled in v5.',
   },
   {
     action: 'research.read_public_sources',
@@ -164,7 +170,7 @@ export const RUNTIME_CAPABILITIES: RuntimeCapability[] = [
     required_permissions: ['report:deliver'],
     bound: false,
     supports_dry_run: false,
-    description: 'Destination is intentionally not configured in v4.',
+    description: 'Destination is intentionally not configured in v5.',
   },
 ];
 
@@ -284,6 +290,47 @@ export function validateCheckpointSave(input: unknown) {
     return { ok: false, error: 'expected_revision must be a non-negative safe integer' } as const;
   }
   return { ok: true, task_id: taskId, status, state, expected_revision: revision as number } as const;
+}
+
+export function validateActivityAppend(input: unknown) {
+  const body = asObject(input);
+  if (!body) return { ok: false, error: 'request must be an object' } as const;
+  const taskId = validateTaskId(body.task_id);
+  if (!taskId) return { ok: false, error: 'valid task_id is required' } as const;
+  const eventType = typeof body.event_type === 'string' ? body.event_type.trim() : '';
+  if (!eventType || eventType.length > 128) return { ok: false, error: 'invalid event_type' } as const;
+  let stepId: string | null = null;
+  if (body.step_id !== undefined && body.step_id !== null) {
+    if (typeof body.step_id !== 'string') return { ok: false, error: 'invalid step_id' } as const;
+    stepId = body.step_id.trim();
+    if (!stepId || stepId.length > 128) return { ok: false, error: 'invalid step_id' } as const;
+  }
+  const payload = body.payload === undefined ? {} : asObject(body.payload);
+  if (!payload) return { ok: false, error: 'event payload must be an object' } as const;
+  const secretPath = findForbiddenSecretPath(payload);
+  if (secretPath) {
+    return { ok: false, error: 'event payload contains a forbidden secret field', secret_path: secretPath } as const;
+  }
+  return { ok: true, task_id: taskId, event_type: eventType, step_id: stepId, payload } as const;
+}
+
+export function validateActivityList(input: unknown) {
+  const body = asObject(input);
+  if (!body) return { ok: false, error: 'request must be an object' } as const;
+  const taskId = validateTaskId(body.task_id);
+  if (!taskId) return { ok: false, error: 'valid task_id is required' } as const;
+  const rawLimit = body.limit === undefined ? 100 : body.limit;
+  if (!Number.isSafeInteger(rawLimit) || (rawLimit as number) < 1 || (rawLimit as number) > 200) {
+    return { ok: false, error: 'activity list limit must be an integer from 1 to 200' } as const;
+  }
+  let afterEventId: number | null = null;
+  if (body.after_event_id !== undefined && body.after_event_id !== null) {
+    if (!Number.isSafeInteger(body.after_event_id) || (body.after_event_id as number) < 0) {
+      return { ok: false, error: 'after_event_id must be a non-negative integer' } as const;
+    }
+    afterEventId = body.after_event_id as number;
+  }
+  return { ok: true, task_id: taskId, limit: rawLimit as number, after_event_id: afterEventId } as const;
 }
 
 export function preflightTask(taskInput: unknown, allowedAccessInput: unknown = ['read']) {
