@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import {
+  ACTIVITY_MODES,
   AGENT_RUNTIME_SERVICE,
   AGENT_RUNTIME_VERSION,
   CHECKPOINT_MODES,
@@ -8,6 +9,8 @@ import {
   SAFETY_STATE,
   capabilityDiagnostics,
   preflightTask,
+  validateActivityAppend,
+  validateActivityList,
   validateCheckpointCreate,
   validateCheckpointSave,
   validateTaskId,
@@ -38,6 +41,7 @@ const CHECKPOINT_LIST_SELECT = [
   'created_at',
   'updated_at',
 ].join(',');
+const EVENT_SELECT = 'event_id,task_id,event_type,step_id,payload,created_at';
 const CHECKPOINT_STATUSES = new Set(['queued', 'running', 'blocked', 'completed', 'failed']);
 
 type OwnerContext = {
@@ -129,9 +133,17 @@ async function verifyOwner(authHeader: string): Promise<OwnerContext | OwnerFail
   return { ok: true, role: 'owner', plan: 'owner', userId: user.id, url, key };
 }
 
-async function persistenceHealth(owner: OwnerContext, authHeader: string) {
+async function checkpointPersistenceHealth(owner: OwnerContext, authHeader: string) {
   const response = await fetch(
     `${owner.url}/rest/v1/agent_tasks?select=task_id&limit=0`,
+    { headers: providerHeaders(owner, authHeader) },
+  );
+  return response.ok;
+}
+
+async function activityPersistenceHealth(owner: OwnerContext, authHeader: string) {
+  const response = await fetch(
+    `${owner.url}/rest/v1/agent_task_events?select=event_id&limit=0`,
     { headers: providerHeaders(owner, authHeader) },
   );
   return response.ok;
@@ -140,6 +152,17 @@ async function persistenceHealth(owner: OwnerContext, authHeader: string) {
 async function getCheckpoint(owner: OwnerContext, authHeader: string, taskId: string) {
   const response = await fetch(
     `${owner.url}/rest/v1/agent_tasks?task_id=eq.${encodeURIComponent(taskId)}&select=${encodeURIComponent(CHECKPOINT_SELECT)}&limit=1`,
+    { headers: providerHeaders(owner, authHeader) },
+  );
+  const data = await readJson(response);
+  if (!response.ok) return { ok: false as const, status: response.status, data };
+  const rows = Array.isArray(data) ? data : [];
+  return { ok: true as const, row: rows.length === 1 ? rows[0] : null };
+}
+
+async function getActivityEvent(owner: OwnerContext, authHeader: string, taskId: string, eventId: number) {
+  const response = await fetch(
+    `${owner.url}/rest/v1/agent_task_events?task_id=eq.${encodeURIComponent(taskId)}&event_id=eq.${eventId}&select=${encodeURIComponent(EVENT_SELECT)}&limit=1`,
     { headers: providerHeaders(owner, authHeader) },
   );
   const data = await readJson(response);
@@ -169,7 +192,10 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  const persistenceVerified = await persistenceHealth(owner, auth);
+  const [checkpointVerified, activityVerified] = await Promise.all([
+    checkpointPersistenceHealth(owner, auth),
+    activityPersistenceHealth(owner, auth),
+  ]);
   const diagnostics = capabilityDiagnostics();
   const base = {
     success: true,
@@ -182,16 +208,18 @@ Deno.serve(async (req: Request) => {
     plan: owner.plan,
     safety: SAFETY_STATE,
     checkpoint_modes: CHECKPOINT_MODES,
+    activity_modes: ACTIVITY_MODES,
     capabilities: RUNTIME_CAPABILITIES,
     diagnostics: {
-      runtime_mode: 'owner_checkpoint_persistence',
+      runtime_mode: 'owner_checkpoint_activity_persistence',
       execution_enabled: false,
       persistence_enabled: true,
-      persistence_verified: persistenceVerified,
+      persistence_verified: checkpointVerified,
+      activity_persistence_verified: activityVerified,
       capability_status: diagnostics,
     },
     message:
-      'Owner-only hosted runtime. Agent checkpoint persistence is enabled; task execution, provider writes, automatic keirin race-data fetching, and report delivery remain disabled.',
+      'Owner-only hosted runtime. Agent checkpoint and append-only activity persistence are enabled; task execution, provider writes, automatic keirin race-data fetching, and report delivery remain disabled.',
   };
 
   if (req.method === 'GET') return reply(base);
@@ -228,8 +256,11 @@ Deno.serve(async (req: Request) => {
     return reply({ ...base, mode, preflight: result, executed: false, saved: false, state_persisted: false });
   }
 
-  if (!persistenceVerified) {
+  if (CHECKPOINT_MODES.includes(mode as never) && !checkpointVerified) {
     return reply({ ...base, success: false, mode, error: 'Agent checkpoint storage is unavailable' }, 503);
+  }
+  if (ACTIVITY_MODES.includes(mode as never) && !activityVerified) {
+    return reply({ ...base, success: false, mode, error: 'Agent activity storage is unavailable' }, 503);
   }
 
   if (mode === 'checkpoint_create') {
@@ -302,11 +333,52 @@ Deno.serve(async (req: Request) => {
     return reply({ ...base, mode, checkpoint: verified.row, revision: newRevision, saved: true, state_persisted: true });
   }
 
+  if (mode === 'event_append') {
+    const valid = validateActivityAppend(requestBody);
+    if (!valid.ok) {
+      return reply({ ...base, success: false, mode, error: valid.error, ...('secret_path' in valid ? { secret_path: valid.secret_path } : {}) }, 422);
+    }
+    const response = await fetch(`${owner.url}/rest/v1/rpc/agent_append_event`, {
+      method: 'POST',
+      headers: providerHeaders(owner, auth),
+      body: JSON.stringify({
+        p_task_id: valid.task_id,
+        p_event_type: valid.event_type,
+        p_step_id: valid.step_id,
+        p_payload: valid.payload,
+      }),
+    });
+    const data = await readJson(response);
+    if (!response.ok) return reply({ ...base, ...persistenceError(data, response.status), mode }, response.status);
+    const eventId = typeof data === 'number' ? data : Number(data);
+    if (!Number.isSafeInteger(eventId) || eventId <= 0) {
+      return reply({ ...base, success: false, mode, error: 'Activity append returned an invalid event id' }, 500);
+    }
+    const verified = await getActivityEvent(owner, auth, valid.task_id, eventId);
+    if (!verified.ok || !verified.row) {
+      return reply({ ...base, success: false, mode, error: 'Activity append could not be verified' }, 500);
+    }
+    return reply({ ...base, mode, event: verified.row, event_persisted: true }, 201);
+  }
+
+  if (mode === 'event_list') {
+    const valid = validateActivityList(requestBody);
+    if (!valid.ok) return reply({ ...base, success: false, mode, error: valid.error }, 422);
+    const cursor = valid.after_event_id === null ? '' : `&event_id=gt.${valid.after_event_id}`;
+    const response = await fetch(
+      `${owner.url}/rest/v1/agent_task_events?task_id=eq.${encodeURIComponent(valid.task_id)}&select=${encodeURIComponent(EVENT_SELECT)}${cursor}&order=event_id.asc&limit=${valid.limit}`,
+      { headers: providerHeaders(owner, auth) },
+    );
+    const data = await readJson(response);
+    if (!response.ok) return reply({ ...base, ...persistenceError(data, response.status), mode }, response.status);
+    return reply({ ...base, mode, events: Array.isArray(data) ? data : [], activity_persisted: true });
+  }
+
   return reply(
     {
       ...base,
       success: false,
-      error: `mode must be preflight or one of: ${CHECKPOINT_MODES.join(', ')}`,
+      error: `mode must be preflight or one of: ${[...CHECKPOINT_MODES, ...ACTIVITY_MODES].join(', ')}`,
     },
     400,
   );

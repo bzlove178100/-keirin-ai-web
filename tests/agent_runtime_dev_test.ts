@@ -1,4 +1,5 @@
 import {
+  ACTIVITY_MODES,
   AGENT_RUNTIME_VERSION,
   CHECKPOINT_MODES,
   RUNTIME_CAPABILITIES,
@@ -6,6 +7,8 @@ import {
   capabilityDiagnostics,
   findForbiddenSecretPath,
   preflightTask,
+  validateActivityAppend,
+  validateActivityList,
   validateCheckpointCreate,
   validateCheckpointSave,
   validateTaskId,
@@ -15,20 +18,27 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-Deno.test('hosted agent runtime version enables owner checkpoint persistence only', () => {
-  assert(AGENT_RUNTIME_VERSION === 'v4-owner-checkpoint-persistence', 'runtime version changed unexpectedly');
+Deno.test('hosted agent runtime version enables owner checkpoint and activity persistence only', () => {
+  assert(
+    AGENT_RUNTIME_VERSION === 'v5-owner-checkpoint-activity-persistence',
+    'runtime version changed unexpectedly',
+  );
   assert(SAFETY_STATE.production_prediction_enabled === false, 'production prediction must remain off');
   assert(SAFETY_STATE.db_write_enabled === false, 'keirin database writing must remain off');
   assert(SAFETY_STATE.external_automatic_fetch_enabled === false, 'external automatic fetching must remain off');
-  assert(SAFETY_STATE.runtime_task_execution_enabled === false, 'runtime task execution must remain off in v4');
-  assert(SAFETY_STATE.persistence_enabled === true, 'agent checkpoint persistence must be enabled in v4');
+  assert(SAFETY_STATE.runtime_task_execution_enabled === false, 'runtime task execution must remain off in v5');
+  assert(SAFETY_STATE.persistence_enabled === true, 'agent checkpoint persistence must remain enabled');
   assert(SAFETY_STATE.checkpoint_persistence_scope === 'agent_only', 'persistence scope must remain agent-only');
+  assert(SAFETY_STATE.activity_persistence_enabled === true, 'append-only agent activity persistence must be enabled');
 });
 
-Deno.test('checkpoint modes are explicit and do not include task execution', () => {
-  const expected = ['checkpoint_create', 'checkpoint_get', 'checkpoint_list', 'checkpoint_save'];
-  assert(expected.every((mode) => CHECKPOINT_MODES.includes(mode)), 'checkpoint modes missing');
-  assert(!CHECKPOINT_MODES.includes('execute'), 'checkpoint modes must not enable task execution');
+Deno.test('persistence modes are explicit and do not include task execution', () => {
+  const checkpoints = ['checkpoint_create', 'checkpoint_get', 'checkpoint_list', 'checkpoint_save'];
+  assert(checkpoints.every((mode) => CHECKPOINT_MODES.includes(mode as never)), 'checkpoint modes missing');
+  assert(ACTIVITY_MODES.includes('event_append'), 'event_append mode missing');
+  assert(ACTIVITY_MODES.includes('event_list'), 'event_list mode missing');
+  assert(!CHECKPOINT_MODES.includes('execute' as never), 'checkpoint modes must not enable task execution');
+  assert(!ACTIVITY_MODES.includes('execute' as never), 'activity modes must not enable task execution');
 });
 
 Deno.test('all external provider capabilities remain explicitly unbound', () => {
@@ -57,7 +67,7 @@ Deno.test('broad agent capabilities are declared but not authorized or enabled',
   }
 });
 
-Deno.test('capability diagnostics do not confuse checkpoint persistence with provider authorization', () => {
+Deno.test('capability diagnostics do not confuse agent persistence with provider authorization', () => {
   const diagnostics = capabilityDiagnostics();
   assert(diagnostics.length === RUNTIME_CAPABILITIES.length, 'every declared capability needs a diagnostic');
   for (const diagnostic of diagnostics) {
@@ -155,6 +165,49 @@ Deno.test('checkpoint save requires CAS revision and matching durable state', ()
     },
   });
   assert(mismatch.ok === false, 'status mismatch must fail validation');
+});
+
+Deno.test('activity append validates task/event identity and rejects secret-shaped payloads', () => {
+  const valid = validateActivityAppend({
+    task_id: 'agent-activity-test',
+    event_type: 'step_completed',
+    step_id: 'step-1',
+    payload: { attempt: 1, verified: true },
+  });
+  assert(valid.ok === true, 'valid activity event should pass');
+  if (valid.ok) {
+    assert(valid.event_type === 'step_completed', 'event type should be normalized');
+    assert(valid.step_id === 'step-1', 'step id should be normalized');
+  }
+
+  const secret = validateActivityAppend({
+    task_id: 'agent-activity-test',
+    event_type: 'provider_result',
+    payload: { nested: { access_token: 'must-not-persist' } },
+  });
+  assert(secret.ok === false, 'secret-shaped activity payload must be rejected');
+  if (!secret.ok && 'secret_path' in secret) {
+    assert(secret.secret_path === '$.nested.access_token', 'secret path should be explicit');
+  }
+
+  const badStep = validateActivityAppend({
+    task_id: 'agent-activity-test',
+    event_type: 'x',
+    step_id: ' ',
+    payload: {},
+  });
+  assert(badStep.ok === false, 'blank activity step id must fail');
+});
+
+Deno.test('activity list validates cursor and bounded page size', () => {
+  const valid = validateActivityList({ task_id: 'agent-activity-test', after_event_id: 7, limit: 200 });
+  assert(valid.ok === true, 'valid activity list request should pass');
+  if (valid.ok) {
+    assert(valid.after_event_id === 7, 'activity cursor should be preserved');
+    assert(valid.limit === 200, 'activity list limit should be preserved');
+  }
+  assert(validateActivityList({ task_id: 'agent-activity-test', after_event_id: -1 }).ok === false, 'negative cursor must fail');
+  assert(validateActivityList({ task_id: 'agent-activity-test', limit: 201 }).ok === false, 'oversized activity page must fail');
 });
 
 Deno.test('task id validation matches database format contract', () => {
