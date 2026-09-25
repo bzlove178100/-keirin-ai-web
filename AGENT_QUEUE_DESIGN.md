@@ -10,7 +10,14 @@ DB writes, provider calls or task execution. A proposal is not authorization.
 ## State mapping and recovery
 
 Hosted `queued` maps to local runner `pending` only after a future atomic claim.
-The existing runner and file store are not a multi-worker locking mechanism.
+The local runner and reconciliation now share a nonblocking POSIX per-task file
+lock. This protects callers using the same state directory on one supported host,
+not independent hosts or distributed filesystems. Raw state-store writes remain
+low-level operations and must not be used concurrently outside that lock.
+An interrupted attempted step without saved completion blocks before any further
+tool call, including when the step was marked retry-safe. Explicit reconciliation
+is required. Already completed steps and unstarted next steps can still resume.
+This local protection does not replace a hosted atomic claim/lease mechanism.
 Completed, blocked and failed tasks are never automatically enqueued again.
 Running tasks with missing/expired leases require explicit reconciliation of
 external effects; lease expiry alone is not evidence that a tool did nothing.
