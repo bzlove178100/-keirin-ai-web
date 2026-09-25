@@ -90,6 +90,8 @@ class InterruptedRunnerTest(unittest.TestCase):
             state.status = "running"
             state.completed_steps = ["one"]
             state.attempts = {"one": 1}
+            spec = task(StepSpec("one", "work"), StepSpec("two", "next"))
+            state.spec_fingerprint = spec.fingerprint()
             store.save_state(state)
             calls = []
             spec = task(StepSpec("one", "work"), StepSpec("two", "next"))
@@ -104,6 +106,7 @@ class InterruptedRunnerTest(unittest.TestCase):
             state = store.load_state("interruption-test")
             state.status = "running"
             state.attempts = {"old-step": 1}
+            state.spec_fingerprint = task(StepSpec("new-step", "work")).fingerprint()
             store.save_state(state)
             calls = []
             result = AgentRunner(store, {"work": lambda a, c: calls.append("new")}).run(
