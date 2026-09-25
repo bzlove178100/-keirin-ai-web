@@ -23,6 +23,9 @@ Updated: 2026-09-25 UTC.
 
 ### Shared autonomous-agent foundation
 
+- Prepared rollback-only hosted checkpoint v2 SQL (not deployed): immutable task definition, revision-based compare-and-swap, explicit owner-role grants, atomic checkpoint/audit writes and completed-state protection. Added an isolated PostgreSQL 17 CI job with synthetic identities; hosted runtime/persistence remain disabled. This is storage preparation, not a distributed worker lease or end-to-end hosted resume.
+- Read-only staging checks confirmed both agent tables are absent and `user_profiles` has an authenticated own-row SELECT policy. Staging schema/data were not changed.
+
 - Bound new local task states to a versioned fingerprint of the complete TaskSpec before execution. Reusing a task ID with changed input/actions/permissions/retry rules now fails without overwriting state, including after completion or interruption. Nested action arguments and task inputs are detached from callers and subsequent steps. Existing state without an identity fingerprint requires review; automatic legacy migration is intentionally absent.
 - Added five task-identity tests; all 50 agent tests and existing regression checks pass locally. CI now includes task-identity coverage. Hosted persistence and distributed claim activation remain disabled.
 
