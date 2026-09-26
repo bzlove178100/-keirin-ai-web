@@ -21,6 +21,43 @@ class CredentialRevokedError(CredentialProviderError):
     """Credential source was intentionally revoked/disabled."""
 
 
+def _seconds(value: object, error: str) -> int:
+    if type(value) is not int or value < 0:
+        raise ValueError(error)
+    return value
+
+
+def _capabilities(values: Iterable[str]) -> tuple[str, ...]:
+    if isinstance(values, (str, bytes)):
+        raise ValueError("credential_capabilities_must_be_collection")
+    try:
+        items = tuple(values)
+    except TypeError:
+        raise ValueError("credential_capabilities_must_be_collection") from None
+    if not items or any(not isinstance(v, str) or not v.strip() for v in items):
+        raise ValueError("credential_capabilities_required")
+    return tuple(sorted({v.strip() for v in items}))
+
+
+def _copy_secrets(secrets: Mapping[str, str]) -> dict[str, str]:
+    if not isinstance(secrets, Mapping) or not secrets:
+        raise ValueError("non_empty_runtime_secrets_required")
+    if any(not isinstance(name, str) or not name.strip()
+           or not isinstance(value, str) or not value.strip()
+           for name, value in secrets.items()):
+        raise ValueError("non_empty_runtime_secrets_required")
+    return dict(secrets)
+
+
+def _validate_times(issued_at: int | None, expires_at: int | None) -> None:
+    if issued_at is not None:
+        _seconds(issued_at, "credential_issue_time_invalid")
+    if expires_at is not None:
+        _seconds(expires_at, "credential_expiry_invalid")
+    if issued_at is not None and expires_at is not None and expires_at <= issued_at:
+        raise ValueError("credential_expiry_must_follow_issue_time")
+
+
 class CredentialSnapshot:
     """Short-lived in-memory credential view with explicitly redacted metadata output.
 
@@ -52,14 +89,11 @@ class CredentialSnapshot:
         refresh_capable: bool,
         created_at: int,
     ) -> None:
-        if not provider_id.strip():
+        if not isinstance(provider_id, str) or not provider_id.strip():
             raise ValueError("provider_id_required")
-        normalized_caps = tuple(sorted({str(value).strip() for value in capabilities if str(value).strip()}))
-        if not normalized_caps:
-            raise ValueError("credential_capabilities_required")
-        copied = {str(name): str(value) for name, value in secrets.items()}
-        if not copied or any(not name.strip() or not value for name, value in copied.items()):
-            raise ValueError("non_empty_runtime_secrets_required")
+        normalized_caps = _capabilities(capabilities)
+        copied = _copy_secrets(secrets)
+        _validate_times(issued_at, expires_at)
 
         self._provider_id = provider_id.strip()
         self._account_label = account_label.strip() if isinstance(account_label, str) and account_label.strip() else None
@@ -68,7 +102,7 @@ class CredentialSnapshot:
         self._expires_at = expires_at
         self._refresh_capable = bool(refresh_capable)
         self._secrets = MappingProxyType(copied)
-        self._created_at = int(created_at)
+        self._created_at = _seconds(created_at, "credential_snapshot_time_invalid")
 
     @property
     def provider_id(self) -> str:
@@ -99,10 +133,10 @@ class CredentialSnapshot:
         return tuple(sorted(self._secrets))
 
     def secret(self, name: str) -> str:
-        try:
-            return self._secrets[name]
-        except KeyError as exc:
-            raise CredentialProviderError(f"credential_secret_not_available:{name}") from exc
+        if not isinstance(name, str) or name not in self._secrets:
+            # Never echo an untrusted lookup value (it may itself be a secret).
+            raise CredentialProviderError("credential_secret_not_available")
+        return self._secrets[name]
 
     def to_safe_dict(self) -> dict[str, object]:
         expires_in = None if self._expires_at is None else self._expires_at - self._created_at
@@ -163,16 +197,11 @@ class StaticInMemoryCredentialProvider:
         issued_at: int | None = None,
         expires_at: int | None = None,
     ) -> None:
-        if not provider_id.strip():
+        if not isinstance(provider_id, str) or not provider_id.strip():
             raise ValueError("provider_id_required")
-        caps = tuple(sorted({str(value).strip() for value in capabilities if str(value).strip()}))
-        if not caps:
-            raise ValueError("credential_capabilities_required")
-        copied = {str(name): str(value) for name, value in secrets.items()}
-        if not copied or any(not name.strip() or not value for name, value in copied.items()):
-            raise ValueError("non_empty_runtime_secrets_required")
-        if issued_at is not None and expires_at is not None and int(expires_at) <= int(issued_at):
-            raise ValueError("credential_expiry_must_follow_issue_time")
+        caps = _capabilities(capabilities)
+        copied = _copy_secrets(secrets)
+        _validate_times(issued_at, expires_at)
 
         self._provider_id = provider_id.strip()
         self._account_label = account_label.strip() if isinstance(account_label, str) and account_label.strip() else None
@@ -188,6 +217,7 @@ class StaticInMemoryCredentialProvider:
 
     def revoke(self) -> None:
         self._revoked = True
+        self._secrets.clear()
 
     def snapshot(
         self,
@@ -199,15 +229,18 @@ class StaticInMemoryCredentialProvider:
     ) -> CredentialSnapshot:
         if self._revoked:
             raise CredentialRevokedError("credential_provider_revoked")
-        if isinstance(minimum_ttl_seconds, bool) or minimum_ttl_seconds < 0:
-            raise ValueError("minimum_ttl_seconds_must_be_non_negative")
+        _seconds(minimum_ttl_seconds, "minimum_ttl_seconds_must_be_non_negative_integer")
+        if type(require_known_expiry) is not bool:
+            raise ValueError("require_known_expiry_must_be_boolean")
 
-        required = tuple(sorted({str(value).strip() for value in required_capabilities if str(value).strip()}))
+        required = _capabilities(required_capabilities)
         missing = tuple(value for value in required if value not in self._capabilities)
         if missing:
-            raise CredentialScopeError("credential_capability_mismatch:" + ",".join(missing))
+            raise CredentialScopeError("credential_capability_mismatch")
 
-        now = int(time.time()) if now_epoch is None else int(now_epoch)
+        now = int(time.time()) if now_epoch is None else _seconds(now_epoch, "credential_now_invalid")
+        if self._issued_at is not None and self._issued_at > now:
+            raise CredentialLifetimeError("credential_not_yet_valid")
         if self._expires_at is None:
             if require_known_expiry:
                 raise CredentialLifetimeError("credential_expiry_unknown")

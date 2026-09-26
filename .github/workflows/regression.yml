@@ -54,6 +54,8 @@ jobs:
         run: python tests/test_manual_one_shot_workflow.py
       - name: Verify redacted runtime credential preflight
         run: python tests/test_runtime_credentials.py
+      - name: Verify credential provider isolation and lifetime boundary
+        run: python tests/test_credential_provider.py
       - name: Verify trusted run-instance scope
         run: python tests/test_trusted_run_instance.py
       - name: Verify trusted run-instance enqueue boundary
