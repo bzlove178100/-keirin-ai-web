@@ -69,6 +69,8 @@ Key merged milestones:
 - PR #92 (`e13a6a9e9507e9545b332a81c08620b65a673f74`): synchronized this status through the safe action-error milestone.
 - PR #93 (`8b777c439b1571c8b17f25f1dae4edbb2ab7931a`): added an explicitly injected host-only ephemeral diagnostic sink. It receives only constrained metadata (task/step/action, phase, attempt, retry flag, fixed classification and sanitized exception class name), never exception text/repr, task inputs, args, results, credential snapshots or provider responses. Sink failure is best-effort and cannot change retry/task semantics. Dedicated tests and all four PR workflows passed before merge; the queried main workflow set completed with no failures observed.
 - PR #94 (`b39ee38c4b6bd791e60d204c17e28b6cf509349c`): added an AST-based persistence-redaction guard so future caught exception objects cannot flow directly into `last_error`, `blocked_reason`, durable events or `BlockedAction`, and pinned runtime-bridge blocked handling to `runtime_bridge_blocked`. PR regression, collection-progress and PostgreSQL-contract workflows passed before merge; post-merge main workflows were checked separately.
+- PR #95: added `REAL_AUTH_INTEGRATION_REQUIREMENTS.md` as the pre-activation security and operational gate for any concrete backend or provider refresh exchange.
+- PR #96 (`a6ec19dd709cce78c870afa30d882977ea72adbf`): added the reusable synthetic-only durable-backend conformance harness, covering CAS/conflict, read-back, new-client persistence and injected ambiguous outcomes. It does not establish multi-process or real backend safety.
 
 ## Hosted staging/runtime state
 
@@ -81,7 +83,7 @@ Deployed agent functions:
 - `agent-runtime-dev`: **v6 / ACTIVE / verify_jwt=true**. Its safety contract reports `runtime_task_execution_enabled=false`.
 - `agent-exact-claim-dev`: **v1 / ACTIVE / verify_jwt=true**. It accepts only exact fresh trusted status-run claim operations and does not enable task/provider execution.
 
-PR #82–#94 did not deploy a new Edge Function, apply a secret-store migration, perform a real authentication refresh or start a live hosted run.
+PR #82–#96 did not deploy a new Edge Function, apply a secret-store migration, perform a real authentication refresh or start a live hosted run.
 
 ## Bounded live read-only validation history
 
@@ -96,7 +98,7 @@ Current implemented layers:
 1. **Static access provider** — in-memory bounded/manual-host credential snapshots, no refresh.
 2. **Generic refresh provider** — access-only grants from an injected `HostCredentialSource`; exact provider/account/capability match, TTL enforcement, monotonic elapsed time, local single-flight refresh, terminal auth failure and revoke semantics.
 3. **Versioned refresh source/store contract** — version-CAS refresh ownership, attempt fencing, rotation generation, durable blocking on ambiguous provider/store outcomes and explicit evidence-based recovery.
-4. **Durable backend adapter contract** — backend-neutral CAS/read/write adapter with opaque binding keys, strict schema/integrity checks and fixed failure mapping. The implementation is tested against fakes only.
+4. **Durable backend adapter contract** — backend-neutral CAS/read/write adapter with opaque binding keys, strict schema/integrity checks and fixed failure mapping. The implementation is tested against synthetic fixtures only; no real secret backend is connected.
 5. **Credential-gated provider adapter** — per-action capability/TTL policy, pre-action credential acquisition, local access-only snapshot injection, fixed auth/provider failure classifications and result leak detection.
 6. **Offline full-stack composition** — a dependency-injection factory composes the durable backend/store/source/provider/gated-adapter chain without accepting raw refresh material or activating a service.
 7. **Persistence-safe action errors** — `AgentRunner` persists only validated `SafeActionError` codes or fixed redacted classifications for untyped action/verifier exceptions; runtime bridge blocked payloads are not copied into persistent state.
@@ -121,11 +123,10 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. finish CI/review for `REAL_AUTH_INTEGRATION_REQUIREMENTS.md` and keep it as the gate for any real backend/exchange work;
-2. add a reusable **durable-backend conformance harness** that can test any future concrete backend for atomic CAS, conflict vs ambiguous-write semantics, read-back integrity, restart persistence and redaction without provider calls;
-3. optionally implement a local/test-only persistent backend to exercise that harness across process restarts, clearly marked non-production and with no real credential material;
-4. only after backend semantics are proven, design a concrete staging backend integration on a separate boundary; do not combine backend activation, provider refresh and runner execution in one change;
-5. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
+1. review the synthetic-only SQLite backend's conformance and two-process CAS test in this change; it is stored only in `tests/support` and provides no encryption or access control;
+2. select and design a concrete host-only staging secret backend against `REAL_AUTH_INTEGRATION_REQUIREMENTS.md`, including encryption ownership, distributed CAS, privileges, backups and failure classification;
+3. implement the real backend with isolated staging conformance on a separate change before connecting any provider refresh endpoint;
+4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 
 No race screenshots or owner credential resend is needed for the current code-only work.
 
