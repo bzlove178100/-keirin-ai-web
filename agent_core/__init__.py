@@ -65,6 +65,14 @@ from .runtime import BoundRuntime, RuntimeBinding, RuntimeManifest
 from .runtime_bridge import BridgeResponse, BridgeToolAdapter, RuntimeBridge
 from .scheduling import DAILY_REPORT_2100_JST, DailySchedule
 from .store import FileStateStore
+from .trusted_run_instance import (
+    TRUSTED_RUN_ID_PREFIX,
+    TrustedRunInstance,
+    build_trusted_status_run_spec,
+    is_trusted_status_run_spec,
+    trusted_status_template_spec,
+    validate_trusted_status_run_spec,
+)
 
 __all__ = [
     "ACTIVATION_SCHEMA_VERSION",
@@ -124,12 +132,18 @@ __all__ = [
     "RuntimeManifest",
     "StepSpec",
     "SupabaseEdgeTransport",
+    "TRUSTED_RUN_ID_PREFIX",
     "TaskSpec",
     "TaskState",
     "ToolRegistry",
+    "TrustedRunInstance",
     "build_activity_report",
+    "build_trusted_status_run_spec",
     "capability_by_action",
     "capability_catalog",
+    "is_trusted_status_run_spec",
     "load_hosted_activation_manifest",
+    "trusted_status_template_spec",
     "validate_hosted_activation_manifest",
+    "validate_trusted_status_run_spec",
 ]
