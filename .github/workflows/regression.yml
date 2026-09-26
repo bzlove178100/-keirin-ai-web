@@ -66,6 +66,8 @@ jobs:
         run: python tests/test_hosted_activity_client.py
       - name: Verify hosted queue lease and fencing client behavior
         run: python tests/test_hosted_queue_client.py
+      - name: Verify exact-task queue claim client behavior
+        run: python tests/test_exact_task_queue.py
       - name: Verify fail-closed hosted worker coordination
         run: python tests/test_hosted_worker_coordinator.py
       - name: Verify explicitly gated read-only hosted execution
