@@ -403,6 +403,9 @@ class VersionedHostCredentialSource:
         claimed = self._claim(current, attempt_id)
         assert claimed.refresh_secret is not None
 
+        result = None
+        exchange_failure: str | None = None
+        interrupted: type[BaseException] | None = None
         try:
             result = self._exchange.exchange(
                 self._binding,
@@ -411,39 +414,52 @@ class VersionedHostCredentialSource:
                 minimum_ttl_seconds=minimum_ttl_seconds,
             )
         except RefreshExchangeRejected:
+            exchange_failure = "rejected"
+        except BaseException as error:
+            exchange_failure = "ambiguous"
+            if isinstance(error, KeyboardInterrupt):
+                interrupted = KeyboardInterrupt
+            elif isinstance(error, SystemExit):
+                interrupted = SystemExit
+
+        # Handle provider failure outside the exception handler so secret-bearing
+        # provider exceptions are not retained as __context__ on outward errors.
+        if exchange_failure == "rejected":
             self._block(
                 claimed,
                 attempt_id=attempt_id,
                 state="blocked_auth",
                 failure="refresh_rejected",
             )
-            raise CredentialAuthBlocked("credential_refresh_rejected") from None
-        except BaseException as error:
-            # Untyped provider/transport failures are ambiguous: the provider may have
-            # rotated/consumed the old refresh secret before the response was lost.
+            raise CredentialAuthBlocked("credential_refresh_rejected")
+        if exchange_failure == "ambiguous":
             self._block(
                 claimed,
                 attempt_id=attempt_id,
                 state="blocked_ambiguous",
                 failure="refresh_outcome_ambiguous",
             )
-            if isinstance(error, KeyboardInterrupt):
-                raise KeyboardInterrupt("credential_refresh_interrupted") from None
-            if isinstance(error, SystemExit):
-                raise SystemExit("credential_refresh_interrupted") from None
-            raise CredentialAuthBlocked("credential_refresh_outcome_ambiguous") from None
+            if interrupted is KeyboardInterrupt:
+                raise KeyboardInterrupt("credential_refresh_interrupted")
+            if interrupted is SystemExit:
+                raise SystemExit("credential_refresh_interrupted")
+            raise CredentialAuthBlocked("credential_refresh_outcome_ambiguous")
 
+        validation_failed = False
         try:
             self._validate_exchange_result(result, minimum_ttl_seconds=minimum_ttl_seconds)
         except BaseException:
+            validation_failed = True
+        if validation_failed:
             self._block(
                 claimed,
                 attempt_id=attempt_id,
                 state="blocked_ambiguous",
                 failure="refresh_response_invalid_or_incomplete",
             )
-            raise CredentialAuthBlocked("credential_refresh_outcome_ambiguous") from None
+            raise CredentialAuthBlocked("credential_refresh_outcome_ambiguous")
 
+        assert type(result) is RefreshExchangeResult
         self._commit_success(claimed, attempt_id=attempt_id, result=result)
         return result.grant
 
