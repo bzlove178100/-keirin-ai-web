@@ -1,6 +1,6 @@
 # Work status
 
-Updated: 2026-09-26 (Asia/Tokyo).
+Updated: 2026-09-27 (Asia/Tokyo).
 
 ## Product direction
 
@@ -71,6 +71,7 @@ Key merged milestones:
 - PR #94 (`b39ee38c4b6bd791e60d204c17e28b6cf509349c`): added an AST-based persistence-redaction guard so future caught exception objects cannot flow directly into `last_error`, `blocked_reason`, durable events or `BlockedAction`, and pinned runtime-bridge blocked handling to `runtime_bridge_blocked`. PR regression, collection-progress and PostgreSQL-contract workflows passed before merge; post-merge main workflows were checked separately.
 - PR #95: added `REAL_AUTH_INTEGRATION_REQUIREMENTS.md` as the pre-activation security and operational gate for any concrete backend or provider refresh exchange.
 - PR #96 (`a6ec19dd709cce78c870afa30d882977ea72adbf`): added the reusable synthetic-only durable-backend conformance harness, covering CAS/conflict, read-back, new-client persistence and injected ambiguous outcomes. It does not establish multi-process or real backend safety.
+- PR #97 (`ba982f9da0d0c237dd6de39f5e98865d90431d15`): added a synthetic-only SQLite backend under `tests/support`, ran the reusable harness against it, and verified a two-process CAS race with one winner and one conflict. The 2 dedicated tests, 2 harness tests and 11 durable-store tests passed locally; all four PR workflows passed before merge. No encryption or production backend readiness is implied.
 
 ## Hosted staging/runtime state
 
@@ -83,7 +84,14 @@ Deployed agent functions:
 - `agent-runtime-dev`: **v6 / ACTIVE / verify_jwt=true**. Its safety contract reports `runtime_task_execution_enabled=false`.
 - `agent-exact-claim-dev`: **v1 / ACTIVE / verify_jwt=true**. It accepts only exact fresh trusted status-run claim operations and does not enable task/provider execution.
 
-PR #82–#96 did not deploy a new Edge Function, apply a secret-store migration, perform a real authentication refresh or start a live hosted run.
+PR #82–#97 did not deploy a new Edge Function, apply a secret-store migration, perform a real authentication refresh or start a live hosted run.
+
+Read-only secret-backend catalog review on 2026-09-27 confirmed PostgreSQL `17.6`,
+`supabase_vault` `0.3.1`, and effective schema/object access for `service_role` to the
+Vault secret/decrypted views and create/update functions. `anon`, `authenticated` and
+`authenticator` lack the inspected schema/read/execute privileges. No secret rows or
+keys were read. Existing role grants were not changed. This review did not recheck the
+earlier task counts or deployed function versions above.
 
 ## Bounded live read-only validation history
 
@@ -111,6 +119,14 @@ Runners/adapters receive no refresh-secret handle. Provider actions receive only
 
 `REAL_AUTH_INTEGRATION_REQUIREMENTS.md` is the current pre-activation review contract for any future real backend/exchange. It requires encrypted host-only secret ownership, distributed atomic CAS, bounded/no-blind-retry refresh I/O, durable rotated-secret persistence before access return, explicit `blocked_ambiguous` recovery, revocation precedence, fixed audit metadata, crash/restart testing and a staged activation sequence that does not bind live task execution in the same change.
 
+`STAGING_SECRET_BACKEND_DESIGN.md` selects Vault plus private PostgreSQL metadata for an
+offline prototype. It specifies a dedicated database identity, narrow private functions,
+atomic secret/metadata CAS, primary read-back and fixed failure classification. Activation
+is blocked pending effective isolation (including current service-role Vault access), key
+lifecycle, bootstrap credential, logging/restore and real-backend fault-test evidence.
+`ops/credential_vault_inventory.sql` was executed successfully as a catalog-only query;
+it is an inventory, not a readiness check.
+
 ## Current agent state
 
 The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract, an offline full credential-stack composition path, a credential-gated provider-action boundary, persistence-safe action/verifier error handling, ephemeral diagnostic metadata and a static persistence-redaction audit.
@@ -123,9 +139,9 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. review the synthetic-only SQLite backend's conformance and two-process CAS test in this change; it is stored only in `tests/support` and provides no encryption or access control;
-2. select and design a concrete host-only staging secret backend against `REAL_AUTH_INTEGRATION_REQUIREMENTS.md`, including encryption ownership, distributed CAS, privileges, backups and failure classification;
-3. implement the real backend with isolated staging conformance on a separate change before connecting any provider refresh endpoint;
+1. implement the private SQL read/CAS and ACL contract in an isolated local PostgreSQL fixture using synthetic Vault functions, including rollback and cross-binding denial tests, following `STAGING_SECRET_BACKEND_DESIGN.md`;
+2. implement the host adapter with bounded injected connection handling and fixed errors; keep all credentials synthetic during code/CI verification;
+3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
 4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 
 No race screenshots or owner credential resend is needed for the current code-only work.
