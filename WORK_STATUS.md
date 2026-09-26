@@ -18,7 +18,7 @@ Unless the user explicitly authorizes a new, specific boundary:
 - report delivery / live 21:00 scheduling: **OFF / unconfigured**;
 - scheduler / recurrence: **OFF**.
 
-Agent-only checkpoint/activity persistence and queue coordination in staging are authorized and active. Exact-task lease acquisition is also deployed, but it does not execute a task. `race_predictions` was directly rechecked at **0 rows** after the exact-claim migration/deployment.
+Agent-only checkpoint/activity persistence and queue coordination in staging are authorized and active. Exact-task lease acquisition is deployed, but it does not execute a task. `race_predictions` remains **0 rows**.
 
 ## Keirin prospective evaluation
 
@@ -47,6 +47,7 @@ Key merged milestones:
 - PR #69 (`c1e1386a9260b47f08506f76d357f13487dbb930`): hosted repository worker can be permanently bound to one exact trusted run instance before any claim.
 - PR #70 (`8ed4a5d841494b17d90ca2ced44fc34ba2892884`): one-shot CLI requires a fresh instance token and recovery inspection remains bound to the same exact task identity.
 - PR #71 (`3bf8e0aa2a8bc22d510f0469c54e841ef4ffed4c`): separate owner-only exact-claim Edge path and credential-isolated routing; exact claim is queue coordination only, not execution.
+- PR #72 (`7eff05fe8c7c26dd4933a67d87f17c8829056af4`): idempotent trusted run-instance enqueue preparation. Repeated enqueue is accepted only while the exact immutable instance remains pristine queued/revision-0/pending; consumed instances fail closed. No claim or execution occurs during enqueue.
 
 ## Hosted staging/runtime state
 
@@ -66,7 +67,14 @@ Staging database verification after applying `agent_runtime_exact_task_claim`:
 - `anon` cannot execute it;
 - `race_predictions` count remained `0`.
 
-The deployed exact-claim function source/metadata was read back successfully. A separate owner-authenticated live HTTP claim was deliberately not performed because there is no newly authorized live run instance.
+Post-PR #72 staging readback confirmed:
+
+- trusted fresh run-instance rows (`keirin-readonly-status-check.*`): `0`;
+- queued trusted run-instance rows: `0`;
+- completed template task `keirin-readonly-status-check`: exactly `1`;
+- `race_predictions`: `0`.
+
+The exact-claim function source/metadata was read back successfully. No owner-authenticated live exact claim was performed because no new live run is authorized.
 
 ## First bounded live read-only integration trial
 
@@ -78,37 +86,35 @@ Observed/final GitHub SHA for that trial was `826e59163280f1f461f58f9c8a8a5a5dc6
 
 The trial proves real GitHub read-only provider access plus real staging queue/checkpoint/activity persistence. It does **not** prove an always-on autonomous host, scheduler/recurrence, generation-provider execution, report delivery, production prediction or prediction DB writes.
 
-## Current code-only slice: trusted run-instance enqueue
+## Trusted run-instance enqueue is prepared, not activated
 
-Branch: `agent-run-instance-enqueue-v1-20260926`.
+Merged PR #72 adds:
 
-Purpose: prepare a safe way to create or verify one fresh trusted run-instance checkpoint **without claiming or executing it**.
+- `TrustedRunEnqueuer.ensure_queued(spec)` with strict trusted-run validation;
+- a confirmed-not-found error distinct from duplicate/CAS conflicts;
+- task-id idempotency key and revision-0/pending/pristine verification;
+- concurrent identical-create re-read with immutable-spec validation;
+- fail-closed rejection of running, blocked, failed or completed instances;
+- `tools/enqueue_trusted_run_instance.py`, which persists a checkpoint only and never claims or executes it;
+- regression coverage proving no `queue_claim*` operation occurs during enqueue.
 
-Current implementation under review:
-
-- hosted checkpoint errors distinguish confirmed not-found from uniqueness/CAS conflicts;
-- `TrustedRunEnqueuer.ensure_queued(spec)` validates the strict trusted run-instance contract before persistence;
-- first use creates exactly one queued revision-0 checkpoint with task-id idempotency key;
-- repeated use is idempotent only while the exact task remains pristine queued/pending;
-- concurrent identical creation is re-read and accepted only if the persisted immutable spec is still pristine;
-- running, blocked, failed or completed instances fail closed and are never silently reused;
-- no `queue_claim*`, provider action, scheduler or task execution is performed by the enqueue helper;
-- `tools/enqueue_trusted_run_instance.py` is preparation only and has not been run against staging.
+PR #72 pull-request CI and all four required `main` push workflows completed successfully. The enqueue CLI has **not** been run against staging, so no new live run instance exists.
 
 ## Current agent state
 
-The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, durable provider evidence, recovery inspection/proposals, hard deadline enforcement, a closed single-run manifest, one completed bounded live integration trial and a one-shot host path bound to fresh exact run instances.
+The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, a safe unique run-instance enqueue path, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, durable provider evidence, recovery inspection/proposals, hard deadline enforcement, a closed single-run manifest, one completed bounded live integration trial and a one-shot host path bound to fresh exact run instances.
 
 It is still **not** an always-on self-contained autonomous agent. No scheduler/recurrence is active, provider generation/write bindings remain unbound, and deployed runtime task execution remains OFF.
 
-## Next action / next boundary
+## Next boundary requiring a new explicit authorization
 
-1. finish the trusted run-instance enqueue code/tests and merge only after required CI passes;
-2. do **not** enqueue/claim/execute another live run under the already-consumed authorization;
-3. after code-only enqueue preparation is merged, a new explicit live-run authorization is required before creating and executing a fresh hosted run instance;
-4. generation providers, recurring scheduler, prediction writes, race-data auto-fetch and report delivery remain separate later boundaries.
+The safe code-only path is now complete through **fresh instance identity → enqueue → exact claim → bounded worker → recovery inspection**. The next meaningful validation is a second bounded live read-only run using a fresh unique instance.
 
-No race screenshots, owner token or credential resend is needed for the current code-only work.
+That next action would create one new queued trusted run instance and then execute exactly one bounded read-only repository/CI worker against it. It must remain one task / one worker / one claim / no recurrence, with GitHub read-only access and all keirin/report/provider-write safety flags OFF.
+
+Do **not** create, claim or execute that fresh live instance until the user explicitly authorizes this new live-run boundary. The previous live-run authorization was consumed.
+
+No race screenshots, owner token or credential resend is needed for the current state.
 
 ## 21:00 report requirement
 
