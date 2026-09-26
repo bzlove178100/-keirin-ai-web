@@ -28,6 +28,7 @@ from .credential_provider import (
     CredentialLifetimeError,
     CredentialRevokedError,
 )
+from .credential_stack import build_durable_credential_bound_adapter
 from .delivery import BridgeReportDelivery, DeliveryResult, ReportDelivery
 from .durable_secret_store import (
     DurableSecretBackend,
@@ -134,6 +135,7 @@ __all__ = [
     "CredentialBoundToolAdapter",
     "CredentialRequirement",
     "require_credential_snapshot",
+    "build_durable_credential_bound_adapter",
 
     "CredentialProvider",
     "CredentialSnapshot",
