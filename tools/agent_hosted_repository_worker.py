@@ -1,10 +1,12 @@
 """Preparation-only composition. No CLI, scheduler, environment activation or writes to GitHub."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import signal
 import time
 import threading
 
@@ -26,6 +28,40 @@ class HostedRunInterrupted(BaseException):
     restart run_next automatically. Like process interruption, no cleanup POST is
     attempted because the preceding POST may already have committed.
     """
+
+
+@contextmanager
+def hard_run_deadline(seconds: float):
+    """Enforce a process-thread wall-clock deadline using POSIX interval timers.
+
+    Live execution fails closed when the host cannot provide a hard deadline. The
+    timer is only valid on the main Python thread; background workers must instead be
+    supervised by a process-level host that can provide an equivalent hard kill.
+    Existing interval timers are never overwritten.
+    """
+    if not isinstance(seconds, (int, float)) or isinstance(seconds, bool) or seconds <= 0:
+        raise ValueError("positive_hard_deadline_required")
+    if threading.current_thread() is not threading.main_thread():
+        raise HostedRunInterrupted("hosted_hard_deadline_unavailable_off_main_thread")
+    if not all(hasattr(signal, name) for name in ("SIGALRM", "ITIMER_REAL", "getitimer", "setitimer")):
+        raise HostedRunInterrupted("hosted_hard_deadline_unavailable")
+
+    existing = signal.getitimer(signal.ITIMER_REAL)
+    if existing[0] > 0 or existing[1] > 0:
+        raise HostedRunInterrupted("hosted_hard_deadline_timer_already_in_use")
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+
+    def on_alarm(_signum, _frame):
+        raise HostedRunInterrupted("hosted_hard_deadline_exceeded")
+
+    signal.signal(signal.SIGALRM, on_alarm)
+    signal.setitimer(signal.ITIMER_REAL, float(seconds))
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0.0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 class _FencedBridge(ShaPinnedGitHubReadOnlyBridge):
@@ -54,11 +90,15 @@ class HostedRepositoryStatusWorker(HostedReadOnlyWorker):
     """
 
     def __init__(self, *, transport, github_token, execution_authorized=False,
-                 api_get=None, clock=time.monotonic, utcnow=lambda: datetime.now(timezone.utc)):
+                 api_get=None, clock=time.monotonic, utcnow=lambda: datetime.now(timezone.utc),
+                 hard_deadline_seconds=180.0):
         self._run_lock = threading.Lock()
         self._expected_fingerprint = trusted_status_spec().fingerprint()
         self._clock = clock
         self._utcnow = utcnow
+        if not isinstance(hard_deadline_seconds, (int, float)) or isinstance(hard_deadline_seconds, bool) or hard_deadline_seconds <= 0:
+            raise ValueError("positive_hard_deadline_required")
+        self._hard_deadline_seconds = float(hard_deadline_seconds)
         self._bridge = _FencedBridge(token=github_token, api_get=api_get)
         registry = ToolRegistry()
         registry.register(BridgeToolAdapter(name="hosted-github-readonly", bridge=self._bridge,
@@ -76,7 +116,7 @@ class HostedRepositoryStatusWorker(HostedReadOnlyWorker):
     def _guarded_actions(self, store=None):
         if store is None:
             raise HostedRunInterrupted("hosted_lease_store_required")
-        deadline = self._clock() + 180.0
+        deadline = self._clock() + self._hard_deadline_seconds
         observation = None
 
         def check_time():
@@ -92,6 +132,8 @@ class HostedRepositoryStatusWorker(HostedReadOnlyWorker):
                 # Uses the current authoritative revision/generation, never reclaims.
                 store.save_state(store.load_state(store.lease.task_id))
                 check_time()
+            except HostedRunInterrupted:
+                raise
             except Exception:
                 raise HostedRunInterrupted("hosted_fence_uncertain_requires_reconciliation") from None
 
@@ -120,6 +162,8 @@ class HostedRepositoryStatusWorker(HostedReadOnlyWorker):
                 record("github_observation", result.data, context)
                 observation = deepcopy(result.data)
                 return result
+            except HostedRunInterrupted:
+                raise
             except Exception:
                 raise HostedRunInterrupted("hosted_observation_uncertain_requires_reconciliation") from None
 
@@ -130,16 +174,22 @@ class HostedRepositoryStatusWorker(HostedReadOnlyWorker):
                 result = actions["github.verify_ci"](args, context)
                 record("github_verification", result.data, context)
                 return result
+            except HostedRunInterrupted:
+                raise
             except Exception:
                 raise HostedRunInterrupted("hosted_verification_uncertain_requires_reconciliation") from None
 
         return {"github.read_main": read, "github.verify_ci": verify}
 
     def run_next(self, *, worker_id, lease_seconds=120):
+        # Preserve the existing zero-I/O authorization gate before timer setup.
+        if self.execution_authorized is not True:
+            return super().run_next(worker_id=worker_id, lease_seconds=lease_seconds)
         if not self._run_lock.acquire(blocking=False):
             raise HostedRunInterrupted("hosted_worker_already_running")
         try:
-            return super().run_next(worker_id=worker_id, lease_seconds=lease_seconds)
+            with hard_run_deadline(self._hard_deadline_seconds):
+                return super().run_next(worker_id=worker_id, lease_seconds=lease_seconds)
         finally:
             # No lease store or observation remains captured by the bridge after a run.
             self._bridge.guard = None
@@ -148,9 +198,10 @@ class HostedRepositoryStatusWorker(HostedReadOnlyWorker):
 
 def prepare_repository_worker(*, project_url, publishable_key, owner_bearer_token,
                               github_token, execution_authorized=False, requester=None,
-                              api_get=None):
+                              api_get=None, hard_deadline_seconds=180.0):
     """Construct only. Supplying credentials does not claim a task or authorize execution."""
     transport = SupabaseEdgeTransport(project_url=project_url, publishable_key=publishable_key,
                                      bearer_token=owner_bearer_token, requester=requester)
     return HostedRepositoryStatusWorker(transport=transport, github_token=github_token,
-                                       execution_authorized=execution_authorized, api_get=api_get)
+                                       execution_authorized=execution_authorized, api_get=api_get,
+                                       hard_deadline_seconds=hard_deadline_seconds)
