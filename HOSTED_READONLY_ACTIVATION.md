@@ -6,9 +6,10 @@ The current deployed `agent-runtime-dev` safety contract keeps `runtime_task_exe
 
 ## First live scope
 
-The first hosted execution scope must be limited to the existing repository/CI status task:
+The first hosted execution scope must be limited to the repository/CI status task:
 
-- task: `agent_core/examples/keirin_readonly_status_task.json`
+- task template: `agent_core/examples/keirin_readonly_status_task.json`
+- runtime instance: one fresh `keirin-readonly-status-check.<token>` TaskSpec only
 - repository: `bzlove178100/-keirin-ai-web`
 - allowed capabilities:
   - `github.read_main`
@@ -23,18 +24,23 @@ The first hosted execution scope must be limited to the existing repository/CI s
 
 ## Required authorization before activation
 
-Do not set a live host's `HostedReadOnlyWorker(execution_authorized=True)` merely because this code exists.
+Do not set a live host's read-only execution gate merely because this code exists.
 
 Before live activation, all of the following must be true:
 
-1. The user explicitly authorizes hosted **read-only task execution** as a separate boundary from persistence/queue coordination.
-2. The deployed Edge Function is read back as the expected version and still reports hosted task execution OFF at the Edge layer; the execution host itself owns the separate read-only authorization gate.
-3. The host has a valid owner-authenticated Supabase access token and a publishable key through runtime secret storage or ephemeral environment injection. Credentials are not written to TaskSpec, task state, activity events, artifacts, logs or this repository.
-4. The GitHub provider binding exposes only `contents:read` and `actions:read` behavior for the first task.
-5. The TaskSpec fingerprint is verified before resume/execution.
-6. Queue claim uses revision CAS plus worker/generation fencing, and the host stops on stale/expired lease errors.
-7. Only one first-worker process is enabled during the initial live validation.
-8. No recurring scheduler is enabled during the first validation.
+1. The user explicitly authorizes one hosted **read-only task execution** as a separate boundary from persistence/queue coordination.
+2. That authorization is bound to exactly one fresh instance token. The host must receive both:
+   - `KEIRIN_AGENT_SINGLE_RUN_AUTHORIZED=true`
+   - `KEIRIN_AGENT_SINGLE_RUN_INSTANCE_TOKEN=<the exact --instance-token value>`
+   A generic boolean authorization is insufficient by itself.
+3. The deployed Edge functions are read back as the expected versions and still report provider/task execution disabled at the Edge layer; the external host owns the separate one-shot read-only authorization gate.
+4. The host has a valid owner-authenticated Supabase access token and publishable key through runtime secret storage or ephemeral environment injection. Credentials are not written to TaskSpec, task state, activity events, artifacts, logs or this repository.
+5. The GitHub provider binding exposes only `contents:read` and `actions:read` behavior for this task.
+6. The TaskSpec fingerprint is verified before enqueue/resume/execution.
+7. The host creates or verifies the exact pristine queued checkpoint before worker construction. Database persistence permits at most one fresh trusted status-run row in `queued` or `running` per owner.
+8. Queue acquisition is exact-task only, with revision CAS plus worker/generation fencing. The host stops on stale/expired lease errors.
+9. Only one manual host process is enabled during the initial validation.
+10. No recurring scheduler is enabled.
 
 ## Credential boundary
 
@@ -51,31 +57,37 @@ Do not:
 
 Long-lived unattended execution will require a separately designed authentication/session lifecycle and secret-management policy. That is not solved by the transport class alone.
 
-## First validation sequence
+## Manual one-shot sequence
 
-After explicit authorization:
+The standalone entrypoint is `tools/run_hosted_repository_once.py`. It is still a manual one-shot host, not a scheduler.
 
-1. Verify the owner-authenticated Edge path using a non-destructive status/list request.
-2. Create or select one dedicated test checkpoint for `keirin_readonly_status_task.json`.
-3. Claim exactly one task with a short bounded lease.
-4. Re-run capability preflight after claim.
-5. Execute only the two read-only GitHub capabilities.
-6. Persist every AgentRunner state transition through the fenced hosted lease store.
-7. Verify final task status is `completed`, the lease is cleared, and activity events show the expected start/step/verify/completion sequence.
-8. Verify `race_predictions` remains unchanged and all production/auto-fetch safety flags remain OFF.
-9. Stop. Do not enable recurrence until the single-run evidence is reviewed.
+After explicit authorization for one fresh instance:
+
+1. Validate the closed committed activation manifest.
+2. Build and validate the exact trusted TaskSpec from `--instance-token`.
+3. Verify `KEIRIN_AGENT_SINGLE_RUN_INSTANCE_TOKEN` exactly matches that token before loading runtime secrets or creating queue/provider objects.
+4. Create or verify exactly that pristine queued checkpoint through `TrustedRunEnqueuer`.
+5. If another distinct trusted run is already queued/running, fail closed before worker construction or claim.
+6. Construct a worker permanently bound to the same TaskSpec.
+7. Claim exactly that task through `agent-exact-claim-dev` with a short bounded lease.
+8. Execute only the two read-only GitHub capabilities.
+9. Persist every AgentRunner state transition through the fenced hosted lease store.
+10. Inspect recovery/final state for the same TaskSpec even after interruption; never switch to another task identity.
+11. Verify final task status, cleared lease, append-only evidence, and `race_predictions` unchanged.
+12. Stop. The authorization is consumed for that instance. A different instance token requires a new explicit authorization value.
 
 ## Fail-closed / rollback behavior
 
-If any authorization, preflight, queue fence, provider read or verification check fails:
+If any authorization, enqueue, preflight, queue fence, provider read or verification check fails:
 
 - do not downgrade the permission requirement;
 - do not switch to a write-capable provider;
+- do not create a second distinct trusted run while another is queued/running;
 - do not silently retry an ambiguous interrupted action;
 - preserve or reconcile durable state according to the existing queue/recovery contract;
 - keep live execution authorization disabled for the next run until the failure is understood.
 
-Rollback of the execution host is simply to stop the host and return `execution_authorized` to false. Queue/persistence data may remain for audit and reconciliation; do not delete it as a substitute for recovery.
+Rollback of the execution host is simply to stop the host and remove/disable the runtime authorization inputs. Queue/persistence data may remain for audit and reconciliation; do not delete it as a substitute for recovery.
 
 ## Not part of this activation
 

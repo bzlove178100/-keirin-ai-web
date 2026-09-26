@@ -10,6 +10,7 @@ from .activation import load_hosted_activation_manifest
 from .trusted_run_instance import build_trusted_status_run_spec, validate_trusted_status_run_spec
 
 AUTHORIZATION_ENV = "KEIRIN_AGENT_SINGLE_RUN_AUTHORIZED"
+AUTHORIZED_INSTANCE_ENV = "KEIRIN_AGENT_SINGLE_RUN_INSTANCE_TOKEN"
 PROJECT_URL_ENV = "SUPABASE_PROJECT_URL"
 PUBLISHABLE_KEY_ENV = "SUPABASE_PUBLISHABLE_KEY"
 OWNER_BEARER_ENV = "SUPABASE_OWNER_BEARER_TOKEN"
@@ -23,12 +24,19 @@ def _required(env: Mapping[str, str], name: str) -> str:
     return value.strip()
 
 
-def _safe_report(result: Any, recovery: Any, *, interrupted: bool) -> dict[str, Any]:
+def _safe_report(result: Any, recovery: Any, *, interrupted: bool, enqueue_result: Any = None) -> dict[str, Any]:
     outcome = getattr(result, "outcome", None) if result is not None else None
+    enqueue_record = getattr(enqueue_result, "record", None) if enqueue_result is not None else None
     return {
         "interrupted": interrupted,
+        "enqueue_created": getattr(enqueue_result, "created", None) if enqueue_result is not None else None,
+        "enqueue_revision": getattr(enqueue_record, "revision", None) if enqueue_record is not None else None,
         "claimed": bool(getattr(result, "claimed", False)) if result is not None else None,
-        "task_id": getattr(result, "task_id", None) if result is not None else getattr(recovery, "task_id", None),
+        "task_id": (
+            getattr(result, "task_id", None)
+            if result is not None
+            else getattr(recovery, "task_id", None)
+        ),
         "execution_enabled": bool(getattr(result, "execution_enabled", False)) if result is not None else True,
         "outcome_status": getattr(outcome, "status", None),
         "blocked_reason": getattr(result, "blocked_reason", None) if result is not None else None,
@@ -43,18 +51,22 @@ def run_once(
     argv: list[str] | None = None,
     *,
     env: Mapping[str, str] | None = None,
+    enqueuer_factory=None,
     worker_factory=None,
     recovery_factory=None,
     interrupted_type=None,
     trusted_spec_factory=None,
 ) -> int:
-    """Execute one explicitly authorized read-only hosted run instance, then inspect it.
+    """Enqueue and execute one explicitly authorized read-only hosted run instance.
 
     The committed activation manifest remains closed. A runtime-only authorization
-    signal, explicit CLI execution flag and a fresh trusted instance token are all
-    required. The worker is permanently bound to the resulting exact TaskSpec before
-    any queue claim, so a completed template task or unrelated FIFO row cannot be
-    consumed by this entrypoint.
+    signal, an authorization value bound to the exact instance token, an explicit CLI
+    execution flag and a fresh trusted instance token are all required.
+
+    The host creates/verifies exactly that pristine queued checkpoint, then binds the
+    worker to the same immutable TaskSpec before any exact queue claim. The database
+    single-active guard prevents two distinct fresh trusted run IDs from being queued
+    or running for the same owner at once. No scheduler or recurrence is enabled.
     """
     parser = argparse.ArgumentParser(description="Run exactly one authorized hosted read-only repository task instance.")
     parser.add_argument("--execute-once", action="store_true")
@@ -85,10 +97,36 @@ def run_once(
         target_spec = trusted_spec_factory()
     validate_trusted_status_run_spec(target_spec, repo_root=root)
 
+    authorized_instance = runtime_env.get(AUTHORIZED_INSTANCE_ENV, "")
+    if not isinstance(authorized_instance, str) or authorized_instance.strip() != args.instance_token:
+        raise RuntimeError("single_run_instance_authorization_mismatch")
+
     project_url = _required(runtime_env, PROJECT_URL_ENV)
     publishable_key = _required(runtime_env, PUBLISHABLE_KEY_ENV)
     owner_bearer = _required(runtime_env, OWNER_BEARER_ENV)
     github_token = _required(runtime_env, GITHUB_TOKEN_ENV)
+
+    if enqueuer_factory is None:
+        from .hosted_checkpoint import HostedCheckpointClient
+        from .hosted_transport import SupabaseEdgeTransport
+        from .trusted_run_enqueue import TrustedRunEnqueuer
+
+        def enqueuer_factory(**kwargs):
+            transport = SupabaseEdgeTransport(
+                project_url=kwargs["project_url"],
+                publishable_key=kwargs["publishable_key"],
+                bearer_token=kwargs["owner_bearer_token"],
+                function_slug="agent-runtime-dev",
+            )
+            return TrustedRunEnqueuer(HostedCheckpointClient(transport))
+
+    enqueuer = enqueuer_factory(
+        project_url=project_url,
+        publishable_key=publishable_key,
+        owner_bearer_token=owner_bearer,
+        target_spec=target_spec,
+    )
+    enqueue_result = enqueuer.ensure_queued(target_spec)
 
     if worker_factory is None or recovery_factory is None or interrupted_type is None:
         from tools.agent_hosted_repository_worker import HostedRunInterrupted
@@ -116,7 +154,11 @@ def run_once(
             publishable_key=publishable_key,
             owner_bearer_token=owner_bearer,
         ).inspect(target_spec)
-        print(json.dumps(_safe_report(None, recovery, interrupted=True), ensure_ascii=False, sort_keys=True))
+        print(json.dumps(
+            _safe_report(None, recovery, interrupted=True, enqueue_result=enqueue_result),
+            ensure_ascii=False,
+            sort_keys=True,
+        ))
         return 2
 
     recovery = recovery_factory(
@@ -124,5 +166,9 @@ def run_once(
         publishable_key=publishable_key,
         owner_bearer_token=owner_bearer,
     ).inspect(target_spec)
-    print(json.dumps(_safe_report(result, recovery, interrupted=False), ensure_ascii=False, sort_keys=True))
+    print(json.dumps(
+        _safe_report(result, recovery, interrupted=False, enqueue_result=enqueue_result),
+        ensure_ascii=False,
+        sort_keys=True,
+    ))
     return 0 if getattr(recovery, "classification", "").startswith("completed_") else 1

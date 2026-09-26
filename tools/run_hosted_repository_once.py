@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
 
 from agent_core.single_run_host import (  # noqa: E402
     AUTHORIZATION_ENV,
+    AUTHORIZED_INSTANCE_ENV,
     GITHUB_TOKEN_ENV,
     OWNER_BEARER_ENV,
     PROJECT_URL_ENV,
@@ -18,6 +19,7 @@ from agent_core.single_run_host import (  # noqa: E402
 
 __all__ = [
     "AUTHORIZATION_ENV",
+    "AUTHORIZED_INSTANCE_ENV",
     "GITHUB_TOKEN_ENV",
     "OWNER_BEARER_ENV",
     "PROJECT_URL_ENV",

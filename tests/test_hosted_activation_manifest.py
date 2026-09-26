@@ -19,10 +19,12 @@ from agent_core.activation import (  # noqa: E402
     validate_hosted_activation_manifest,
 )
 from agent_core.model import TaskSpec  # noqa: E402
+from agent_core.trusted_run_enqueue import TrustedRunAlreadyUsed  # noqa: E402
 from agent_core.trusted_run_instance import build_trusted_status_run_spec  # noqa: E402
 from tools.agent_hosted_repository_worker import HostedRunInterrupted  # noqa: E402
 from tools.run_hosted_repository_once import (  # noqa: E402
     AUTHORIZATION_ENV,
+    AUTHORIZED_INSTANCE_ENV,
     GITHUB_TOKEN_ENV,
     OWNER_BEARER_ENV,
     PROJECT_URL_ENV,
@@ -43,11 +45,29 @@ def payload():
 def runtime_env():
     return {
         AUTHORIZATION_ENV: "true",
+        AUTHORIZED_INSTANCE_ENV: TOKEN,
         PROJECT_URL_ENV: "https://example.supabase.co",
         PUBLISHABLE_KEY_ENV: "publishable-fixture-value",
         OWNER_BEARER_ENV: "owner-fixture-value",
         GITHUB_TOKEN_ENV: "github-fixture-value",
     }
+
+
+def enqueuer_factory(captured: dict, *, created: bool = True):
+    class Enqueuer:
+        def ensure_queued(self, spec):
+            captured["enqueue_task_id"] = spec.task_id
+            captured.setdefault("order", []).append("enqueue")
+            return SimpleNamespace(
+                created=created,
+                record=SimpleNamespace(task_id=spec.task_id, revision=0, status="queued"),
+            )
+
+    def factory(**kwargs):
+        captured["enqueue_kwargs"] = kwargs
+        return Enqueuer()
+
+    return factory
 
 
 class HostedActivationManifestTest(unittest.TestCase):
@@ -137,11 +157,34 @@ class HostedActivationManifestTest(unittest.TestCase):
             )
         self.assertFalse(called)
 
-    def test_one_shot_host_success_binds_exact_instance_and_redacts_runtime_secrets(self):
-        captured = {}
+    def test_one_shot_host_requires_authorization_bound_to_exact_instance(self):
+        called = {"enqueue": False, "worker": False}
+        env = runtime_env()
+        env[AUTHORIZED_INSTANCE_ENV] = "fedcba9876543210"
+
+        def enqueue_factory(**_kwargs):
+            called["enqueue"] = True
+            raise AssertionError("enqueue factory must not be reached")
+
+        def worker_factory(**_kwargs):
+            called["worker"] = True
+            raise AssertionError("worker factory must not be reached")
+
+        with self.assertRaisesRegex(RuntimeError, "single_run_instance_authorization_mismatch"):
+            run_once(
+                ["--execute-once", "--instance-token", TOKEN, "--worker-id", "worker-test"],
+                env=env,
+                enqueuer_factory=enqueue_factory,
+                worker_factory=worker_factory,
+            )
+        self.assertEqual(called, {"enqueue": False, "worker": False})
+
+    def test_one_shot_host_success_enqueues_then_binds_exact_instance_and_redacts_runtime_secrets(self):
+        captured = {"order": []}
 
         class Worker:
             def run_next(self, *, worker_id, lease_seconds):
+                captured["order"].append("run")
                 captured["worker_id"] = worker_id
                 captured["lease_seconds"] = lease_seconds
                 return SimpleNamespace(
@@ -153,6 +196,7 @@ class HostedActivationManifestTest(unittest.TestCase):
                 )
 
         def worker_factory(**kwargs):
+            captured["order"].append("worker_factory")
             captured["worker_kwargs"] = kwargs
             return Worker()
 
@@ -166,6 +210,7 @@ class HostedActivationManifestTest(unittest.TestCase):
 
         class Inspector:
             def inspect(self, spec):
+                captured["order"].append("recovery")
                 captured["recovery_task_id"] = spec.task_id
                 return recovery
 
@@ -183,11 +228,15 @@ class HostedActivationManifestTest(unittest.TestCase):
                     "--lease-seconds", "180",
                 ],
                 env=runtime_env(),
+                enqueuer_factory=enqueuer_factory(captured),
                 worker_factory=worker_factory,
                 recovery_factory=recovery_factory,
             )
 
         self.assertEqual(code, 0)
+        self.assertEqual(captured["order"], ["enqueue", "worker_factory", "run", "recovery"])
+        self.assertEqual(captured["enqueue_task_id"], INSTANCE.task_id)
+        self.assertEqual(captured["enqueue_kwargs"]["target_spec"].to_dict(), INSTANCE.to_dict())
         self.assertEqual(captured["worker_id"], "worker-test")
         self.assertEqual(captured["lease_seconds"], 180)
         self.assertIs(captured["worker_kwargs"]["execution_authorized"], True)
@@ -195,20 +244,44 @@ class HostedActivationManifestTest(unittest.TestCase):
         self.assertEqual(captured["recovery_task_id"], INSTANCE.task_id)
         report = stream.getvalue()
         self.assertIn(f'"task_id": "{INSTANCE.task_id}"', report)
+        self.assertIn('"enqueue_created": true', report)
+        self.assertIn('"enqueue_revision": 0', report)
         self.assertIn('"recovery_classification": "completed_verified_no_reexecution"', report)
         self.assertIn('"reexecution_allowed": false', report)
         for value in ("publishable-fixture-value", "owner-fixture-value", "github-fixture-value"):
             self.assertNotIn(value, report)
 
+    def test_one_shot_host_active_other_run_fails_before_worker_claim(self):
+        captured = {"worker": False}
+
+        class Enqueuer:
+            def ensure_queued(self, _spec):
+                raise TrustedRunAlreadyUsed("another_trusted_run_instance_is_active")
+
+        def worker_factory(**_kwargs):
+            captured["worker"] = True
+            raise AssertionError("worker factory must not be reached")
+
+        with self.assertRaisesRegex(TrustedRunAlreadyUsed, "another_trusted_run_instance_is_active"):
+            run_once(
+                ["--execute-once", "--instance-token", TOKEN, "--worker-id", "worker-test"],
+                env=runtime_env(),
+                enqueuer_factory=lambda **_kwargs: Enqueuer(),
+                worker_factory=worker_factory,
+            )
+        self.assertFalse(captured["worker"])
+
     def test_one_shot_host_interruption_inspects_same_instance_without_retry(self):
-        captured = {}
+        captured = {"order": []}
 
         class Worker:
             def run_next(self, **_kwargs):
+                captured["order"].append("run")
                 raise HostedRunInterrupted("ambiguous")
 
         class Inspector:
             def inspect(self, spec):
+                captured["order"].append("recovery")
                 captured["recovery_task_id"] = spec.task_id
                 return SimpleNamespace(
                     task_id=spec.task_id,
@@ -223,16 +296,21 @@ class HostedActivationManifestTest(unittest.TestCase):
             code = run_once(
                 ["--execute-once", "--instance-token", TOKEN, "--worker-id", "worker-test"],
                 env=runtime_env(),
+                enqueuer_factory=enqueuer_factory(captured),
                 worker_factory=lambda **kwargs: (
-                    captured.setdefault("target_spec", kwargs["target_spec"]), Worker()
-                )[1],
+                    captured["order"].append("worker_factory"),
+                    captured.setdefault("target_spec", kwargs["target_spec"]),
+                    Worker(),
+                )[2],
                 recovery_factory=lambda **_kwargs: Inspector(),
             )
 
         self.assertEqual(code, 2)
+        self.assertEqual(captured["order"], ["enqueue", "worker_factory", "run", "recovery"])
         self.assertEqual(captured["target_spec"].task_id, INSTANCE.task_id)
         self.assertEqual(captured["recovery_task_id"], INSTANCE.task_id)
         self.assertIn('"interrupted": true', stream.getvalue())
+        self.assertIn('"enqueue_created": true', stream.getvalue())
         self.assertIn('"reexecution_allowed": false', stream.getvalue())
 
 
