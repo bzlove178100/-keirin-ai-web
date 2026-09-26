@@ -11,12 +11,14 @@ import time
 import threading
 
 from agent_core.adapters import ToolRegistry
+from agent_core.exact_task_queue import BoundExactTaskQueueClient
 from agent_core.hosted_activity import HostedActivityClient
 from agent_core.hosted_queue import HostedQueueClient
 from agent_core.hosted_readonly_worker import HostedReadOnlyWorker
 from agent_core.hosted_transport import SupabaseEdgeTransport
 from agent_core.model import TaskSpec
 from agent_core.runtime_bridge import BridgeToolAdapter
+from agent_core.trusted_run_instance import validate_trusted_status_run_spec
 from tools.agent_github_readonly_host import runtime_manifest
 from tools.agent_github_sha_bridge import ShaPinnedGitHubReadOnlyBridge
 
@@ -84,16 +86,31 @@ def trusted_status_spec() -> TaskSpec:
 class HostedRepositoryStatusWorker(HostedReadOnlyWorker):
     """One scoped task per explicit call, disabled by default.
 
-    Observation and verification evidence use the existing append-only activity
-    store, tagged with TaskSpec fingerprint/revision/generation. No schema change.
-    Interruption is blocked for explicit reconciliation, not automatic replay.
+    With no ``target_spec`` this preserves the legacy trusted-template FIFO behavior.
+    A supplied target must be a strictly validated trusted run instance and switches
+    the queue to exact-task claiming, so an unrelated FIFO row can never be consumed
+    before scope validation.
+
+    Observation and verification evidence use the existing append-only activity store,
+    tagged with the exact instance fingerprint/revision/generation. Interruption is
+    blocked for explicit reconciliation, not automatic replay.
     """
 
     def __init__(self, *, transport, github_token, execution_authorized=False,
                  api_get=None, clock=time.monotonic, utcnow=lambda: datetime.now(timezone.utc),
-                 hard_deadline_seconds=180.0):
+                 hard_deadline_seconds=180.0, target_spec: TaskSpec | None = None):
         self._run_lock = threading.Lock()
-        self._expected_fingerprint = trusted_status_spec().fingerprint()
+        if target_spec is None:
+            scoped_spec = trusted_status_spec()
+            queue_client = HostedQueueClient(transport)
+            self._claim_mode = "legacy_fifo_template"
+        else:
+            scoped_spec = TaskSpec.from_dict(deepcopy(target_spec.to_dict()))
+            validate_trusted_status_run_spec(scoped_spec)
+            queue_client = BoundExactTaskQueueClient(transport, scoped_spec)
+            self._claim_mode = "exact_trusted_run_instance"
+        self._expected_task_id = scoped_spec.task_id
+        self._expected_fingerprint = scoped_spec.fingerprint()
         self._clock = clock
         self._utcnow = utcnow
         if not isinstance(hard_deadline_seconds, (int, float)) or isinstance(hard_deadline_seconds, bool) or hard_deadline_seconds <= 0:
@@ -103,11 +120,19 @@ class HostedRepositoryStatusWorker(HostedReadOnlyWorker):
         registry = ToolRegistry()
         registry.register(BridgeToolAdapter(name="hosted-github-readonly", bridge=self._bridge,
             capabilities=tuple(b.capability() for b in runtime_manifest().bindings)))
-        super().__init__(queue=HostedQueueClient(transport), activity=HostedActivityClient(transport),
+        super().__init__(queue=queue_client, activity=HostedActivityClient(transport),
                          registry=registry, execution_authorized=execution_authorized)
 
+    @property
+    def claim_mode(self) -> str:
+        return self._claim_mode
+
+    @property
+    def expected_task_id(self) -> str:
+        return self._expected_task_id
+
     def _scope_failure(self, lease):
-        if lease.spec.fingerprint() != self._expected_fingerprint:
+        if lease.task_id != self._expected_task_id or lease.spec.fingerprint() != self._expected_fingerprint:
             return "hosted_task_outside_trusted_scope"
         if lease.attempt_count != 1 or lease.state.attempts or lease.state.completed_steps:
             return "hosted_prior_attempt_requires_reconciliation"
@@ -198,10 +223,12 @@ class HostedRepositoryStatusWorker(HostedReadOnlyWorker):
 
 def prepare_repository_worker(*, project_url, publishable_key, owner_bearer_token,
                               github_token, execution_authorized=False, requester=None,
-                              api_get=None, hard_deadline_seconds=180.0):
+                              api_get=None, hard_deadline_seconds=180.0,
+                              target_spec: TaskSpec | None = None):
     """Construct only. Supplying credentials does not claim a task or authorize execution."""
     transport = SupabaseEdgeTransport(project_url=project_url, publishable_key=publishable_key,
                                      bearer_token=owner_bearer_token, requester=requester)
     return HostedRepositoryStatusWorker(transport=transport, github_token=github_token,
                                        execution_authorized=execution_authorized, api_get=api_get,
-                                       hard_deadline_seconds=hard_deadline_seconds)
+                                       hard_deadline_seconds=hard_deadline_seconds,
+                                       target_spec=target_spec)
