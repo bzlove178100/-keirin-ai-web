@@ -1,6 +1,6 @@
 # Work status
 
-Updated: 2026-09-25 UTC.
+Updated: 2026-09-26 (Asia/Tokyo).
 
 ## Product direction
 
@@ -35,7 +35,19 @@ Key merged milestones:
 - PR #56 (`94c98cb10cc7324dbcd16dae1cdb9f35ef7c4e45`): owner-only append/read activity persistence and strict `HostedActivityClient`.
 - PR #57 (`6600d8174bc52f6dd3937e8f5a4acccd05871261`): crash-safe queue lease/fencing, bounded attempts, strict `HostedQueueClient`, explicit expired-lease reconciliation and PostgreSQL 17 fencing tests.
 - PR #58 (`e21dca79a08e21b12979cf886fceaf3c69c33763`): fail-closed `HostedWorkerCoordinator`; queue claims can be preflighted and durably released as blocked without invoking provider actions.
-- PR #59 prepares an explicitly gated `HostedReadOnlyWorker` and `HostedLeaseStateStore`. The default is execution denied before queue claim. When enabled only in an explicitly authorized host, all task actions/verifiers must be registered `read` capabilities and every AgentRunner state transition is persisted through queue revision-CAS/fencing. CI tests use fake/injected actions only; this is preparation, not live activation.
+- PR #59 (`783997d8788810ea405db04e4e72da14ea9a2980`, merged; all four PR workflows passed) prepares an explicitly gated `HostedReadOnlyWorker` and `HostedLeaseStateStore`. The default is execution denied before queue claim. When enabled only in an explicitly authorized host, all task actions/verifiers must be registered `read` capabilities and every AgentRunner state transition is persisted through queue revision-CAS/fencing. CI tests use fake/injected actions only; this is preparation, not live activation.
+
+- PR #60 (`b110f5bf890d6e6dad2dfc64497167177cf7f89b`) merged credential-isolated `SupabaseEdgeTransport`, package exports, the activation checklist, and transport regression CI. HTTP errors cannot override failure status; redirects are rejected; credential echoes and unsafe error propagation are blocked; ambiguous POSTs are not automatically retried.
+
+## 2026-09-26 verified handoff checkpoint
+
+- Read current GitHub main, PR #59, the existing transport branch and its full diff before editing. Starting main matched `783997d8788810ea405db04e4e72da14ea9a2980`; the transport branch was four commits ahead with no divergence and no existing PR.
+- PR #60 head `65c69cc28237c3d40cc8e5e1cac41d9070f73589`: all four PR workflows passed. Regression run `36209262808` explicitly executed and passed the new transport test step. The other successful runs were `36209262849` (UI), `36209262788` (PostgreSQL), and `36209262848` (read-only smoke).
+- Local checks: transport 11 tests, queue 7, activity 6, checkpoint 7, read-only worker 5, web/safety regression and diff whitespace validation all passed.
+- GitHub main was read back at PR #60 merge `b110f5bf890d6e6dad2dfc64497167177cf7f89b`. This is the verified code baseline for this documentation update, not a claim that future main commits have the same SHA.
+- Supabase `agent-runtime-dev` was independently read back at version 6 / ACTIVE / `verify_jwt=true`; deployed source retains `v6-owner-queue-lease-fencing`, agent-only persistence/queue ON and execution/prediction/auto-fetch OFF. Direct SQL confirmed `race_predictions=0`.
+- No Supabase deployment/migration, live hosted queue execution, credential provisioning, GitHub permission change or report scheduling was performed.
+- `HOSTED_READONLY_BINDING_DESIGN.md` now specifies the concrete composition, exact task/repository boundary, missing SHA-pinned CI verification, lease timing and injected integration acceptance tests. This is reviewed design preparation, not an implemented or live-tested binding.
 
 ## Hosted persistence and queue state
 
@@ -111,7 +123,7 @@ It is still **not** an always-on self-contained autonomous agent. `agent-runtime
 
 Remaining major boundaries:
 
-1. merge the explicitly gated read-only worker preparation after CI;
+1. implement and test the scoped repository/CI binding described in `HOSTED_READONLY_BINDING_DESIGN.md`;
 2. separately authorize and configure any live hosted task execution before setting an execution host to enabled;
 3. test a real authenticated owner browser-to-Edge flow without storing the user's token;
 4. connect additional safe read-only Supabase/files/Web provider bindings where host authorization exists;
@@ -121,7 +133,9 @@ Remaining major boundaries:
 
 ## Next action
 
-After PR #59 is merged, the next implementation step is to prepare the concrete **read-only repository/CI status task binding** and host activation checklist. Keep the live execution flag OFF until the user explicitly authorizes hosted task execution. Do not ask for race screenshots unless a race-data step genuinely requires user input.
+The transport/checklist is merged in PR #60. Next implement **SHA-pinned repository/CI observation** and regression coverage: the existing GitHub bridge reads a moving ref and selects completed CI runs without requiring the same SHA. Then compose transport, queue/activity clients, the restricted GitHub bridge and HostedReadOnlyWorker with exact TaskSpec validation and fake end-to-end tests. See `HOSTED_READONLY_BINDING_DESIGN.md`.
+
+Keep live `execution_authorized=False`, the Edge execution flag OFF and all existing keirin/report safety conditions unchanged. The hosted binding itself is not yet implemented; live owner-to-Edge validation and activation remain separately gated by the user's explicit authorization. No screenshots or tokens need to be resent for the next code-only step.
 
 ## 21:00 report requirement
 
