@@ -1,0 +1,75 @@
+name: agent manual one-shot read-only
+
+on:
+  workflow_dispatch:
+    inputs:
+      instance_token:
+        description: "Fresh 16-character lowercase hex trusted run token"
+        required: true
+        type: string
+      confirmation:
+        description: "Type RUN_EXACTLY_ONCE to authorize this manually dispatched run"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: keirin-agent-trusted-one-shot
+  cancel-in-progress: false
+
+jobs:
+  run-once:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KEIRIN_AGENT_SINGLE_RUN_AUTHORIZED: "true"
+      KEIRIN_AGENT_SINGLE_RUN_INSTANCE_TOKEN: ${{ inputs.instance_token }}
+      SUPABASE_PROJECT_URL: ${{ vars.SUPABASE_PROJECT_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_OWNER_BEARER_TOKEN: ${{ secrets.SUPABASE_OWNER_BEARER_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
+      MANUAL_CONFIRMATION: ${{ inputs.confirmation }}
+      INSTANCE_TOKEN: ${{ inputs.instance_token }}
+      WORKER_ID: gha-${{ github.run_id }}
+    steps:
+      - name: Validate explicit one-shot dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$MANUAL_CONFIRMATION" != "RUN_EXACTLY_ONCE" ]; then
+            echo "manual one-shot confirmation mismatch" >&2
+            exit 2
+          fi
+          if ! printf '%s' "$INSTANCE_TOKEN" | grep -Eq '^[0-9a-f]{16}$'; then
+            echo "invalid trusted instance token" >&2
+            exit 2
+          fi
+          for name in SUPABASE_PROJECT_URL SUPABASE_PUBLISHABLE_KEY SUPABASE_OWNER_BEARER_TOKEN GITHUB_TOKEN; do
+            if [ -z "${!name:-}" ]; then
+              echo "required runtime value is not configured: $name" >&2
+              exit 2
+            fi
+          done
+
+      - name: Checkout exact repository revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Execute exactly one trusted read-only run instance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/run_hosted_repository_once.py \
+            --execute-once \
+            --instance-token "$INSTANCE_TOKEN" \
+            --worker-id "$WORKER_ID" \
+            --lease-seconds 180
