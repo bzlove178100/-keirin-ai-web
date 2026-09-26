@@ -1,0 +1,90 @@
+name: agent manual hosted one-shot
+
+on:
+  workflow_dispatch:
+    inputs:
+      authorization_phrase:
+        description: "Type AUTHORIZE_ONE_READONLY_RUN to authorize exactly one bounded read-only run"
+        required: true
+        type: string
+      instance_token:
+        description: "Fresh trusted run token: 16-32 lowercase hex characters"
+        required: true
+        type: string
+      worker_id:
+        description: "Unique worker id for this one-shot run"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: agent-manual-hosted-one-shot
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Validate explicit single-run authorization
+        shell: bash
+        env:
+          AUTHORIZATION_PHRASE: ${{ inputs.authorization_phrase }}
+          INSTANCE_TOKEN: ${{ inputs.instance_token }}
+          WORKER_ID: ${{ inputs.worker_id }}
+        run: |
+          set -euo pipefail
+          test "$AUTHORIZATION_PHRASE" = "AUTHORIZE_ONE_READONLY_RUN"
+          [[ "$INSTANCE_TOKEN" =~ ^[0-9a-f]{16,32}$ ]]
+          [[ "$WORKER_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$ ]]
+
+  run-one-shot:
+    needs: authorize
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_PROJECT_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_OWNER_BEARER_TOKEN: ${{ secrets.SUPABASE_OWNER_BEARER_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
+      KEIRIN_AGENT_SINGLE_RUN_AUTHORIZED: "true"
+      INSTANCE_TOKEN: ${{ inputs.instance_token }}
+      WORKER_ID: ${{ inputs.worker_id }}
+    steps:
+      - name: Checkout exact workflow revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fail closed when runtime credentials are unavailable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_PROJECT_URL"
+          test -n "$SUPABASE_PUBLISHABLE_KEY"
+          test -n "$SUPABASE_OWNER_BEARER_TOKEN"
+          test -n "$GITHUB_TOKEN"
+
+      - name: Enqueue exactly one fresh trusted run instance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/enqueue_trusted_run_instance.py --instance-token "$INSTANCE_TOKEN"
+
+      - name: Execute exactly one bounded read-only hosted run
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/run_hosted_repository_once.py \
+            --execute-once \
+            --instance-token "$INSTANCE_TOKEN" \
+            --worker-id "$WORKER_ID" \
+            --lease-seconds 180
