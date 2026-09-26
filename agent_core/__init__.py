@@ -14,6 +14,7 @@ from .activation import (
 from .adapters import Capability, CallableReadOnlyGitHubAdapter, ToolRegistry
 from .capability_catalog import CapabilityContract, capability_by_action, capability_catalog
 from .delivery import BridgeReportDelivery, DeliveryResult, ReportDelivery
+from .exact_task_queue import ExactTaskQueueClient
 from .hosted_activity import (
     HostedActivityClient,
     HostedActivityError,
@@ -93,6 +94,7 @@ __all__ = [
     "DailyActivityReport",
     "DailySchedule",
     "DeliveryResult",
+    "ExactTaskQueueClient",
     "FileArtifactAdapter",
     "FileStateStore",
     "HostedActivationManifest",
