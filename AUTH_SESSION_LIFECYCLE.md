@@ -56,7 +56,7 @@ The snapshot must not expose durable refresh material to task code. Provider ada
 
 ## Session state machine
 
-Recommended states:
+Credential-provider states (implemented by the refresh boundary below):
 
 - `unconfigured` — no credential provider exists;
 - `ready` — a valid session can be minted for the requested capability;
@@ -97,14 +97,55 @@ The current project keeps scheduler and recurrence OFF.
 - Runtime credentials are not TaskSpec inputs. Tests rotate an external provider while preserving the TaskSpec fingerprint and persisted state, and prove completed work is not replayed or secrets persisted.
 - This module performs no network I/O, secret-store access, token refresh or host activation. It is not yet wired into the one-shot worker, and does not change its existing preflight.
 
+## Refresh-capable access boundary
+
+`agent_core.refresh_credentials` adds a provider-neutral `RefreshingCredentialProvider`. It implements the existing snapshot protocol using an injected `HostCredentialSource`; it is not connected to a real service or to the worker. It does not make the existing runtime preflight long-lived-ready.
+
+The runtime layers are:
+
+1. **HostCredentialSource** owns access to the host secret store and the provider-specific authentication exchange. Its only outward operations are `assert_available()` and `refresh_access(binding, minimum_ttl_seconds)`. There is no refresh-secret getter at the provider or adapter boundary.
+2. **RefreshingCredentialProvider** owns access caching, one in-flight issuance/refresh, lifetime validation, identity/scope checks, redacted state and local revocation.
+3. **CredentialSnapshot** exposes one `access_token` to the adapter. It contains no source handle or refresh material. The runner and adapter must never receive the host source itself.
+
+`CredentialBinding` pins the trusted provider ID, stable account ID and normalized capabilities. `AccessCredentialGrant` carries only access material and known integer issue/expiry times. The response must match the entire configured identity and capability set, including rejecting added privileges. Do not bind an interchangeable account display label as a stable account ID. Remote identity verification remains a responsibility of the concrete source; comparing its returned metadata is not cryptographic identity verification.
+
+### Refresh state behavior
+
+| Condition | Result |
+| --- | --- |
+| No configured source | `unconfigured`; no snapshot |
+| Configured source without cached access | `refresh_required` |
+| Access missing, expired or below requested TTL | One caller enters `refreshing` |
+| First valid response | `ready`, generation 1 |
+| Later valid refresh | `ready_rotated`, generation incremented |
+| Cached access meets TTL | Recheck source availability and lifetime; no refresh |
+| Concurrent issuance/refresh already owned | Reject with `CredentialRefreshInProgress`; no second source call |
+| Source failure, malformed response, identity/scope mismatch or insufficient returned TTL | Terminal `blocked_auth`; discard cached access |
+| Local or source revocation | Terminal `revoked`; discard cached access and in-flight results |
+
+Each snapshot validates source availability before issuance and after refresh. Time is rechecked after source I/O. A monotonic elapsed-time floor prevents wall-clock rollback from extending cached TTL within this process. `now_epoch` is a deterministic test override with elapsed time still counted. Unknown expiry is always rejected for refresh-capable access, even if a caller allows unknown expiry for the static provider.
+
+`blocked_auth` and `revoked` have no automatic reset or fallback to previous access. An operator/host must remedy the source and explicitly construct a new provider. Refresh does not schedule, enqueue, retry tasks or replay provider actions. Interruptions block subsequent issuance; KeyboardInterrupt/SystemExit propagate with a fixed redacted message. Normal failures expose only fixed error classifications, with no retained original exception context in the outward error.
+
+`refresh_capable=True` describes the implementation, not authenticated readiness or execution permission. State is evaluated on snapshot requests; a cached `ready` report is not a fresh readiness check. Local revoke prevents future issuance but cannot erase already issued Python strings or revoke a remote token. There is no cross-process lock or durable refresh state in this version.
+
+### Host secret-store contract (not yet implemented)
+
+A concrete source must satisfy these requirements before it can be connected:
+
+- The host alone holds the refresh/session secret. Use a host-only secret reference scoped to one provider/account; never put refresh material or secret-store credentials into TaskSpec, adapters, checkpoint/activity state or artifacts.
+- `assert_available()` must fail closed when the host authorization/secret source is disabled or its status cannot be checked. Checking an in-memory flag alone is not sufficient for a distributed secret store.
+- Authenticate the provider response and map stable account identity and actual granted scopes to the pinned binding. Reject ambiguous or unverified identities. The generic provider cannot validate remote signatures or infer scopes from token text.
+- Serialize refresh across every host using the same refresh secret with a secret-store version/CAS or equivalent exclusive ownership. The current provider lock protects only one object in one process. Constructing several providers over one source is not safe distributed coordination.
+- Persist rotated refresh material inside the host secret store before returning access. Handle interrupted/ambiguous token rotation explicitly; do not blindly repeat a refresh request after a timeout or failed secret-store save.
+- Set bounded network timeouts. The generic interface cannot cancel arbitrary Python callbacks; local revoke rejects their eventual result but does not terminate their I/O.
+- Return only `AccessCredentialGrant` with an access token. Never return raw OAuth responses, durable refresh values, or provider exceptions in metadata. The generic boundary cannot identify a secret that a faulty source incorrectly labels as an access token.
+- Report only fixed failure classes and non-secret configured metadata. Repr is redacted, but generic dataclass/object serialization and access-return logging are forbidden.
+
+The tests use a fake host source only. No real refresh, secret-store read/write, source revocation, provider generation, hosted task execution or recurring worker is performed.
+
 ## Next implementation step
 
-Implement and validate the refresh-capable provider and host-only secret-store boundary separately:
+Implement a concrete host secret-store/exchange boundary with versioned refresh ownership, durable rotation and ambiguous-outcome handling. Validate it offline with fault injection first. Then design the adapter/runner binding that turns credential failure into a blocked task before any provider action, while keeping all execution gates OFF.
 
-- mint access-only snapshots; keep durable refresh material out of task runners/adapters;
-- enforce configured provider/account identity and capability scope on each refresh result;
-- serialize refresh ownership and define expiry/refresh/revocation transitions;
-- enter `blocked_auth` on refresh failure without scheduling, retrying or replaying tasks;
-- preserve TaskSpec immutable identity during credential rotation.
-
-Do not implement a recurring worker until the refresh-capable provider and its secret-store boundary are independently validated.
+Connecting real authentication, adding host permissions, running hosted work, or enabling recurrence remains a separate explicit authorization boundary. Do not implement an always-on worker until the concrete source and recovery contract are independently validated.
