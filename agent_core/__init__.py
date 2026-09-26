@@ -93,6 +93,19 @@ from .trusted_run_instance import (
     trusted_status_template_spec,
     validate_trusted_status_run_spec,
 )
+from .versioned_secret_store import (
+    InMemoryVersionedSecretStore,
+    RefreshExchange,
+    RefreshExchangeAmbiguous,
+    RefreshExchangeRejected,
+    RefreshExchangeResult,
+    RefreshSecretRecord,
+    SecretStoreAmbiguousWrite,
+    SecretStoreConflict,
+    SecretStoreError,
+    VersionedHostCredentialSource,
+    VersionedSecretStore,
+)
 
 __all__ = [
     "AccessCredentialGrant",
@@ -109,6 +122,18 @@ __all__ = [
     "CredentialScopeError",
     "CredentialLifetimeError",
     "CredentialRevokedError",
+
+    "InMemoryVersionedSecretStore",
+    "RefreshExchange",
+    "RefreshExchangeAmbiguous",
+    "RefreshExchangeRejected",
+    "RefreshExchangeResult",
+    "RefreshSecretRecord",
+    "SecretStoreAmbiguousWrite",
+    "SecretStoreConflict",
+    "SecretStoreError",
+    "VersionedHostCredentialSource",
+    "VersionedSecretStore",
 
     "ACTIVATION_SCHEMA_VERSION",
     "ActionResult",
