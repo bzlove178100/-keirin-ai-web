@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .activation import load_hosted_activation_manifest
+from .trusted_run_instance import build_trusted_status_run_spec, validate_trusted_status_run_spec
 
 AUTHORIZATION_ENV = "KEIRIN_AGENT_SINGLE_RUN_AUTHORIZED"
 PROJECT_URL_ENV = "SUPABASE_PROJECT_URL"
@@ -47,14 +48,17 @@ def run_once(
     interrupted_type=None,
     trusted_spec_factory=None,
 ) -> int:
-    """Execute one explicitly authorized read-only hosted task, then inspect durable state.
+    """Execute one explicitly authorized read-only hosted run instance, then inspect it.
 
-    Provider/transport factories are dependency-injected so the core contract can be
-    tested without network access. Default live dependencies are imported only after
-    all committed-manifest and runtime-authorization gates pass.
+    The committed activation manifest remains closed. A runtime-only authorization
+    signal, explicit CLI execution flag and a fresh trusted instance token are all
+    required. The worker is permanently bound to the resulting exact TaskSpec before
+    any queue claim, so a completed template task or unrelated FIFO row cannot be
+    consumed by this entrypoint.
     """
-    parser = argparse.ArgumentParser(description="Run exactly one authorized hosted read-only repository task.")
+    parser = argparse.ArgumentParser(description="Run exactly one authorized hosted read-only repository task instance.")
     parser.add_argument("--execute-once", action="store_true")
+    parser.add_argument("--instance-token", required=True)
     parser.add_argument("--worker-id", required=True)
     parser.add_argument("--lease-seconds", type=int, default=180)
     args = parser.parse_args(argv)
@@ -75,23 +79,24 @@ def run_once(
     if manifest.mode != "single_run" or manifest.max_tasks != 1 or manifest.allowed_access != ("read",):
         raise RuntimeError("single_run_manifest_scope_invalid")
 
+    if trusted_spec_factory is None:
+        target_spec = build_trusted_status_run_spec(args.instance_token, repo_root=root)
+    else:
+        target_spec = trusted_spec_factory()
+    validate_trusted_status_run_spec(target_spec, repo_root=root)
+
     project_url = _required(runtime_env, PROJECT_URL_ENV)
     publishable_key = _required(runtime_env, PUBLISHABLE_KEY_ENV)
     owner_bearer = _required(runtime_env, OWNER_BEARER_ENV)
     github_token = _required(runtime_env, GITHUB_TOKEN_ENV)
 
-    if worker_factory is None or recovery_factory is None or interrupted_type is None or trusted_spec_factory is None:
-        from tools.agent_hosted_repository_worker import (
-            HostedRunInterrupted,
-            prepare_repository_worker,
-            trusted_status_spec,
-        )
+    if worker_factory is None or recovery_factory is None or interrupted_type is None:
+        from tools.agent_hosted_repository_worker import HostedRunInterrupted, prepare_repository_worker
         from tools.prepare_hosted_recovery import prepare_hosted_recovery
 
         worker_factory = worker_factory or prepare_repository_worker
         recovery_factory = recovery_factory or prepare_hosted_recovery
         interrupted_type = interrupted_type or HostedRunInterrupted
-        trusted_spec_factory = trusted_spec_factory or trusted_status_spec
 
     worker = worker_factory(
         project_url=project_url,
@@ -99,6 +104,7 @@ def run_once(
         owner_bearer_token=owner_bearer,
         github_token=github_token,
         execution_authorized=True,
+        target_spec=target_spec,
     )
 
     try:
@@ -108,7 +114,7 @@ def run_once(
             project_url=project_url,
             publishable_key=publishable_key,
             owner_bearer_token=owner_bearer,
-        ).inspect(trusted_spec_factory())
+        ).inspect(target_spec)
         print(json.dumps(_safe_report(None, recovery, interrupted=True), ensure_ascii=False, sort_keys=True))
         return 2
 
@@ -116,6 +122,6 @@ def run_once(
         project_url=project_url,
         publishable_key=publishable_key,
         owner_bearer_token=owner_bearer,
-    ).inspect(trusted_spec_factory())
+    ).inspect(target_spec)
     print(json.dumps(_safe_report(result, recovery, interrupted=False), ensure_ascii=False, sort_keys=True))
     return 0 if getattr(recovery, "classification", "").startswith("completed_") else 1
