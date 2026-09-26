@@ -6,6 +6,7 @@ import json
 import re
 from typing import Any, Callable, Mapping
 
+from .diagnostics import ActionDiagnosticEvent, ActionDiagnosticSink, safe_exception_type
 from .model import ActionResult, ArtifactUpdate, StepSpec, TaskSpec, TaskState
 from .store import FileStateStore
 
@@ -60,13 +61,26 @@ class AgentRunner:
     Untyped action/verifier exception messages are treated as untrusted provider data and
     are never persisted. Adapters that need a stable diagnostic classification may raise
     ``SafeActionError`` with a fixed validated code.
+
+    An optional ``diagnostic_sink`` is host-injected and ephemeral. It receives only a
+    constrained ``ActionDiagnosticEvent`` containing identifiers, a fixed classification
+    and a sanitized exception class name. It never receives exception text/repr, action
+    args, task inputs, action results, credential snapshots or provider responses. Sink
+    failures are ignored and never alter durable task semantics.
     """
 
     TERMINAL = {"completed", "blocked", "failed"}
 
-    def __init__(self, store: FileStateStore, actions: Mapping[str, Action]):
+    def __init__(
+        self,
+        store: FileStateStore,
+        actions: Mapping[str, Action],
+        *,
+        diagnostic_sink: ActionDiagnosticSink | None = None,
+    ) -> None:
         self.store = store
         self.actions = dict(actions)
+        self.diagnostic_sink = diagnostic_sink
 
     @staticmethod
     def _normalise_action_result(value: Any) -> ActionResult:
@@ -103,6 +117,47 @@ class AgentRunner:
         if verification:
             return "UntrustedActionError:verification_exception_redacted"
         return "UntrustedActionError:action_exception_redacted"
+
+    @staticmethod
+    def _diagnostic_classification(exc: Exception, *, verification: bool = False) -> str:
+        if isinstance(exc, SafeActionError):
+            return exc.code
+        return "verification_exception_redacted" if verification else "action_exception_redacted"
+
+    def _emit_diagnostic(
+        self,
+        *,
+        spec: TaskSpec,
+        step: StepSpec,
+        action: str,
+        phase: str,
+        attempt: int,
+        retry_safe: bool,
+        error: Exception,
+    ) -> None:
+        sink = self.diagnostic_sink
+        if sink is None:
+            return
+        try:
+            event = ActionDiagnosticEvent(
+                task_id=spec.task_id,
+                step_id=step.step_id,
+                action=action,
+                phase=phase,
+                attempt=attempt,
+                retry_safe=retry_safe,
+                classification=self._diagnostic_classification(
+                    error,
+                    verification=phase == "verification",
+                ),
+                exception_type=safe_exception_type(error),
+            )
+            sink.emit(event)
+        except Exception:
+            # Observability must never change task state, retry policy or side effects.
+            # The sink is explicitly non-durable and its failure is intentionally not
+            # appended to the persistent activity ledger.
+            return
 
     def _outcome(
         self,
@@ -228,6 +283,15 @@ class AgentRunner:
                     self._block(state, f"action_blocked:{exc}", step=step)
                     return self._outcome(state, executed=executed, skipped=skipped)
                 except Exception as exc:  # provider/connector payload is untrusted by default
+                    self._emit_diagnostic(
+                        spec=spec,
+                        step=step,
+                        action=step.action,
+                        phase="action",
+                        attempt=attempt,
+                        retry_safe=step.retry_safe,
+                        error=exc,
+                    )
                     error = self._persistent_error(exc)
                     state.last_error = error
                     self.store.append_event(
@@ -280,6 +344,15 @@ class AgentRunner:
                 try:
                     verified = self._verification_passed(verifier(verify_args, step_context))
                 except Exception as exc:
+                    self._emit_diagnostic(
+                        spec=spec,
+                        step=step,
+                        action=step.verify_action,
+                        phase="verification",
+                        attempt=state.attempts.get(step.step_id, 1),
+                        retry_safe=False,
+                        error=exc,
+                    )
                     self._block(
                         state,
                         "verification_error_requires_reconciliation",
