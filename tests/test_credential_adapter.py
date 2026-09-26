@@ -173,7 +173,6 @@ class CredentialBoundAdapterTest(unittest.TestCase):
             self.assertEqual(inner.calls, 0)
             persisted = all_runtime_text(tmp)
             self.assertNotIn(SECRET, persisted)
-            # Terminal blocked state cannot silently retry after credentials change.
             second = AgentRunner(store, registry.actions()).run(task(verify=False))
             self.assertEqual(second.status, "blocked")
             self.assertEqual(failing.calls, 1)
@@ -278,7 +277,7 @@ class CredentialBoundAdapterTest(unittest.TestCase):
             outcome = AgentRunner(FileStateStore(tmp), registry.actions()).run(task(verify=False))
             self.assertEqual(outcome.status, "blocked")
             self.assertEqual(outcome.blocked_reason, "action_error_requires_reconciliation")
-            self.assertEqual(outcome.last_error, "RuntimeError:credential_material_return_forbidden")
+            self.assertEqual(outcome.last_error, "SafeActionError:credential_material_return_forbidden")
             self.assertNotIn(SECRET, all_runtime_text(tmp))
 
     def test_underlying_provider_exception_is_fixed_before_runner_persistence(self):
@@ -298,7 +297,7 @@ class CredentialBoundAdapterTest(unittest.TestCase):
             outcome = AgentRunner(FileStateStore(tmp), registry.actions()).run(task(verify=False))
             self.assertEqual(outcome.status, "blocked")
             self.assertEqual(outcome.blocked_reason, "action_error_requires_reconciliation")
-            self.assertEqual(outcome.last_error, "RuntimeError:credential_bound_provider_action_failed")
+            self.assertEqual(outcome.last_error, "SafeActionError:credential_bound_provider_action_failed")
             self.assertNotIn(SECRET, all_runtime_text(tmp))
 
     def test_underlying_blocked_action_reason_is_not_forwarded(self):
