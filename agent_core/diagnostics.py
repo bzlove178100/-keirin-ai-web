@@ -8,6 +8,14 @@ _SAFE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$")
 _SAFE_CODE_RE = re.compile(r"^[a-z][a-z0-9_.:-]{0,127}$")
 
 
+def safe_exception_type(error: BaseException) -> str:
+    """Return only a log-safe exception class name, never exception text/repr."""
+    name = type(error).__name__
+    if not isinstance(name, str) or not _SAFE_NAME_RE.fullmatch(name):
+        return "Exception"
+    return name
+
+
 @dataclass(frozen=True, slots=True)
 class ActionDiagnosticEvent:
     """Persistence-independent diagnostic metadata for one action/verifier failure.
