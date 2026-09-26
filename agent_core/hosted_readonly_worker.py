@@ -9,7 +9,7 @@ from .adapters import ToolRegistry
 from .hosted_activity import HostedActivityClient
 from .hosted_queue import HostedQueueClient, HostedQueueLease
 from .model import ActionResult, ArtifactState, ArtifactUpdate, TaskSpec, TaskState
-from .runner import AgentRunner, RunOutcome
+from .runner import AgentRunner, RunOutcome, SafeActionError
 
 
 class HostedExecutionNotAuthorized(RuntimeError):
@@ -180,9 +180,9 @@ class HostedReadOnlyWorker:
                     for name in ("created", "persistent_saved", "device_saved", "ui_loaded")
                 )
             else:
-                raise RuntimeError("read_only_action_returned_invalid_artifact_update")
+                raise SafeActionError("read_only_action_returned_invalid_artifact_update")
             if any(flag is True for flag in flags):
-                raise RuntimeError("read_only_action_reported_write_artifact")
+                raise SafeActionError("read_only_action_reported_write_artifact")
         return value
 
     def _scope_failure(self, lease: HostedQueueLease) -> str | None:
