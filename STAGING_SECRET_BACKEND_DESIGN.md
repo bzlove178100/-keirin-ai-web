@@ -201,8 +201,24 @@ access, and treat provider-side revocation as a separate, confirmed operation.
    refresh tests. Hosted tasks, scheduler, provider generation/write and reports remain
    separate activation boundaries under `REAL_AUTH_INTEGRATION_REQUIREMENTS.md`.
 
-**Next code slice:** local PostgreSQL SQL/ACL fixture from step 1. Existing PR #97 SQLite
-evidence establishes only its own test backend's process-level CAS behavior.
+### Initial SQL/ACL prototype
+
+`tests/support/vault_postgres_contract.sql` and
+`tests/vault_postgres_contract_cases.sql` implement the initial local fixture from step 1.
+`tests/run_vault_postgres_contract.py` accepts only the explicit ephemeral CI database
+configuration and wraps setup/tests in a transaction that is rolled back.
+
+The fixture uses plaintext **synthetic markers** in a `synthetic_vault` table. Its reduced
+record contains version/state/secret only. It tests database-login identity, per-binding
+authorization, denied direct table/API access, stale CAS, atomic rollback in both update
+orders, and terminal revocation. It is not a deployable Vault adapter or a complete
+`RefreshSecretRecord` SQL validator. Session identities are changed in one isolated test
+connection; this does not establish simultaneous independent-session CAS behavior.
+
+**Next code slice:** complete raw-record validation (binding identity, capabilities,
+generation/attempt/failure fields) and independent-session CAS tests, then the bounded
+host adapter. Real extension encryption, key lifecycle and deployment gates remain open.
+Existing PR #97 SQLite evidence applies only to that test backend.
 
 ## Sources checked
 

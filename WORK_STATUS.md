@@ -72,6 +72,7 @@ Key merged milestones:
 - PR #95: added `REAL_AUTH_INTEGRATION_REQUIREMENTS.md` as the pre-activation security and operational gate for any concrete backend or provider refresh exchange.
 - PR #96 (`a6ec19dd709cce78c870afa30d882977ea72adbf`): added the reusable synthetic-only durable-backend conformance harness, covering CAS/conflict, read-back, new-client persistence and injected ambiguous outcomes. It does not establish multi-process or real backend safety.
 - PR #97 (`ba982f9da0d0c237dd6de39f5e98865d90431d15`): added a synthetic-only SQLite backend under `tests/support`, ran the reusable harness against it, and verified a two-process CAS race with one winner and one conflict. The 2 dedicated tests, 2 harness tests and 11 durable-store tests passed locally; all four PR workflows passed before merge. No encryption or production backend readiness is implied.
+- PR #98 (`15bc909133a688b1db87bb780532912afcfec38b`): selected Vault plus private PostgreSQL metadata for an offline prototype and recorded the current isolation/key-lifecycle/operational blockers. Added and executed a catalog-only inventory without reading secret rows. All four PR workflows passed before merge.
 
 ## Hosted staging/runtime state
 
@@ -84,7 +85,7 @@ Deployed agent functions:
 - `agent-runtime-dev`: **v6 / ACTIVE / verify_jwt=true**. Its safety contract reports `runtime_task_execution_enabled=false`.
 - `agent-exact-claim-dev`: **v1 / ACTIVE / verify_jwt=true**. It accepts only exact fresh trusted status-run claim operations and does not enable task/provider execution.
 
-PR #82–#97 did not deploy a new Edge Function, apply a secret-store migration, perform a real authentication refresh or start a live hosted run.
+PR #82–#98 did not deploy a new Edge Function, apply a secret-store migration, perform a real authentication refresh or start a live hosted run.
 
 Read-only secret-backend catalog review on 2026-09-27 confirmed PostgreSQL `17.6`,
 `supabase_vault` `0.3.1`, and effective schema/object access for `service_role` to the
@@ -127,6 +128,13 @@ lifecycle, bootstrap credential, logging/restore and real-backend fault-test evi
 `ops/credential_vault_inventory.sql` was executed successfully as a catalog-only query;
 it is an inventory, not a readiness check.
 
+The initial SQL/ACL prototype in `tests/support/vault_postgres_contract.sql` has passed
+the dedicated PostgreSQL 17 CI step on PR #99 (implementation head `40bdb16`). It verifies
+scoped session identities, cross-binding/API denial, stale CAS, rollback of both secret
+and metadata updates, and terminal revocation using synthetic markers. Its reduced
+record schema and single-connection identity switching do not prove full-record integrity,
+independent-session concurrency, real Vault encryption or staging readiness.
+
 ## Current agent state
 
 The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract, an offline full credential-stack composition path, a credential-gated provider-action boundary, persistence-safe action/verifier error handling, ephemeral diagnostic metadata and a static persistence-redaction audit.
@@ -139,7 +147,7 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. implement the private SQL read/CAS and ACL contract in an isolated local PostgreSQL fixture using synthetic Vault functions, including rollback and cross-binding denial tests, following `STAGING_SECRET_BACKEND_DESIGN.md`;
+1. extend the reduced PostgreSQL fixture record to the full refresh-record schema and test independent-session CAS;
 2. implement the host adapter with bounded injected connection handling and fixed errors; keep all credentials synthetic during code/CI verification;
 3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
 4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
