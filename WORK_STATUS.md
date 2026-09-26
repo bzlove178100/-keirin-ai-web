@@ -59,7 +59,7 @@ Key merged milestones:
 
 - PR #78 (`5ddae8161abba6d8d4ffee725c16db6b9b5d45f8`): synchronized this work-status record before authentication-boundary work.
 - PR #79 (`4ad117907e4416d8ebeba9d14209884cf1f0c5ed`): added redacted local credential preflight, HTTPS-origin/exact-instance validation and known-expiry TTL rejection before the manual one-shot worker. Unknown expiry remains explicit; `AUTH_SESSION_LIFECYCLE.md` defines the refresh-provider boundary. All four PR workflows passed.
-- PR #80 (`d85e6c008fc725accf5fd63a19a6c945457c37d4`): completed `CredentialProvider`, redacted `CredentialSnapshot`, static in-memory access provider, typed errors, package exports and regression integration. Added 19 tests, including fail-closed scopes/lifetimes, revocation and rotation without immutable TaskSpec changes or completed-task replay. Rejected malformed/non-finite TTL and timestamp inputs; removed untrusted lookup/scope values from errors. All 36 Python regression commands passed locally and all four required PR workflows passed before merge.
+- PR #80 (`d85e6c008fc725accf5fd63a19a6c945457c37d4`): completed `CredentialProvider`, redacted `CredentialSnapshot`, static in-memory access provider, typed errors, package exports and regression integration. Added 19 tests, including fail-closed scopes/lifetimes, revocation and rotation without immutable TaskSpec changes or completed-task replay. Rejected malformed/non-finite TTL and timestamp inputs; removed untrusted lookup/scope values from errors. All 36 Python regression commands passed locally and all four required PR workflows passed before merge. The four main push workflows and Pages deployment also passed at this merge SHA.
 
 ## Hosted staging/runtime state
 
@@ -140,7 +140,7 @@ The workflow has **not been dispatched**. A future dispatch is a new live-execut
 
 ## Current agent state
 
-The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, durable provider evidence, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host a manual GitHub Actions host, redacted credential preflight and a tested provider-neutral static credential boundary.
+The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, durable provider evidence, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight and a tested provider-neutral static credential boundary.
 
 It is still **not** an always-on self-contained autonomous agent. No scheduler/recurrence is active, provider generation/write bindings remain unbound, report delivery is not configured, and deployed runtime task execution remains OFF.
 
