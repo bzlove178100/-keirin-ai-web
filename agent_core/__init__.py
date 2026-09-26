@@ -35,6 +35,11 @@ from .hosted_readonly_worker import (
     HostedReadOnlyWorker,
     HostedReadOnlyWorkerResult,
 )
+from .hosted_recovery import (
+    HostedRecoveryInspector,
+    HostedRecoveryIntegrityError,
+    HostedRecoveryReport,
+)
 from .hosted_transport import HostedTransportError, SupabaseEdgeTransport
 from .hosted_worker import HostedWorkerCoordinator, HostedWorkerDecision
 from .model import (
@@ -93,6 +98,9 @@ __all__ = [
     "HostedQueueLease",
     "HostedReadOnlyWorker",
     "HostedReadOnlyWorkerResult",
+    "HostedRecoveryInspector",
+    "HostedRecoveryIntegrityError",
+    "HostedRecoveryReport",
     "HostedTransportError",
     "HostedWorkerCoordinator",
     "HostedWorkerDecision",
