@@ -70,6 +70,14 @@ from .model import (
 )
 from .orchestrator import AgentOrchestrator, PreflightReport
 from .provider_adapters import FileArtifactAdapter, ReadOnlySupabaseStatusAdapter
+from .refresh_credentials import (
+    AccessCredentialGrant,
+    CredentialAuthBlocked,
+    CredentialBinding,
+    CredentialRefreshInProgress,
+    HostCredentialSource,
+    RefreshingCredentialProvider,
+)
 from .reporting import DailyActivityReport, RevenueMetric, build_activity_report
 from .runner import AgentRunner, BlockedAction, RunOutcome
 from .runtime import BoundRuntime, RuntimeBinding, RuntimeManifest
@@ -87,6 +95,13 @@ from .trusted_run_instance import (
 )
 
 __all__ = [
+    "AccessCredentialGrant",
+    "CredentialAuthBlocked",
+    "CredentialBinding",
+    "CredentialRefreshInProgress",
+    "HostCredentialSource",
+    "RefreshingCredentialProvider",
+
     "CredentialProvider",
     "CredentialSnapshot",
     "StaticInMemoryCredentialProvider",

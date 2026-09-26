@@ -20,7 +20,7 @@ Unless the user explicitly authorizes a new, specific boundary:
 
 Agent-only checkpoint/activity persistence and queue coordination in staging are authorized and active. Exact-task lease acquisition is deployed. No always-on worker is active.
 
-Latest direct read-only staging verification: 2026-09-26, credential-provider work (no live run started):
+Latest direct read-only staging verification: 2026-09-26, refresh-provider work (no live run started):
 
 - single-active trusted-run guard: **present**;
 - fresh trusted tasks currently `queued` / `running`: **0**;
@@ -140,17 +140,19 @@ The workflow has **not been dispatched**. A future dispatch is a new live-execut
 
 ## Current agent state
 
-The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, durable provider evidence, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight and a tested provider-neutral static credential boundary.
+The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, durable provider evidence, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight and tested static credentials and an access-only refresh-provider boundary with terminal authentication failure states.
 
 It is still **not** an always-on self-contained autonomous agent. No scheduler/recurrence is active, provider generation/write bindings remain unbound, report delivery is not configured, and deployed runtime task execution remains OFF.
 
 ## Next work / next boundary
 
-Code-only work may continue without another live-run authorization. The static credential-provider boundary is complete; it is not wired into the host and cannot refresh. Provider/account metadata is host configuration, not remote identity verification. Revocation blocks new snapshots but does not invalidate already issued copies or remotely revoke a token.
+Code-only work may continue without another live-run authorization. Static credentials and the generic refresh-capable provider are implemented and regression-covered, but neither provider is wired into the host. The refresh provider uses an injected `HostCredentialSource` that returns access-only grants. No concrete source, durable secret store or actual token refresh has been configured or run.
 
-Next: implement the refresh-capable provider and a host-only secret-store boundary with access-only snapshot issuance, expiry/refresh state transitions, provider/account identity and scope validation, single refresh ownership, and `blocked_auth` on refresh failure. Runners/adapters must never receive durable refresh material. Credential rotation must remain separate from immutable TaskSpec identity, and refresh must not enqueue/retry/replay work.
+Current refresh behavior: exact provider/account/capability matching, known-expiry TTL enforcement, monotonic elapsed-time checks, one in-flight refresh per object, source/local revocation, and terminal `blocked_auth` without fallback or automatic retry. Runners/adapters receive no refresh-secret handle. Credential rotation tests preserve TaskSpec identity and do not replay completed work.
 
-See `AUTH_SESSION_LIFECYCLE.md` for the current static contract and remaining boundaries. No long-lived host, scheduler or recurrence may be activated by this code-only work.
+The source/secret-store design in `AUTH_SESSION_LIFECYCLE.md` explicitly leaves remote identity verification, distributed refresh fencing, durable refresh-token rotation and ambiguous-outcome recovery to a concrete host source. Current tests use only a fake source. The 26 refresh-provider tests and all 37 Python regression commands passed locally. A `ready` report or `refresh_capable=True` is not execution authorization.
+
+Next: implement and fault-test the versioned host secret-store/exchange boundary, then design a runner/adapter binding that blocks work on authentication failure before provider actions. Keep the existing manual preflight unchanged and all long-lived host, scheduler and recurrence gates OFF.
 
 A future manual workflow dispatch or any other new hosted execution requires a new explicit live-run authorization. Do not infer such authorization from code merge, workflow presence, or prior one-run approvals.
 
