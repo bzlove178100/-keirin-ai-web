@@ -214,6 +214,13 @@ class HostedQueueClient:
             raise self._error_from_response(response)
         return response
 
+    def inspect(self, spec: TaskSpec) -> HostedQueueLease:
+        """Read one durable queue/checkpoint row without claiming, saving, or requeueing it."""
+        spec = TaskSpec.from_dict(deepcopy(spec.to_dict()))
+        spec.validate()
+        response = self._request("checkpoint_get", {"task_id": spec.task_id})
+        return self._parse_lease(response.get("checkpoint"), expected_spec=spec)
+
     def claim(self, *, worker_id: str, lease_seconds: int = 120) -> HostedQueueLease | None:
         if not self._valid_worker_id(worker_id):
             raise ValueError("invalid_worker_id")
