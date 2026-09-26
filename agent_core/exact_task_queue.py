@@ -52,3 +52,28 @@ class ExactTaskQueueClient(HostedQueueClient):
         if record.revision < 1 or record.attempt_count < 1:
             raise HostedQueueIntegrityError("queue_claim_counters_not_advanced")
         return record
+
+
+class BoundExactTaskQueueClient(ExactTaskQueueClient):
+    """Drop-in hosted queue client permanently bound to one immutable TaskSpec.
+
+    ``HostedReadOnlyWorker`` calls ``queue.claim(...)``. Binding the spec here lets the
+    existing worker use the exact-task backend primitive without giving it a FIFO
+    fallback. The target cannot be swapped after construction.
+    """
+
+    def __init__(self, transport, target_spec: TaskSpec):
+        super().__init__(transport)
+        self._target_spec = TaskSpec.from_dict(deepcopy(target_spec.to_dict()))
+        self._target_spec.validate()
+
+    @property
+    def target_spec(self) -> TaskSpec:
+        return TaskSpec.from_dict(deepcopy(self._target_spec.to_dict()))
+
+    def claim(self, *, worker_id: str, lease_seconds: int = 120) -> HostedQueueLease | None:
+        return self.claim_task(
+            self._target_spec,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+        )
