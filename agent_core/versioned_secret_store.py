@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import re
 from threading import Lock
 from typing import Callable, Protocol
 from uuid import uuid4
@@ -12,6 +13,15 @@ from .refresh_credentials import (
     CredentialBinding,
     CredentialRefreshInProgress,
 )
+
+_ATTEMPT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_FAILURE_CODES = frozenset({
+    "refresh_rejected",
+    "refresh_outcome_ambiguous",
+    "refresh_response_invalid_or_incomplete",
+    "secret_store_commit_ambiguous",
+    "credential_source_revoked",
+})
 
 
 class SecretStoreError(RuntimeError):
@@ -36,6 +46,12 @@ class RefreshExchangeRejected(RuntimeError):
 
 class RefreshExchangeAmbiguous(RuntimeError):
     """Refresh request may have been applied but its outcome is unknown."""
+
+
+def _safe_attempt_id(value: str, error: str) -> str:
+    if not isinstance(value, str) or not _ATTEMPT_ID_RE.fullmatch(value):
+        raise ValueError(error)
+    return value
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -75,17 +91,14 @@ class RefreshSecretRecord:
         elif not isinstance(self.refresh_secret, str) or not self.refresh_secret.strip():
             raise ValueError("refresh_secret_required")
         if self.state == "refreshing":
-            if not isinstance(self.active_attempt_id, str) or not self.active_attempt_id:
+            if self.active_attempt_id is None:
                 raise ValueError("refresh_attempt_required")
+            _safe_attempt_id(self.active_attempt_id, "refresh_attempt_invalid")
         elif self.active_attempt_id is not None:
             raise ValueError("active_attempt_only_while_refreshing")
-        if self.last_attempt_id is not None and (
-            not isinstance(self.last_attempt_id, str) or not self.last_attempt_id
-        ):
-            raise ValueError("last_attempt_invalid")
-        if self.failure is not None and (
-            not isinstance(self.failure, str) or not self.failure or len(self.failure) > 128
-        ):
+        if self.last_attempt_id is not None:
+            _safe_attempt_id(self.last_attempt_id, "last_attempt_invalid")
+        if self.failure is not None and self.failure not in _FAILURE_CODES:
             raise ValueError("secret_store_failure_invalid")
 
     def to_safe_dict(self) -> dict[str, object]:
@@ -227,16 +240,24 @@ class VersionedHostCredentialSource:
         self._attempt_id_factory = attempt_id_factory or (lambda: uuid4().hex)
 
     def _read(self) -> RefreshSecretRecord:
-        record = self._store.read(self._binding)
+        record = None
+        store_failed = False
+        try:
+            record = self._store.read(self._binding)
+        except SecretStoreError:
+            store_failed = True
+        if store_failed:
+            raise CredentialAuthBlocked("credential_secret_store_unavailable")
         if type(record) is not RefreshSecretRecord or record.binding != self._binding:
             raise CredentialAuthBlocked("credential_secret_store_integrity_error")
         return record
 
     @staticmethod
     def _fixed_attempt(value: str) -> str:
-        if not isinstance(value, str) or not value or len(value) > 128:
-            raise CredentialAuthBlocked("credential_refresh_attempt_invalid")
-        return value
+        try:
+            return _safe_attempt_id(value, "credential_refresh_attempt_invalid")
+        except ValueError:
+            raise CredentialAuthBlocked("credential_refresh_attempt_invalid") from None
 
     def assert_available(self) -> None:
         record = self._read()
@@ -269,9 +290,17 @@ class VersionedHostCredentialSource:
             active_attempt_id=attempt_id,
             failure=None,
         )
+        saved = None
+        failure: str | None = None
         try:
-            return self._cas(current, claimed)
+            saved = self._cas(current, claimed)
         except SecretStoreAmbiguousWrite:
+            failure = "ambiguous"
+        except SecretStoreConflict:
+            failure = "conflict"
+        if failure == "conflict":
+            raise CredentialRefreshInProgress("credential_refresh_owned_elsewhere")
+        if failure == "ambiguous":
             observed = self._read()
             if (
                 observed.state == "refreshing"
@@ -279,9 +308,9 @@ class VersionedHostCredentialSource:
                 and observed.version == claimed.version
             ):
                 return observed
-            raise CredentialAuthBlocked("credential_refresh_claim_ambiguous") from None
-        except SecretStoreConflict:
-            raise CredentialRefreshInProgress("credential_refresh_owned_elsewhere") from None
+            raise CredentialAuthBlocked("credential_refresh_claim_ambiguous")
+        assert type(saved) is RefreshSecretRecord
+        return saved
 
     def _block(
         self,
@@ -299,9 +328,13 @@ class VersionedHostCredentialSource:
             last_attempt_id=attempt_id,
             failure=failure,
         )
+        saved = None
+        store_failed = False
         try:
-            return self._cas(current, blocked)
+            saved = self._cas(current, blocked)
         except (SecretStoreConflict, SecretStoreAmbiguousWrite):
+            store_failed = True
+        if store_failed:
             observed = self._read()
             if (
                 observed.state == state
@@ -309,7 +342,9 @@ class VersionedHostCredentialSource:
                 and observed.failure == failure
             ):
                 return observed
-            raise CredentialAuthBlocked("credential_refresh_recovery_state_uncertain") from None
+            raise CredentialAuthBlocked("credential_refresh_recovery_state_uncertain")
+        assert type(saved) is RefreshSecretRecord
+        return saved
 
     def _validate_exchange_result(
         self,
@@ -353,9 +388,15 @@ class VersionedHostCredentialSource:
             last_attempt_id=attempt_id,
             failure=None,
         )
+        saved = None
+        store_failure: str | None = None
         try:
-            return self._cas(current, committed)
+            saved = self._cas(current, committed)
         except SecretStoreAmbiguousWrite:
+            store_failure = "ambiguous"
+        except SecretStoreConflict:
+            store_failure = "conflict"
+        if store_failure == "ambiguous":
             observed = self._read()
             if (
                 observed.state == "ready"
@@ -372,12 +413,14 @@ class VersionedHostCredentialSource:
                     state="blocked_ambiguous",
                     failure="secret_store_commit_ambiguous",
                 )
-            raise CredentialAuthBlocked("credential_refresh_persistence_ambiguous") from None
-        except SecretStoreConflict:
+            raise CredentialAuthBlocked("credential_refresh_persistence_ambiguous")
+        if store_failure == "conflict":
             observed = self._read()
             if observed.state == "revoked":
-                raise CredentialRevokedError("credential_source_revoked") from None
-            raise CredentialAuthBlocked("credential_refresh_persistence_conflict") from None
+                raise CredentialRevokedError("credential_source_revoked")
+            raise CredentialAuthBlocked("credential_refresh_persistence_conflict")
+        assert type(saved) is RefreshSecretRecord
+        return saved
 
     def refresh_access(
         self,
@@ -422,8 +465,6 @@ class VersionedHostCredentialSource:
             elif isinstance(error, SystemExit):
                 interrupted = SystemExit
 
-        # Handle provider failure outside the exception handler so secret-bearing
-        # provider exceptions are not retained as __context__ on outward errors.
         if exchange_failure == "rejected":
             self._block(
                 claimed,
@@ -463,6 +504,26 @@ class VersionedHostCredentialSource:
         self._commit_success(claimed, attempt_id=attempt_id, result=result)
         return result.grant
 
+    def _recover_cas(
+        self,
+        current: RefreshSecretRecord,
+        replacement: RefreshSecretRecord,
+    ) -> RefreshSecretRecord:
+        saved = None
+        store_failure: str | None = None
+        try:
+            saved = self._cas(current, replacement)
+        except SecretStoreAmbiguousWrite:
+            store_failure = "ambiguous"
+        except SecretStoreConflict:
+            store_failure = "conflict"
+        if store_failure == "ambiguous":
+            raise CredentialAuthBlocked("credential_recovery_persistence_ambiguous")
+        if store_failure == "conflict":
+            raise SecretStoreConflict("secret_store_version_conflict")
+        assert type(saved) is RefreshSecretRecord
+        return saved
+
     def recover_ambiguous_not_applied(
         self,
         *,
@@ -484,7 +545,7 @@ class VersionedHostCredentialSource:
             active_attempt_id=None,
             failure=None,
         )
-        return self._cas(current, replacement)
+        return self._recover_cas(current, replacement)
 
     def recover_ambiguous_with_rotated_secret(
         self,
@@ -512,7 +573,7 @@ class VersionedHostCredentialSource:
             active_attempt_id=None,
             failure=None,
         )
-        return self._cas(current, replacement)
+        return self._recover_cas(current, replacement)
 
     def revoke(self) -> RefreshSecretRecord:
         current = self._read()
@@ -526,4 +587,20 @@ class VersionedHostCredentialSource:
             active_attempt_id=None,
             failure="credential_source_revoked",
         )
-        return self._cas(current, replacement)
+        saved = None
+        store_failure: str | None = None
+        try:
+            saved = self._cas(current, replacement)
+        except SecretStoreAmbiguousWrite:
+            store_failure = "ambiguous"
+        except SecretStoreConflict:
+            store_failure = "conflict"
+        if store_failure:
+            observed = self._read()
+            if observed.state == "revoked" and observed.refresh_secret is None:
+                return observed
+            if store_failure == "ambiguous":
+                raise CredentialAuthBlocked("credential_revoke_persistence_ambiguous")
+            raise CredentialAuthBlocked("credential_revoke_persistence_conflict")
+        assert type(saved) is RefreshSecretRecord
+        return saved
