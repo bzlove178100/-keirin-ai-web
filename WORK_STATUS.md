@@ -20,7 +20,7 @@ Unless the user explicitly authorizes a new, specific boundary:
 
 Agent-only checkpoint/activity persistence and queue coordination in staging are authorized and active. Exact-task lease acquisition is deployed. No always-on worker is active.
 
-Latest direct read-only staging verification: 2026-09-26 during versioned-secret-store work; no live run was started:
+Latest direct read-only staging verification during credential-boundary work; no live run was started:
 
 - single-active trusted-run guard: **present**;
 - fresh trusted tasks currently `queued` / `running`: **0**;
@@ -52,12 +52,15 @@ Key merged milestones:
 - PR #66–#72: bounded integration evidence, trusted run-instance identity, exact-task claim, exact worker binding, exact-claim Edge path and idempotent enqueue preparation.
 - PR #75 (`8b17f67c8858fedf5494c738217169e33f1336fe`): one-active-fresh-trusted-run-per-owner database guard after the two-run concurrency defect was found.
 - PR #76 (`2eda84c768edb53e9e9429b7f18761a37bac7ffa`): exact runtime instance-token binding and self-enqueue/verify before worker construction.
-- PR #77 (`ead3368968deb2f4c889f3061f07371a0610977f`): manual `workflow_dispatch`-only one-shot host with read-only GitHub permissions, fixed concurrency and timeout; it has not been dispatched by current code-only work.
+- PR #77 (`ead3368968deb53e9e9429b7f18761a37bac7ffa`): manual `workflow_dispatch`-only one-shot host with read-only GitHub permissions, fixed concurrency and timeout; it has not been dispatched by current code-only work.
 - PR #79 (`4ad117907e4416d8ebeba9d14209884cf1f0c5ed`): redacted runtime credential preflight and authentication/session lifecycle boundary.
-- PR #80 (`d85e6c008fc725accf5fd63a19a6c945457c37d4`): static `CredentialProvider`, redacted `CredentialSnapshot`, typed lifetime/scope/revocation failures, 19 tests and CI integration.
-- PR #81: synchronized this status before refresh-provider implementation.
-- PR #82 (`f684bfc3e8409558d508ad521113caaf88420253`): `RefreshingCredentialProvider` and `HostCredentialSource` boundary. It exposes access-only credential snapshots, pins provider/account/capabilities, validates TTL, prevents simultaneous refresh in one provider object, makes refresh failure terminal `blocked_auth`, prioritizes revoke, prevents clock rollback from extending TTL and preserves immutable TaskSpec identity across credential rotation. Its 26 dedicated tests and all required PR/main workflows passed; Pages also passed.
-- PR #83 (`30920f298c3ac8083ca764935369edc7e28b5237`): added the offline/reference versioned refresh-secret store and exchange boundary with strict version CAS/fencing, fixed refresh attempt IDs, durable `refreshing` ownership before provider contact, rotated-secret persistence before access return, explicit `blocked_auth` / `blocked_ambiguous`, read-back handling for ambiguous store writes, operator-only recovery, revocation and fault-injection/concurrency tests. The first PR run found that provider exceptions remained in Python exception context; the implementation was changed so outward fixed errors are raised after leaving the provider exception handler. All four required PR workflows then passed. After merge, the four main push workflows and Pages deployment also passed.
+- PR #80 (`d85e6c008fc725accf5fd63a19a6c945457c37d4`): static `CredentialProvider`, redacted `CredentialSnapshot`, typed lifetime/scope/revocation failures and CI coverage.
+- PR #82 (`f684bfc3e8409558d508ad521113caaf88420253`): access-only `RefreshingCredentialProvider` / `HostCredentialSource`, exact provider/account/capability validation, TTL/clock-rollback protection, single-object refresh exclusion, terminal auth failure and rotation without TaskSpec identity changes.
+- PR #83 (`30920f298c3ac8083ca764935369edc7e28b5237`): offline/reference versioned refresh-secret store/exchange boundary with strict CAS/fencing, durable `refreshing` ownership, rotation generation, ambiguous-outcome blocking, operator recovery and fault injection.
+- PR #84 (`02e71c2a587cf3f55ee5b6d1671c5b5a9489fbea`): synchronized this status after the versioned refresh-secret boundary.
+- PR #85 (`df6100cd6ba4bfea834659417ef482ad78922456`): hardened attempt IDs and failure metadata, mapped secret-store errors to fixed redacted outward failures, and added hostile-error regression coverage. All four required PR workflows passed before merge.
+- PR #86 (`f0594f6376f82805d311d9bd9a0ab4b0bc1aba6c`): added `DurableVersionedSecretStore` and `DurableSecretBackend` contract with opaque binding keys, strict schema/binding validation, atomic CAS outcome classes, exact read-back verification and fake-backend fault injection. No real durable secret backend was configured. All four required PR workflows passed before merge.
+- PR #87 (`6031eac456cfeb834e9fcb31a20da7b671099e99`): added `CredentialBoundToolAdapter` / `CredentialRequirement` so access-only credential acquisition occurs before an underlying provider action. Credential failures become fixed terminal `BlockedAction` states before provider invocation; snapshots exist only in local action context, requirements cover every action/verifier and tests verify persisted state/activity do not contain the credential secret. All four required PR workflows passed before merge.
 
 ## Hosted staging/runtime state
 
@@ -70,7 +73,7 @@ Deployed agent functions:
 - `agent-runtime-dev`: **v6 / ACTIVE / verify_jwt=true**. Its safety contract reports `runtime_task_execution_enabled=false`.
 - `agent-exact-claim-dev`: **v1 / ACTIVE / verify_jwt=true**. It accepts only exact fresh trusted status-run claim operations and does not enable task/provider execution.
 
-No migration, Edge deployment or live task execution was performed by PR #82 or PR #83.
+PR #82–#87 did not perform a migration, Edge deployment, provider refresh, secret-store integration or live task execution.
 
 ## Bounded live read-only validation history
 
@@ -82,21 +85,23 @@ A future workflow dispatch or any new hosted execution requires a new explicit l
 
 Current implemented layers:
 
-1. **Static access provider** — in-memory, bounded/manual-host credential snapshot, no refresh.
-2. **Generic refresh provider** — access-only grants from an injected `HostCredentialSource`; exact provider/account/capability match, TTL enforcement, monotonic elapsed time, local single-flight refresh, terminal auth failure and revoke semantics.
-3. **Versioned source/store reference contract** — version-CAS refresh ownership, fixed attempts, rotation generation, durable block on ambiguous provider/store outcomes and explicit evidence-based recovery.
+1. **Static access provider** — in-memory bounded/manual-host access snapshot, no refresh.
+2. **Generic refresh provider** — access-only grants from an injected `HostCredentialSource`, exact binding/TTL checks and terminal fail-closed auth state.
+3. **Versioned refresh source/store** — CAS refresh ownership, attempt fencing, rotated-secret persistence before access return, durable ambiguous blocking and evidence-based operator recovery.
+4. **Durable backend adapter contract** — opaque binding key, schema/binding validation, explicit conflict/ambiguous/unavailable backend outcomes and exact CAS read-back. Only a fake backend is tested; no real durable secret store is connected.
+5. **Credential-gated tool adapter** — acquires an access-only snapshot before each underlying provider action/verifier and blocks before provider invocation when authentication is unavailable. The snapshot is local action context only and is not task/checkpoint/activity state.
 
-`InMemoryVersionedSecretStore` is a reference/fault-test implementation only. It is **not** a production secret store. `RefreshExchange` is an interface only; no real OAuth/authentication refresh is configured or called.
+`InMemoryVersionedSecretStore` and fake durable backends are reference/fault-test implementations only. No real OAuth/token refresh is configured or called. `DURABLE_SECRET_STORE_ADAPTER.md`, `SECRET_STORE_RECOVERY.md`, `CREDENTIAL_GATED_ADAPTER.md` and `AUTH_SESSION_LIFECYCLE.md` describe the boundaries.
 
-`SECRET_STORE_RECOVERY.md` records the contract: a real store must provide cross-process atomic CAS/fencing and host-only secret protection; a real exchange must validate provider identity/scopes, bound timeouts and return rotated material through the host-only boundary. Ambiguous outcomes are never automatically retried.
+A blocked credential-gated task is not silently retried after authentication repair. Since `AgentRunner` records the step attempt before action invocation, a later retry requires explicit reconciliation proving that no underlying provider action ran.
 
-Runners/adapters still have no refresh-secret handle. Access snapshots remain the only intended provider-facing credential view.
+The generic wrapper prevents a `CredentialSnapshot` object from being returned as action data, but cannot infer whether an arbitrary string is a token. Concrete provider adapters remain responsible for never returning/logging credential strings and for using only the injected snapshot in provider authentication headers/transport state.
 
 ## Current agent state
 
-The project has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, tested static/refresh access credential providers, and an offline versioned refresh-secret CAS/recovery contract.
+The project has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, one-shot host preparation, tested static/refresh access providers, versioned refresh-secret CAS/recovery, a durable-store adapter contract and a pre-provider credential gate.
 
-It is still **not** an always-on self-contained autonomous agent. No scheduler/recurrence is active, provider generation/write bindings remain unbound, report delivery is not configured, deployed runtime task execution remains OFF, and a real durable secret store/auth refresh integration is not configured.
+It is still **not** an always-on self-contained autonomous agent. No scheduler/recurrence is active, provider generation/write bindings remain unbound, report delivery is not configured, deployed runtime task execution remains OFF, and no real durable secret store/auth refresh integration is configured.
 
 ## Next work / next boundary
 
@@ -104,15 +109,14 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. harden the versioned-store safe metadata contract: fixed failure classifications and safe attempt-ID format;
-2. ensure secret-store adapter failures cannot leak provider/store exception payloads through outward exception context/logging;
-3. define a concrete durable-store adapter contract and fault-test it without deploying new secret storage;
-4. design the runner/adapter credential binding so authentication failure blocks the task before any provider action;
-5. keep refresh-provider integration, live secret storage, scheduler/recurrence and new hosted execution as separate later boundaries.
+1. add a host credential-binding registry that pins action -> provider/account/capability requirements independently of TaskSpec input;
+2. reject adapter/task attempts to select or override credential provider/account from untrusted task args;
+3. add recovery evidence distinguishing `credential_unavailable_before_provider` from ambiguous provider-side effects so reconciliation can prove a safe retry path;
+4. keep real secret-store/provider integration, live hosted task execution, scheduler/recurrence and new provider permissions as separate later boundaries.
 
 Generation providers, prediction writes, race-data auto-fetch and report delivery remain separately disabled.
 
-No race screenshots or owner credential resend is needed for the current code-only work.
+No race screenshots or owner credential resend is needed for current code-only preparation.
 
 ## 21:00 report requirement
 
