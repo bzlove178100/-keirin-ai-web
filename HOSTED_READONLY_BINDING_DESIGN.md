@@ -22,7 +22,13 @@ The host must compare the entire claimed TaskSpec fingerprint against its truste
 
 No new CLI or workflow should infer authorization from the presence of credentials, an environment string such as `"false"`, or task JSON. Any future activation input must be an explicit host-owned boolean, separate from task data. Keep the Edge runtime's execution flag false: the future external host is a different execution boundary.
 
-## Findings that must be fixed before live binding
+## Implementation progress
+
+`tools/agent_github_sha_bridge.py` now provides the separate, unactivated `ShaPinnedGitHubReadOnlyBridge`. It addresses file SHA pinning/validation, same-SHA workflow identity and latest-attempt checks with bounded pagination, final main recheck, scoped repository/file reads, redirect rejection and sanitized provider failures. Its serializable observation passes through the existing action-result/verifier contract and can be verified by a fresh bridge instance.
+
+The legacy smoke bridge remains unchanged and is not evidence of strict hosted verification. Durable observation persistence/reconciliation, exact claimed TaskSpec validation, host composition and lease-time budgeting remain unimplemented. No hosted activation is implied.
+
+## Findings and remaining work before live binding
 
 The existing GitHub bridge is a useful read-only foundation, but it is not yet sufficient evidence for a same-commit hosted status check:
 
@@ -52,6 +58,6 @@ After these tests pass, review `HOSTED_READONLY_ACTIVATION.md`. Live hosted exec
 
 ## Next implementation slice
 
-Prepare the SHA-pinned GitHub observation/verification behavior and its regression tests first. Then add the closed-by-default composition factory and trusted-task policy with an injected end-to-end test. Keep these changes separate from live host/session provisioning.
+Bind the prepared `ShaPinnedGitHubReadOnlyBridge` through a closed-by-default composition factory and trusted-task policy, adding durable observation evidence and lease-time budgeting with injected end-to-end tests. Keep these changes separate from live host/session provisioning.
 
 Long-lived authentication, always-on scheduling, general generation providers, sales ingestion and 21:00 report delivery remain later work. Unknown sales are never zero-filled.
