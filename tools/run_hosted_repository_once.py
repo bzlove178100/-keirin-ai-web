@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from agent_core.single_run_host import (
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from agent_core.single_run_host import (  # noqa: E402
     AUTHORIZATION_ENV,
     GITHUB_TOKEN_ENV,
     OWNER_BEARER_ENV,
