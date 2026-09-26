@@ -25,6 +25,7 @@ class FakeTransport:
         self.rows = {}
         self.calls = []
         self.concurrent_create = False
+        self.other_active_conflict = False
 
     @staticmethod
     def row_for(spec):
@@ -62,6 +63,8 @@ class FakeTransport:
             task_id = payload["task"]["task_id"]
             from agent_core.model import TaskSpec
             spec = TaskSpec.from_dict(payload["task"])
+            if self.other_active_conflict:
+                return {"success": False, "error": "duplicate key", "backend_code": "23505"}
             if self.concurrent_create and task_id not in self.rows:
                 self.rows[task_id] = self.row_for(spec)
                 return {"success": False, "error": "duplicate key", "backend_code": "23505"}
@@ -115,6 +118,18 @@ class TrustedRunEnqueueTest(unittest.TestCase):
         self.assertEqual([mode for mode, _ in transport.calls], [
             "checkpoint_get", "checkpoint_create", "checkpoint_get",
         ])
+
+    def test_distinct_active_run_conflict_fails_closed_without_claiming(self):
+        transport = FakeTransport()
+        transport.other_active_conflict = True
+        spec = self.spec()
+
+        with self.assertRaisesRegex(TrustedRunAlreadyUsed, "another_trusted_run_instance_is_active"):
+            TrustedRunEnqueuer(HostedCheckpointClient(transport)).ensure_queued(spec)
+        self.assertEqual([mode for mode, _ in transport.calls], [
+            "checkpoint_get", "checkpoint_create", "checkpoint_get",
+        ])
+        self.assertFalse(any(mode.startswith("queue_") for mode, _ in transport.calls))
 
     def test_consumed_instance_is_never_silently_reused(self):
         transport = FakeTransport()
