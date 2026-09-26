@@ -63,6 +63,9 @@ Key merged milestones:
 - PR #86 (`f0594f6376f82805d311d9bd9a0ab4b0bc1aba6c`): added `DurableVersionedSecretStore` and a provider-neutral durable-backend contract. Binding keys are opaque SHA-256 identifiers, stored records/CAS read-back are validated, backend conflict/ambiguous/unavailable conditions are mapped to fixed errors, and fake-backend fault injection verifies composition with `VersionedHostCredentialSource`. No real backend was connected.
 - PR #87 (`6031eac456cfeb834e9fcb31a20da7b671099e99`): added `CredentialBoundToolAdapter` and per-action `CredentialRequirement`. Credentials are acquired before provider actions/verifiers, access-only snapshots are injected only into local in-memory action context, auth failures block before provider invocation and terminal blocked tasks do not silently retry. No real provider was connected.
 - PR #88 (`719245a36c56d0c431ef2cd65cb1befdb5122eb6`): hardened the credential-gated provider boundary so credential-source/provider-action exception payloads are not persisted, provider `BlockedAction` reasons are replaced with fixed classifications, and action results containing a credential snapshot or any access-secret value are rejected. Dedicated leak/regression tests passed. All four PR workflows passed before merge; all four main push workflows and Pages deployment passed after merge.
+- PR #89 (`b9f4abdbd9bcd29239af8df151345bec24ea910e`): synchronized this status through the durable authentication and credential-gating work.
+- PR #90 (`0c7021371d0829766454ef847a93903e747139e4`): added the offline composition contract `DurableSecretBackend -> DurableVersionedSecretStore -> VersionedHostCredentialSource -> RefreshingCredentialProvider -> CredentialBoundToolAdapter`. The factory accepts no raw refresh secret and performs no network I/O, seeding, migration, dispatch or background work. End-to-end fake-backend/exchange tests cover successful rotation, ambiguous exchange, ambiguous durable commit read-back, CAS claim conflict, revocation, completed-task no-replay and absence of access/refresh credential material from `FileStateStore` task/activity persistence. All four required PR workflows passed before merge.
+- PR #91 (`315c9e87cc607f0669cef2f5752dd27ec1e55ce2`): introduced `SafeActionError` and changed `AgentRunner` so arbitrary untyped action/verifier exception text is never written to durable task/activity state by default. Credential-gated action failures use fixed safe codes, runtime-bridge `blocked_reason` values are treated as untrusted, and read-only worker invariant failures use explicit safe classifications. The first PR CI run exposed one expected invariant-code mismatch; it was fixed by classifying that known internal read-only violation with `SafeActionError`, after which all four PR workflows passed. After merge, all four main push workflows and Pages deployment also passed.
 
 ## Hosted staging/runtime state
 
@@ -75,7 +78,7 @@ Deployed agent functions:
 - `agent-runtime-dev`: **v6 / ACTIVE / verify_jwt=true**. Its safety contract reports `runtime_task_execution_enabled=false`.
 - `agent-exact-claim-dev`: **v1 / ACTIVE / verify_jwt=true**. It accepts only exact fresh trusted status-run claim operations and does not enable task/provider execution.
 
-PR #82–#88 did not deploy a new Edge Function, apply a secret-store migration, perform a real authentication refresh or start a live hosted run.
+PR #82–#91 did not deploy a new Edge Function, apply a secret-store migration, perform a real authentication refresh or start a live hosted run.
 
 ## Bounded live read-only validation history
 
@@ -92,6 +95,8 @@ Current implemented layers:
 3. **Versioned refresh source/store contract** — version-CAS refresh ownership, attempt fencing, rotation generation, durable blocking on ambiguous provider/store outcomes and explicit evidence-based recovery.
 4. **Durable backend adapter contract** — backend-neutral CAS/read/write adapter with opaque binding keys, strict schema/integrity checks and fixed failure mapping. The implementation is tested against fakes only.
 5. **Credential-gated provider adapter** — per-action capability/TTL policy, pre-action credential acquisition, local access-only snapshot injection, fixed auth/provider failure classifications and result leak detection.
+6. **Offline full-stack composition** — a dependency-injection factory composes the durable backend/store/source/provider/gated-adapter chain without accepting raw refresh material or activating a service.
+7. **Persistence-safe action errors** — `AgentRunner` persists only validated `SafeActionError` codes or fixed redacted classifications for untyped action/verifier exceptions; runtime bridge blocked payloads are not copied into persistent state.
 
 `InMemoryVersionedSecretStore` is reference/fault-test only. `DurableVersionedSecretStore` defines the contract around a future host-only durable backend but is not itself a configured production backend. `RefreshExchange` remains an interface only; no real OAuth/authentication refresh is configured or called.
 
@@ -99,7 +104,7 @@ Runners/adapters receive no refresh-secret handle. Provider actions receive only
 
 ## Current agent state
 
-The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract and a credential-gated provider-action boundary.
+The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract, an offline full credential-stack composition path, a credential-gated provider-action boundary and persistence-safe action/verifier error handling.
 
 It is still **not** an always-on self-contained autonomous agent. No scheduler/recurrence is active, provider generation/write bindings remain unbound, report delivery is not configured, deployed runtime task execution remains OFF, and no real durable secret backend or real provider refresh exchange is connected.
 
@@ -109,10 +114,10 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. add an offline composition/factory contract for `DurableSecretBackend -> DurableVersionedSecretStore -> VersionedHostCredentialSource -> RefreshingCredentialProvider -> CredentialBoundToolAdapter -> AgentRunner` using only fake/injected backend and exchange implementations;
-2. fault-test end-to-end CAS conflict, ambiguous refresh, revoke and rotated-secret persistence so provider work is blocked before side effects and no credential material reaches TaskSpec/state/activity/checkpoint persistence;
-3. define a general safe action-error persistence contract for future non-credential adapters so arbitrary provider/connector exception payloads do not enter the ledger by default;
-4. only after those code-only contracts are stable, separately design a real durable secret backend/provider refresh integration with explicit host/security review;
+1. design a host-only **ephemeral diagnostic sink** so operators can receive typed failure diagnostics without weakening the durable redaction contract; default persistent state must remain fixed/redacted and the sink must be explicitly injected;
+2. extend static checks/tests so future adapters cannot accidentally persist raw connector/provider exception text or untrusted bridge `blocked_reason` values;
+3. define the security/operational requirements for a concrete durable secret backend and real provider refresh exchange: encryption/secret ownership, CAS semantics, timeout/no-blind-retry policy, refresh-token rotation recovery, audit metadata and revocation;
+4. only after that review, implement a concrete backend/exchange on a separate boundary; do not bind it to live runner/provider execution in the same change;
 5. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 
 No race screenshots or owner credential resend is needed for the current code-only work.
