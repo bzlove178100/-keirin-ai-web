@@ -26,7 +26,7 @@ No new CLI or workflow should infer authorization from the presence of credentia
 
 `tools/agent_github_sha_bridge.py` now provides the separate, unactivated `ShaPinnedGitHubReadOnlyBridge`. It addresses file SHA pinning/validation, same-SHA workflow identity and latest-attempt checks with bounded pagination, final main recheck, scoped repository/file reads, redirect rejection and sanitized provider failures. Its serializable observation passes through the existing action-result/verifier contract and can be verified by a fresh bridge instance.
 
-The legacy smoke bridge remains unchanged and is not evidence of strict hosted verification. Durable observation persistence/reconciliation, exact claimed TaskSpec validation, host composition and lease-time budgeting remain unimplemented. No hosted activation is implied.
+The legacy smoke bridge remains unchanged and is not evidence of strict hosted verification. The closed-by-default composition now validates the exact claimed TaskSpec, persists observations and verification results through the existing activity ledger, and checks/renews the queue fence around provider requests. Injected integration tests cover these paths. Read-only recovery inspection and hard wall-clock deadline enforcement remain outstanding; cooperative elapsed/lease checks and socket timeouts do not forcibly terminate a stalled process. No hosted activation is implied.
 
 ## Findings and remaining work before live binding
 
@@ -58,6 +58,10 @@ After these tests pass, review `HOSTED_READONLY_ACTIVATION.md`. Live hosted exec
 
 ## Next implementation slice
 
-Bind the prepared `ShaPinnedGitHubReadOnlyBridge` through a closed-by-default composition factory and trusted-task policy, adding durable observation evidence and lease-time budgeting with injected end-to-end tests. Keep these changes separate from live host/session provisioning.
+Use `prepare_repository_worker()` in `tools/agent_hosted_repository_worker.py` only with its default execution authorization false until separately approved. Next implement a read-only recovery inspector for checkpoint/fence/activity evidence and hard run/request deadline enforcement. The host must catch `HostedRunInterrupted` only to stop and report/inspect; never use it as a retry signal. Keep these changes separate from live host/session provisioning.
 
 Long-lived authentication, always-on scheduling, general generation providers, sales ingestion and 21:00 report delivery remain later work. Unknown sales are never zero-filled.
+
+## Evidence and interruption contract
+
+`github_observation` and `github_verification` events preserve SHA/file/CI evidence, TaskSpec fingerprint, lease generation and revision. They do not imply queue completion: activity append and queue save are separate transactions. A lost acknowledgement can leave valid evidence with a running or completed checkpoint. Reconciliation must inspect both before deciding what happened, and must not repeat provider execution automatically. The current worker rejects previously attempted tasks and performs no automatic resume.
