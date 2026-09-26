@@ -23,6 +23,15 @@ from .credential_provider import (
     CredentialRevokedError,
 )
 from .delivery import BridgeReportDelivery, DeliveryResult, ReportDelivery
+from .durable_secret_store import (
+    DurableSecretBackend,
+    DurableSecretBackendAmbiguousWrite,
+    DurableSecretBackendConflict,
+    DurableSecretBackendError,
+    DurableSecretBackendUnavailable,
+    DurableVersionedSecretStore,
+    SECRET_RECORD_SCHEMA_VERSION,
+)
 from .exact_task_queue import BoundExactTaskQueueClient, ExactTaskQueueClient
 from .hosted_activity import (
     HostedActivityClient,
@@ -122,6 +131,14 @@ __all__ = [
     "CredentialScopeError",
     "CredentialLifetimeError",
     "CredentialRevokedError",
+
+    "DurableSecretBackend",
+    "DurableSecretBackendAmbiguousWrite",
+    "DurableSecretBackendConflict",
+    "DurableSecretBackendError",
+    "DurableSecretBackendUnavailable",
+    "DurableVersionedSecretStore",
+    "SECRET_RECORD_SCHEMA_VERSION",
 
     "InMemoryVersionedSecretStore",
     "RefreshExchange",
