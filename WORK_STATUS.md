@@ -61,6 +61,18 @@ Key merged milestones:
 - The legacy read-only smoke bridge is deliberately not replaced in this slice: its in-workflow check cannot require its own still-running workflow. Its older CI selection is not used as evidence that the new hosted path has passed. Hosted composition must bind the strict class.
 - Deployed runtime source was read back with service v6 and execution/prediction/auto-fetch flags still false. No deployment, migration, queue claim or live hosted execution occurred.
 
+## Hosted repository composition preparation (2026-09-26)
+
+- Reconfirmed main at PR #62 merge `5bc2b67576db2a9e24970d55e678ebf2ce0410de` and its four passing PR workflows before this slice. Deployed runtime source still reports service v6 and execution OFF.
+- `tools/agent_hosted_repository_worker.py` now composes SupabaseEdgeTransport, HostedQueueClient, HostedActivityClient, the strict SHA bridge and HostedReadOnlyWorker. Construction and the default run gate perform zero provider/Edge I/O.
+- The complete claimed TaskSpec must match the trusted repository template fingerprint. Prior attempts/completed steps are blocked for explicit reconciliation; scope mismatch never invokes GitHub. A local nonblocking lock prevents concurrent reuse of one worker object; database lease/fencing remains the cross-process protection.
+- The observation is appended to the existing agent activity ledger before CI verification. Verification evidence (including a negative result) is also appended before task completion. Both carry TaskSpec fingerprint, lease generation and revision. No DB schema change is needed.
+- Fenced saves surround GitHub reads and evidence acknowledgement. Current lease budget must exceed 30 seconds, and the run has an elapsed-time guard of 180 seconds. HTTP operations retain the existing 20-second socket timeout. This is a cooperative budget check, **not a hard process wall-clock cancellation guarantee**; an indefinitely slow response is a remaining live-host concern.
+- `HostedRunInterrupted` deliberately bypasses the runner's automatic Exception retry loop. An ambiguous save/append stops without a compensating POST or provider replay. The durable attempts/evidence remain available for explicit inspection/reconciliation. The host must not automatically restart this signal.
+- Persistence and completion are separate: activity append and queue CAS are not one atomic transaction. Events are evidence tied to a fence, not proof that the final queue transition succeeded. A completed checkpoint with a missing final activity acknowledgement must be inspected, not re-executed.
+- Validation: 13 injected full-composition tests passed (including actual Edge transport serialization and real queue/activity clients), plus read-only worker 5, queue client 7, strict SHA bridge 15, runner interruption 5 and web/safety regression. No live hosted task, owner token or real agent-persistence write was used.
+- This change does not activate execution, deploy Supabase, alter permissions, schedule reports, or enable prediction writes/production/auto-fetch.
+
 ## Hosted persistence and queue state
 
 The user explicitly authorized **AI-agent-only task/activity persistence in staging**. That authorization does not extend to keirin prediction writes, production prediction, automatic race-data fetching, provider writes/generation, hosted task execution or report delivery.
@@ -135,7 +147,7 @@ It is still **not** an always-on self-contained autonomous agent. `agent-runtime
 
 Remaining major boundaries:
 
-1. implement and test the scoped repository/CI binding described in `HOSTED_READONLY_BINDING_DESIGN.md`;
+1. prepare read-only recovery inspection and hard deadline enforcement for the tested, unactivated hosted composition;
 2. separately authorize and configure any live hosted task execution before setting an execution host to enabled;
 3. test a real authenticated owner browser-to-Edge flow without storing the user's token;
 4. connect additional safe read-only Supabase/files/Web provider bindings where host authorization exists;
@@ -145,9 +157,9 @@ Remaining major boundaries:
 
 ## Next action
 
-The transport/checklist is merged in PR #60; the strict SHA-pinned bridge is now prepared separately from the legacy smoke binding. Next compose transport, queue/activity clients, `ShaPinnedGitHubReadOnlyBridge` and HostedReadOnlyWorker with exact trusted TaskSpec validation, durable observation evidence, bounded lease timing and fake end-to-end tests. See `HOSTED_READONLY_BINDING_DESIGN.md`.
+The closed-by-default composition is now implemented and tested with injected Edge/GitHub responses. Next add a read-only recovery inspector that compares checkpoint/fence identity and observation/verification events, distinguishing missing acknowledgements, expired running work and completed work without executing or requeueing it. Address hard request/run deadline enforcement before any live host is activated.
 
-Keep live `execution_authorized=False`, the Edge execution flag OFF and all existing keirin/report safety conditions unchanged. The hosted binding itself is not yet implemented; live owner-to-Edge validation and activation remain separately gated by the user's explicit authorization. No screenshots or tokens need to be resent for the next code-only step.
+Keep live `execution_authorized=False`, the Edge execution flag OFF and all keirin/report safety conditions unchanged. Actual owner-authenticated Edge-to-worker execution remains untested and requires the user's separate authorization plus a configured host/session. No screenshot or token resend is needed for the next code-only step.
 
 ## 21:00 report requirement
 
