@@ -49,6 +49,18 @@ Key merged milestones:
 - No Supabase deployment/migration, live hosted queue execution, credential provisioning, GitHub permission change or report scheduling was performed.
 - `HOSTED_READONLY_BINDING_DESIGN.md` now specifies the concrete composition, exact task/repository boundary, missing SHA-pinned CI verification, lease timing and injected integration acceptance tests. This is reviewed design preparation, not an implemented or live-tested binding.
 
+## SHA-pinned GitHub binding preparation (2026-09-26)
+
+- Added `tools/agent_github_sha_bridge.py` with `ShaPinnedGitHubReadOnlyBridge`, scoped to this repository and the three existing requirement/status files.
+- Resolves main once and fetches all files at that full SHA; validates file type, UTF-8/base64 content, size and Git blob identity.
+- Verifies the four reviewed workflow IDs and paths using same-SHA main push runs, bounded complete pagination and latest run/attempt selection. Pending, failed, missing or mismatched evidence cannot pass. Rechecks main and returns `main_changed` instead of mixing commits.
+- Verification consumes the action result's serializable observation, including with a fresh bridge instance. The existing AgentRunner wiring was tested with this binding. Persisting that observation for hosted interruption/reconciliation is still pending; this is not claimed as durable evidence storage.
+- The strict bridge refuses redirects and sanitizes provider failures/credential echoes. It adds no provider permission or live workflow binding.
+- Local validation: 15 strict-bridge tests, 4 legacy GitHub bridge tests, 8 runtime-bridge tests, web/safety regression and diff whitespace checks passed. The new tests are included in regression CI; PR check results are the authoritative merge gate.
+- Development-only live public GitHub GET validation also passed: all three files and all four required main push workflows matched `90e42ad4ebe843dd6b6a54017afa3297fa3713fa`; the final main read matched. No owner token, Supabase call or hosted queue execution was used for this check.
+- The legacy read-only smoke bridge is deliberately not replaced in this slice: its in-workflow check cannot require its own still-running workflow. Its older CI selection is not used as evidence that the new hosted path has passed. Hosted composition must bind the strict class.
+- Deployed runtime source was read back with service v6 and execution/prediction/auto-fetch flags still false. No deployment, migration, queue claim or live hosted execution occurred.
+
 ## Hosted persistence and queue state
 
 The user explicitly authorized **AI-agent-only task/activity persistence in staging**. That authorization does not extend to keirin prediction writes, production prediction, automatic race-data fetching, provider writes/generation, hosted task execution or report delivery.
@@ -133,7 +145,7 @@ Remaining major boundaries:
 
 ## Next action
 
-The transport/checklist is merged in PR #60. Next implement **SHA-pinned repository/CI observation** and regression coverage: the existing GitHub bridge reads a moving ref and selects completed CI runs without requiring the same SHA. Then compose transport, queue/activity clients, the restricted GitHub bridge and HostedReadOnlyWorker with exact TaskSpec validation and fake end-to-end tests. See `HOSTED_READONLY_BINDING_DESIGN.md`.
+The transport/checklist is merged in PR #60; the strict SHA-pinned bridge is now prepared separately from the legacy smoke binding. Next compose transport, queue/activity clients, `ShaPinnedGitHubReadOnlyBridge` and HostedReadOnlyWorker with exact trusted TaskSpec validation, durable observation evidence, bounded lease timing and fake end-to-end tests. See `HOSTED_READONLY_BINDING_DESIGN.md`.
 
 Keep live `execution_authorized=False`, the Edge execution flag OFF and all existing keirin/report safety conditions unchanged. The hosted binding itself is not yet implemented; live owner-to-Edge validation and activation remain separately gated by the user's explicit authorization. No screenshots or tokens need to be resent for the next code-only step.
 
