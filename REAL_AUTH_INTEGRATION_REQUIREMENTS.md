@@ -265,3 +265,8 @@ Recommended order:
 At the time this document is added, no concrete production secret backend or real provider
 refresh exchange is configured. Existing implementations and tests remain offline/fake or
 provider-neutral contracts. No live hosted task execution is authorized by this document.
+
+The 2026-09-27 candidate review is in `STAGING_SECRET_BACKEND_DESIGN.md`: Vault plus
+private PostgreSQL metadata is selected for an offline prototype, with real-secret
+activation blocked by the documented isolation and operational gates. This does not
+weaken any requirement in this document.
