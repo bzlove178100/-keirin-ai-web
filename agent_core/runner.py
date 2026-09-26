@@ -3,16 +3,39 @@ from __future__ import annotations
 from dataclasses import dataclass
 from copy import deepcopy
 import json
+import re
 from typing import Any, Callable, Mapping
 
 from .model import ActionResult, ArtifactUpdate, StepSpec, TaskSpec, TaskState
 from .store import FileStateStore
 
 Action = Callable[[dict[str, Any], dict[str, Any]], Any]
+_SAFE_ERROR_CODE_RE = re.compile(r"^[a-z][a-z0-9_.:-]{0,127}$")
 
 
 class BlockedAction(RuntimeError):
-    """Raised by an action when a prerequisite or permission is missing."""
+    """Raised by an action when a prerequisite or permission is missing.
+
+    The message becomes persistent task state and therefore must be a trusted, fixed
+    classification. Provider/connector payloads must never be forwarded through it.
+    """
+
+
+class SafeActionError(RuntimeError):
+    """Explicit persistence-safe action failure classification.
+
+    ``code`` must be a short static identifier, not provider text, exception text, user
+    content or credential material. AgentRunner persists only this validated code.
+    """
+
+    def __init__(self, code: str) -> None:
+        if not isinstance(code, str) or not _SAFE_ERROR_CODE_RE.fullmatch(code):
+            raise ValueError("safe_action_error_code_invalid")
+        self.code = code
+        super().__init__(code)
+
+    def __repr__(self) -> str:
+        return f"SafeActionError({self.code!r})"
 
 
 @dataclass(frozen=True)
@@ -33,6 +56,10 @@ class AgentRunner:
     deliberate: after an ambiguous side effect or failed verification, repeating the
     same action can create duplicate work. A future reconciliation operation must make
     the state safe before execution continues.
+
+    Untyped action/verifier exception messages are treated as untrusted provider data and
+    are never persisted. Adapters that need a stable diagnostic classification may raise
+    ``SafeActionError`` with a fixed validated code.
     """
 
     TERMINAL = {"completed", "blocked", "failed"}
@@ -68,6 +95,14 @@ class AgentRunner:
         if isinstance(value, dict):
             return value.get("verified") is True
         return False
+
+    @staticmethod
+    def _persistent_error(exc: Exception, *, verification: bool = False) -> str:
+        if isinstance(exc, SafeActionError):
+            return f"SafeActionError:{exc.code}"
+        if verification:
+            return "UntrustedActionError:verification_exception_redacted"
+        return "UntrustedActionError:action_exception_redacted"
 
     def _outcome(
         self,
@@ -192,8 +227,8 @@ class AgentRunner:
                 except BlockedAction as exc:
                     self._block(state, f"action_blocked:{exc}", step=step)
                     return self._outcome(state, executed=executed, skipped=skipped)
-                except Exception as exc:  # action adapters may raise provider-specific exceptions
-                    error = f"{type(exc).__name__}:{exc}"
+                except Exception as exc:  # provider/connector payload is untrusted by default
+                    error = self._persistent_error(exc)
                     state.last_error = error
                     self.store.append_event(
                         task_id=spec.task_id,
@@ -249,7 +284,7 @@ class AgentRunner:
                         state,
                         "verification_error_requires_reconciliation",
                         step=step,
-                        error=f"{type(exc).__name__}:{exc}",
+                        error=self._persistent_error(exc, verification=True),
                     )
                     return self._outcome(state, executed=executed, skipped=skipped)
                 if not verified:

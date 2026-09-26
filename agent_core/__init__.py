@@ -95,7 +95,7 @@ from .refresh_credentials import (
     RefreshingCredentialProvider,
 )
 from .reporting import DailyActivityReport, RevenueMetric, build_activity_report
-from .runner import AgentRunner, BlockedAction, RunOutcome
+from .runner import AgentRunner, BlockedAction, RunOutcome, SafeActionError
 from .runtime import BoundRuntime, RuntimeBinding, RuntimeManifest
 from .runtime_bridge import BridgeResponse, BridgeToolAdapter, RuntimeBridge
 from .scheduling import DAILY_REPORT_2100_JST, DailySchedule
@@ -172,6 +172,7 @@ __all__ = [
     "ArtifactState",
     "ArtifactUpdate",
     "BlockedAction",
+    "SafeActionError",
     "BoundExactTaskQueueClient",
     "BoundRuntime",
     "BridgeReportDelivery",

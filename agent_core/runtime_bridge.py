@@ -33,7 +33,11 @@ class BridgeResponse:
 
 
 class BridgeToolAdapter:
-    """Expose declared capabilities as AgentRunner actions through a host bridge."""
+    """Expose declared capabilities as AgentRunner actions through a host bridge.
+
+    A provider-returned ``blocked_reason`` is untrusted transport data. It is converted
+    to a fixed persistence-safe classification instead of being copied into task state.
+    """
 
     def __init__(
         self,
@@ -76,7 +80,7 @@ class BridgeToolAdapter:
             return value
         if isinstance(value, BridgeResponse):
             if value.blocked_reason:
-                raise BlockedAction(value.blocked_reason)
+                raise BlockedAction("runtime_bridge_blocked")
             return ActionResult(
                 message=value.message,
                 artifacts=tuple(value.artifacts),
@@ -85,7 +89,7 @@ class BridgeToolAdapter:
         if isinstance(value, dict):
             blocked_reason = value.get("blocked_reason")
             if blocked_reason:
-                raise BlockedAction(str(blocked_reason))
+                raise BlockedAction("runtime_bridge_blocked")
             artifacts = tuple(
                 item if isinstance(item, ArtifactUpdate) else ArtifactUpdate(**item)
                 for item in value.get("artifacts", ())
