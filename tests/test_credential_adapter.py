@@ -18,7 +18,7 @@ from agent_core.credential_adapter import (  # noqa: E402
 from agent_core.credential_provider import StaticInMemoryCredentialProvider  # noqa: E402
 from agent_core.model import ActionResult, StepSpec, TaskSpec  # noqa: E402
 from agent_core.refresh_credentials import CredentialAuthBlocked  # noqa: E402
-from agent_core.runner import AgentRunner  # noqa: E402
+from agent_core.runner import AgentRunner, BlockedAction  # noqa: E402
 from agent_core.store import FileStateStore  # noqa: E402
 
 SECRET = "credential-adapter-secret-fixture"
@@ -255,8 +255,90 @@ class CredentialBoundAdapterTest(unittest.TestCase):
             outcome = AgentRunner(FileStateStore(tmp), registry.actions()).run(task(verify=False))
             self.assertEqual(outcome.status, "blocked")
             self.assertEqual(outcome.blocked_reason, "action_error_requires_reconciliation")
-            self.assertIn("credential_snapshot_return_forbidden", outcome.last_error or "")
+            self.assertIn("credential_material_return_forbidden", outcome.last_error or "")
             self.assertNotIn(SECRET, all_runtime_text(tmp))
+
+    def test_access_token_cannot_be_returned_in_action_result(self):
+        def echo_secret(args, context):
+            snapshot = require_credential_snapshot(context)
+            return ActionResult(
+                message="provider response",
+                data={"authorization": f"Bearer {snapshot.secret('access_token')}"},
+            )
+
+        inner = OneActionAdapter(callback=echo_secret)
+        gated = CredentialBoundToolAdapter(
+            inner,
+            provider(capabilities=("provider.read",)),
+            (CredentialRequirement("provider.read", ("provider.read",)),),
+        )
+        registry = ToolRegistry()
+        registry.register(gated)
+        with tempfile.TemporaryDirectory() as tmp:
+            outcome = AgentRunner(FileStateStore(tmp), registry.actions()).run(task(verify=False))
+            self.assertEqual(outcome.status, "blocked")
+            self.assertEqual(outcome.blocked_reason, "action_error_requires_reconciliation")
+            self.assertEqual(outcome.last_error, "RuntimeError:credential_material_return_forbidden")
+            self.assertNotIn(SECRET, all_runtime_text(tmp))
+
+    def test_underlying_provider_exception_is_fixed_before_runner_persistence(self):
+        def fail_with_secret(args, context):
+            require_credential_snapshot(context)
+            raise RuntimeError(f"provider payload carried {SECRET}")
+
+        inner = OneActionAdapter(callback=fail_with_secret)
+        gated = CredentialBoundToolAdapter(
+            inner,
+            provider(capabilities=("provider.read",)),
+            (CredentialRequirement("provider.read", ("provider.read",)),),
+        )
+        registry = ToolRegistry()
+        registry.register(gated)
+        with tempfile.TemporaryDirectory() as tmp:
+            outcome = AgentRunner(FileStateStore(tmp), registry.actions()).run(task(verify=False))
+            self.assertEqual(outcome.status, "blocked")
+            self.assertEqual(outcome.blocked_reason, "action_error_requires_reconciliation")
+            self.assertEqual(outcome.last_error, "RuntimeError:credential_bound_provider_action_failed")
+            self.assertNotIn(SECRET, all_runtime_text(tmp))
+
+    def test_underlying_blocked_action_reason_is_not_forwarded(self):
+        def block_with_secret(args, context):
+            require_credential_snapshot(context)
+            raise BlockedAction(f"provider rejected {SECRET}")
+
+        inner = OneActionAdapter(callback=block_with_secret)
+        gated = CredentialBoundToolAdapter(
+            inner,
+            provider(capabilities=("provider.read",)),
+            (CredentialRequirement("provider.read", ("provider.read",)),),
+        )
+        registry = ToolRegistry()
+        registry.register(gated)
+        with tempfile.TemporaryDirectory() as tmp:
+            outcome = AgentRunner(FileStateStore(tmp), registry.actions()).run(task(verify=False))
+            self.assertEqual(outcome.status, "blocked")
+            self.assertEqual(
+                outcome.blocked_reason,
+                "action_blocked:credential_bound_provider_action_blocked",
+            )
+            self.assertIsNone(outcome.last_error)
+            self.assertNotIn(SECRET, all_runtime_text(tmp))
+
+    def test_provider_exception_context_is_not_retained_by_wrapper(self):
+        def fail_with_secret(args, context):
+            require_credential_snapshot(context)
+            raise RuntimeError(SECRET)
+
+        gated = CredentialBoundToolAdapter(
+            OneActionAdapter(callback=fail_with_secret),
+            provider(capabilities=("provider.read",)),
+            (CredentialRequirement("provider.read", ("provider.read",)),),
+        )
+        action = gated.actions()["provider.read"]
+        with self.assertRaisesRegex(RuntimeError, "credential_bound_provider_action_failed") as caught:
+            action({}, {})
+        self.assertIsNone(caught.exception.__context__)
+        self.assertNotIn(SECRET, repr(caught.exception))
 
     def test_adapter_repr_and_registry_description_remain_secret_free(self):
         inner = OneActionAdapter()

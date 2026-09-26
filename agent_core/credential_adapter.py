@@ -11,6 +11,7 @@ from .credential_provider import (
     _capabilities,
     _seconds,
 )
+from .model import ActionResult, ArtifactUpdate
 from .runner import Action, BlockedAction
 
 CREDENTIAL_CONTEXT_KEY = "_agent_credential_snapshot_v1"
@@ -42,24 +43,70 @@ def require_credential_snapshot(context: Mapping[str, Any]) -> CredentialSnapsho
     return value
 
 
-def _contains_snapshot(value: Any, *, seen: set[int] | None = None) -> bool:
+def _secret_values(snapshot: CredentialSnapshot) -> tuple[str, ...]:
+    """Copy exact secret values only for in-process result leak detection.
+
+    These values are never serialized, logged or returned. The wrapper uses them solely
+    to reject an adapter result that accidentally tries to return credential material.
+    """
+    return tuple(snapshot.secret(name) for name in snapshot.secret_names)
+
+
+def _contains_credential_material(
+    value: Any,
+    *,
+    secret_values: tuple[str, ...],
+    seen: set[int] | None = None,
+) -> bool:
     if isinstance(value, CredentialSnapshot):
         return True
+    if isinstance(value, str):
+        return any(secret and secret in value for secret in secret_values)
     if seen is None:
         seen = set()
+    if isinstance(value, ActionResult):
+        marker = id(value)
+        if marker in seen:
+            return False
+        seen.add(marker)
+        return (
+            _contains_credential_material(value.message, secret_values=secret_values, seen=seen)
+            or _contains_credential_material(value.artifacts, secret_values=secret_values, seen=seen)
+            or _contains_credential_material(value.data, secret_values=secret_values, seen=seen)
+        )
+    if isinstance(value, ArtifactUpdate):
+        marker = id(value)
+        if marker in seen:
+            return False
+        seen.add(marker)
+        return any(
+            _contains_credential_material(child, secret_values=secret_values, seen=seen)
+            for child in (
+                value.artifact_id,
+                value.kind,
+                value.locator,
+                value.metadata,
+            )
+        )
     if isinstance(value, Mapping):
         marker = id(value)
         if marker in seen:
             return False
         seen.add(marker)
-        return any(_contains_snapshot(key, seen=seen) or _contains_snapshot(child, seen=seen)
-                   for key, child in value.items())
+        return any(
+            _contains_credential_material(key, secret_values=secret_values, seen=seen)
+            or _contains_credential_material(child, secret_values=secret_values, seen=seen)
+            for key, child in value.items()
+        )
     if isinstance(value, (list, tuple, set, frozenset)):
         marker = id(value)
         if marker in seen:
             return False
         seen.add(marker)
-        return any(_contains_snapshot(child, seen=seen) for child in value)
+        return any(
+            _contains_credential_material(child, secret_values=secret_values, seen=seen)
+            for child in value
+        )
     return False
 
 
@@ -67,10 +114,11 @@ class CredentialBoundToolAdapter:
     """Wrap every action of an adapter behind a credential snapshot gate.
 
     Credential acquisition occurs before the underlying provider action is invoked.
-    Provider/source failures are converted to fixed ``BlockedAction`` reasons outside
-    the credential exception handler, so secret-bearing provider exceptions are not
-    persisted by ``AgentRunner``. The snapshot is added only to the local action
-    context; it is never inserted into TaskSpec, step args or runner state.
+    Credential-provider failures and provider-action failures are converted to fixed
+    outward classifications after leaving their exception handlers, so secret-bearing
+    provider payloads are not persisted by ``AgentRunner`` through exception text or
+    exception context. The snapshot is added only to the local action context and any
+    result containing the snapshot or one of its secret values is rejected.
     """
 
     def __init__(
@@ -130,8 +178,8 @@ class CredentialBoundToolAdapter:
                 _requirement=requirement,
             ) -> Any:
                 snapshot: CredentialSnapshot | None = None
-                failure: str | None = None
-                interrupted: type[BaseException] | None = None
+                credential_failure: str | None = None
+                credential_interrupted: type[BaseException] | None = None
                 try:
                     snapshot = self._provider.snapshot(
                         _requirement.capabilities,
@@ -139,31 +187,61 @@ class CredentialBoundToolAdapter:
                         require_known_expiry=_requirement.require_known_expiry,
                     )
                 except CredentialProviderError:
-                    failure = "credential_unavailable"
+                    credential_failure = "credential_unavailable"
                 except BaseException as error:
-                    failure = "credential_provider_failure"
+                    credential_failure = "credential_provider_failure"
                     if isinstance(error, KeyboardInterrupt):
-                        interrupted = KeyboardInterrupt
+                        credential_interrupted = KeyboardInterrupt
                     elif isinstance(error, SystemExit):
-                        interrupted = SystemExit
+                        credential_interrupted = SystemExit
 
                 # Raise only after leaving provider exception handling, so a provider
                 # exception carrying token material cannot survive as __context__.
-                if failure is not None:
-                    if interrupted is KeyboardInterrupt:
+                if credential_failure is not None:
+                    if credential_interrupted is KeyboardInterrupt:
                         raise KeyboardInterrupt("credential_provider_interrupted")
-                    if interrupted is SystemExit:
+                    if credential_interrupted is SystemExit:
                         raise SystemExit("credential_provider_interrupted")
-                    raise BlockedAction(failure)
+                    raise BlockedAction(credential_failure)
 
                 if not isinstance(snapshot, CredentialSnapshot):
                     raise BlockedAction("credential_provider_invalid_snapshot")
+                secret_values = _secret_values(snapshot)
                 local_context = dict(context)
                 local_context[CREDENTIAL_CONTEXT_KEY] = snapshot
-                result = _implementation(args, local_context)
-                if _contains_snapshot(result):
-                    raise RuntimeError("credential_snapshot_return_forbidden")
-                return result
+
+                provider_result: Any = None
+                provider_failure: str | None = None
+                provider_blocked = False
+                provider_interrupted: type[BaseException] | None = None
+                try:
+                    provider_result = _implementation(args, local_context)
+                except BlockedAction:
+                    provider_blocked = True
+                except BaseException as error:
+                    provider_failure = "credential_bound_provider_action_failed"
+                    if isinstance(error, KeyboardInterrupt):
+                        provider_interrupted = KeyboardInterrupt
+                    elif isinstance(error, SystemExit):
+                        provider_interrupted = SystemExit
+
+                # Provider adapters receive access credentials, so their exceptions are
+                # not trusted for persistence. Preserve only a fixed classification.
+                if provider_blocked:
+                    raise BlockedAction("credential_bound_provider_action_blocked")
+                if provider_failure is not None:
+                    if provider_interrupted is KeyboardInterrupt:
+                        raise KeyboardInterrupt("credential_bound_provider_action_interrupted")
+                    if provider_interrupted is SystemExit:
+                        raise SystemExit("credential_bound_provider_action_interrupted")
+                    raise RuntimeError(provider_failure)
+
+                if _contains_credential_material(
+                    provider_result,
+                    secret_values=secret_values,
+                ):
+                    raise RuntimeError("credential_material_return_forbidden")
+                return provider_result
 
             wrapped[action_name] = invoke
         return wrapped
