@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, time, timezone
-import json
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -124,10 +123,12 @@ class AgentRuntimeBridgeTest(unittest.TestCase):
         self.assertTrue(enabled.is_due(now))
         self.assertFalse(enabled.is_due(now, last_run_date="2026-09-24"))
 
-    def test_bridge_adapter_reports_blocked_provider_state(self):
+    def test_bridge_adapter_redacts_blocked_provider_state(self):
+        secret = "bridge-provider-secret-fixture"
+
         class BlockedBridge:
             def invoke(self, *, capability, args, context):
-                return {"blocked_reason": "authorization_required"}
+                return {"blocked_reason": f"authorization_required:{secret}"}
 
         adapter = BridgeToolAdapter(
             name="blocked",
@@ -137,8 +138,9 @@ class AgentRuntimeBridgeTest(unittest.TestCase):
         action = adapter.actions()["x.read"]
         from agent_core.runner import BlockedAction
 
-        with self.assertRaisesRegex(BlockedAction, "authorization_required"):
+        with self.assertRaisesRegex(BlockedAction, "runtime_bridge_blocked") as caught:
             action({}, {})
+        self.assertNotIn(secret, str(caught.exception))
 
 
 if __name__ == "__main__":
