@@ -30,6 +30,12 @@ from .credential_provider import (
 )
 from .credential_stack import build_durable_credential_bound_adapter
 from .delivery import BridgeReportDelivery, DeliveryResult, ReportDelivery
+from .diagnostics import (
+    ActionDiagnosticEvent,
+    ActionDiagnosticSink,
+    CollectingDiagnosticSink,
+    safe_exception_type,
+)
 from .durable_secret_store import (
     DurableSecretBackend,
     DurableSecretBackendAmbiguousWrite,
@@ -144,6 +150,11 @@ __all__ = [
     "CredentialScopeError",
     "CredentialLifetimeError",
     "CredentialRevokedError",
+
+    "ActionDiagnosticEvent",
+    "ActionDiagnosticSink",
+    "CollectingDiagnosticSink",
+    "safe_exception_type",
 
     "DurableSecretBackend",
     "DurableSecretBackendAmbiguousWrite",
