@@ -1,0 +1,31 @@
+{
+  "schema_version": "agent-host-activation-v1",
+  "activation_enabled": false,
+  "mode": "single_run",
+  "max_tasks": 1,
+  "scheduler_enabled": false,
+  "recurrence_enabled": false,
+  "allowed_access": [
+    "read"
+  ],
+  "repository": "bzlove178100/-keirin-ai-web",
+  "task_file": "agent_core/examples/keirin_readonly_status_task.json",
+  "task_id": "keirin-readonly-status-check",
+  "task_fingerprint": "sha256-v1:f9af0209ae2545d096d9c04cf4cfe5d434b90407bfc6aaa73ca0c6445d749403",
+  "actions": [
+    "github.read_main",
+    "github.verify_ci"
+  ],
+  "github_permissions": [
+    "contents:read",
+    "actions:read"
+  ],
+  "safety": {
+    "github_write_enabled": false,
+    "production_prediction_enabled": false,
+    "keirin_prediction_db_write_enabled": false,
+    "external_keirin_auto_fetch_enabled": false,
+    "provider_generation_enabled": false,
+    "report_delivery_enabled": false
+  }
+}

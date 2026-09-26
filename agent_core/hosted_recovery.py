@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
 
 from .hosted_activity import HostedActivityClient, HostedActivityEvent
 from .hosted_queue import HostedQueueClient, HostedQueueIntegrityError, HostedQueueLease
-from .model import TaskSpec
+from .model import TaskSpec, TaskState
 
 
 class HostedRecoveryIntegrityError(RuntimeError):
@@ -32,6 +33,24 @@ class HostedRecoveryReport:
     classification: str
     may_reconcile_expired_to_blocked: bool
     reexecution_allowed: bool
+
+
+@dataclass(frozen=True)
+class HostedRecoveryProposal:
+    """Non-mutating recovery recommendation bound to one durable snapshot.
+
+    A proposal is evidence for a later authorized decision. It never performs the
+    proposed action and never authorizes execution/retry by itself.
+    """
+
+    task_id: str
+    classification: str
+    proposed_action: str
+    expected_revision: int | None
+    lease_generation: int | None
+    reason: str
+    automatic_execution_allowed: bool
+    blocked_state: dict | None = None
 
 
 class HostedRecoveryInspector:
@@ -121,7 +140,7 @@ class HostedRecoveryInspector:
 
         return observations, verifications
 
-    def inspect(self, spec: TaskSpec) -> HostedRecoveryReport:
+    def _inspect_snapshot(self, spec: TaskSpec) -> tuple[HostedQueueLease, HostedRecoveryReport]:
         spec = TaskSpec.from_dict(spec.to_dict())
         spec.validate()
         try:
@@ -185,7 +204,7 @@ class HostedRecoveryInspector:
         else:  # defensive: HostedQueueClient currently rejects all other states.
             raise HostedRecoveryIntegrityError("unsupported_checkpoint_status")
 
-        return HostedRecoveryReport(
+        report = HostedRecoveryReport(
             task_id=lease.task_id,
             checkpoint_status=lease.status,
             revision=lease.revision,
@@ -203,4 +222,105 @@ class HostedRecoveryInspector:
             classification=classification,
             may_reconcile_expired_to_blocked=may_reconcile,
             reexecution_allowed=reexecution_allowed,
+        )
+        return lease, report
+
+    def inspect(self, spec: TaskSpec) -> HostedRecoveryReport:
+        _, report = self._inspect_snapshot(spec)
+        return report
+
+    @staticmethod
+    def _snapshot_identity(lease: HostedQueueLease, report: HostedRecoveryReport) -> tuple:
+        return (
+            lease.task_id,
+            lease.status,
+            lease.revision,
+            lease.attempt_count,
+            lease.max_attempts,
+            lease.lease_generation,
+            lease.lease_owner,
+            lease.lease_expires_at,
+            report.classification,
+            report.observation_events,
+            report.verification_events,
+            report.latest_observation_event_id,
+            report.latest_verification_event_id,
+            report.verified,
+        )
+
+    def propose(self, spec: TaskSpec) -> HostedRecoveryProposal:
+        """Return a non-mutating next-action proposal after a stable double read.
+
+        The second read catches durable state/evidence changes between inspection and
+        proposal construction. A future authorized reconciler must still use revision
+        CAS + lease generation fencing; this proposal alone is never sufficient to
+        execute a mutation or provider action.
+        """
+        first_lease, first_report = self._inspect_snapshot(spec)
+        second_lease, second_report = self._inspect_snapshot(spec)
+        if self._snapshot_identity(first_lease, first_report) != self._snapshot_identity(second_lease, second_report):
+            raise HostedRecoveryIntegrityError("recovery_snapshot_changed")
+
+        report = second_report
+        lease = second_lease
+        common = {
+            "task_id": report.task_id,
+            "classification": report.classification,
+            "automatic_execution_allowed": False,
+        }
+
+        if report.may_reconcile_expired_to_blocked:
+            blocked = TaskState.from_dict(deepcopy(lease.state.to_dict()))
+            blocked.status = "blocked"
+            blocked.blocked_reason = "expired_lease_requires_reconciliation"
+            blocked.last_error = blocked.last_error or "hosted_run_interrupted_or_expired"
+            blocked.touch()
+            return HostedRecoveryProposal(
+                **common,
+                proposed_action="reconcile_expired_to_blocked",
+                expected_revision=lease.revision,
+                lease_generation=lease.lease_generation,
+                reason="expired running lease must be converted to blocked before any later decision",
+                blocked_state=blocked.to_dict(),
+            )
+
+        if report.classification == "queued_unstarted":
+            return HostedRecoveryProposal(
+                **common,
+                proposed_action="eligible_for_first_execution",
+                expected_revision=lease.revision,
+                lease_generation=lease.lease_generation,
+                reason="no prior attempt or provider evidence was observed; separate execution authorization is still required",
+            )
+        if report.classification == "running_active_do_not_touch":
+            return HostedRecoveryProposal(
+                **common,
+                proposed_action="do_not_touch",
+                expected_revision=lease.revision,
+                lease_generation=lease.lease_generation,
+                reason="active lease is still owned; do not reconcile or replay",
+            )
+        if report.checkpoint_status == "completed":
+            return HostedRecoveryProposal(
+                **common,
+                proposed_action="no_reexecution",
+                expected_revision=lease.revision,
+                lease_generation=lease.lease_generation,
+                reason="completed checkpoint is not a retry signal regardless of evidence completeness",
+            )
+        if report.checkpoint_status in {"blocked", "failed"} or report.classification == "queued_with_prior_attempt_requires_review":
+            return HostedRecoveryProposal(
+                **common,
+                proposed_action="manual_reconciliation_required",
+                expected_revision=lease.revision,
+                lease_generation=lease.lease_generation,
+                reason="durable prior-attempt state requires an explicit reconciliation decision",
+            )
+
+        return HostedRecoveryProposal(
+            **common,
+            proposed_action="manual_review",
+            expected_revision=lease.revision,
+            lease_generation=lease.lease_generation,
+            reason="no automatic recovery action is permitted for this durable state",
         )

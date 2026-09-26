@@ -44,6 +44,10 @@ jobs:
         run: python tests/test_hosted_repository_worker.py
       - name: Verify read-only hosted recovery classification
         run: python tests/test_hosted_recovery.py
+      - name: Verify proposal-only hosted recovery decisions
+        run: python tests/test_hosted_recovery_proposal.py
+      - name: Verify closed single-run activation manifest
+        run: python tests/test_hosted_activation_manifest.py
       - name: Verify hosted recovery factory construction
         run: python tests/test_prepare_hosted_recovery.py
       - name: Verify hard hosted run deadline
