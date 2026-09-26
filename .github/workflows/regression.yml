@@ -54,6 +54,8 @@ jobs:
         run: python tests/test_hosted_worker_coordinator.py
       - name: Verify explicitly gated read-only hosted execution
         run: python tests/test_hosted_readonly_worker.py
+      - name: Verify hosted Edge transport credential isolation and failure handling
+        run: python tests/test_hosted_transport.py
       - name: Set up Node for Web capture checks
         uses: actions/setup-node@v4
       - name: Run Web capture checks
