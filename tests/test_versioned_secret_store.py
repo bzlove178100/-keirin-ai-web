@@ -25,6 +25,7 @@ from agent_core.versioned_secret_store import (  # noqa: E402
     RefreshSecretRecord,
     SecretStoreAmbiguousWrite,
     SecretStoreConflict,
+    SecretStoreError,
     VersionedHostCredentialSource,
 )
 
@@ -95,6 +96,22 @@ class FaultStore(InMemoryVersionedSecretStore):
         )
 
 
+class ReadFailureStore(InMemoryVersionedSecretStore):
+    def read(self, binding):
+        raise SecretStoreError(OLD_REFRESH)
+
+
+class ClaimConflictStore(InMemoryVersionedSecretStore):
+    def compare_and_swap(self, binding, *, expected_version, replacement):
+        if replacement.state == "refreshing":
+            raise SecretStoreConflict(OLD_REFRESH)
+        return super().compare_and_swap(
+            binding,
+            expected_version=expected_version,
+            replacement=replacement,
+        )
+
+
 class VersionedSecretStoreTest(unittest.TestCase):
     def make(self, store=None, exchange=None, *, attempt=ATTEMPT):
         store = store or InMemoryVersionedSecretStore()
@@ -120,10 +137,40 @@ class VersionedSecretStoreTest(unittest.TestCase):
         self.assertEqual(record.state, "ready")
         self.assertEqual(record.version, 0)
 
+    def test_attempt_ids_are_restricted_before_safe_metadata_exposure(self):
+        with self.assertRaisesRegex(ValueError, "refresh_attempt_invalid"):
+            RefreshSecretRecord(
+                binding=BINDING,
+                version=1,
+                state="refreshing",
+                refresh_secret=OLD_REFRESH,
+                active_attempt_id="bad\nattempt",
+            )
+        with self.assertRaisesRegex(ValueError, "last_attempt_invalid"):
+            RefreshSecretRecord(
+                binding=BINDING,
+                version=1,
+                state="blocked_ambiguous",
+                refresh_secret=OLD_REFRESH,
+                last_attempt_id="../unsafe",
+                failure="refresh_outcome_ambiguous",
+            )
+
+    def test_failure_metadata_accepts_only_fixed_classifications(self):
+        with self.assertRaisesRegex(ValueError, "secret_store_failure_invalid"):
+            RefreshSecretRecord(
+                binding=BINDING,
+                version=1,
+                state="blocked_auth",
+                refresh_secret=OLD_REFRESH,
+                last_attempt_id=ATTEMPT,
+                failure="provider said token=" + OLD_REFRESH,
+            )
+
     def test_store_cas_requires_exact_version_and_next_version(self):
         store, _, _ = self.make()
         current = store.read(BINDING)
-        replacement = replace(current, version=1, state="blocked_auth", failure="fixture")
+        replacement = replace(current, version=1, state="blocked_auth", failure="refresh_rejected")
         saved = store.compare_and_swap(BINDING, expected_version=0, replacement=replacement)
         self.assertEqual(saved.version, 1)
         with self.assertRaisesRegex(SecretStoreConflict, "secret_store_version_conflict"):
@@ -200,6 +247,30 @@ class VersionedSecretStoreTest(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(first_exchange.calls, 1)
         self.assertEqual(store.read(BINDING).state, "ready")
+
+    def test_secret_store_read_failure_is_mapped_without_context_payload(self):
+        source = VersionedHostCredentialSource(BINDING, ReadFailureStore(), FakeExchange())
+        with self.assertRaisesRegex(CredentialAuthBlocked, "credential_secret_store_unavailable") as caught:
+            source.assert_available()
+        self.assertIsNone(caught.exception.__context__)
+        self.assertNotIn(OLD_REFRESH, str(caught.exception))
+
+    def test_claim_store_conflict_is_mapped_without_context_payload(self):
+        store = ClaimConflictStore()
+        store.seed(BINDING, OLD_REFRESH)
+        exchange = FakeExchange()
+        source = VersionedHostCredentialSource(BINDING, store, exchange)
+        with self.assertRaisesRegex(CredentialRefreshInProgress, "credential_refresh_owned_elsewhere") as caught:
+            source.refresh_access(BINDING, minimum_ttl_seconds=300)
+        self.assertIsNone(caught.exception.__context__)
+        self.assertEqual(exchange.calls, 0)
+        self.assertNotIn(OLD_REFRESH, str(caught.exception))
+
+    def test_invalid_attempt_factory_fails_before_provider_contact(self):
+        _, exchange, source = self.make(attempt="bad\nattempt")
+        with self.assertRaisesRegex(CredentialAuthBlocked, "credential_refresh_attempt_invalid"):
+            source.refresh_access(BINDING, minimum_ttl_seconds=300)
+        self.assertEqual(exchange.calls, 0)
 
     def test_ambiguous_exchange_blocks_durably_and_never_auto_retries(self):
         store, exchange, source = self.make()
@@ -278,7 +349,6 @@ class VersionedSecretStoreTest(unittest.TestCase):
 
     def test_success_commit_ambiguous_after_apply_is_confirmed_by_readback(self):
         store = FaultStore(state="ready", timing="after")
-        # Seed itself writes ready, so arm the fault only after seed.
         store.fault_state = "seed-disabled"
         store.seed(BINDING, OLD_REFRESH)
         store.fault_state = "ready"
