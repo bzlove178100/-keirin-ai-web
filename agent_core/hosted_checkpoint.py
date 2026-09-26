@@ -14,7 +14,11 @@ class HostedCheckpointError(RuntimeError):
 
 
 class HostedCheckpointConflict(HostedCheckpointError):
-    """Raised when compare-and-swap rejects an expected revision."""
+    """Raised when compare-and-swap or uniqueness rejects a checkpoint write."""
+
+
+class HostedCheckpointNotFound(HostedCheckpointError):
+    """Raised only when the hosted checkpoint API confirms a task is absent."""
 
 
 class HostedCheckpointIntegrityError(HostedCheckpointError):
@@ -72,7 +76,10 @@ class HostedCheckpointClient:
     def _error_from_response(response: Mapping[str, Any]) -> HostedCheckpointError:
         message = str(response.get("error") or "hosted_checkpoint_request_failed")
         backend_code = str(response.get("backend_code") or "")
-        if backend_code == "40001" or "checkpoint_conflict" in message:
+        backend_status = response.get("backend_status")
+        if backend_status == 404 or message == "Checkpoint not found":
+            return HostedCheckpointNotFound(message)
+        if backend_code in {"40001", "23505"} or "checkpoint_conflict" in message or message == "duplicate":
             return HostedCheckpointConflict(message)
         return HostedCheckpointError(message)
 
