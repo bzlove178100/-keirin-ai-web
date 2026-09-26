@@ -64,6 +64,15 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Inspect runtime configuration without network I/O
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/inspect_manual_host_config.py \
+            --instance-token "$INSTANCE_TOKEN" \
+            --minimum-known-ttl-seconds 300 \
+            --require-manual-ready
+
       - name: Execute exactly one trusted read-only run instance
         shell: bash
         run: |
