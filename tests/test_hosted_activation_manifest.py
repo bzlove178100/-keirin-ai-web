@@ -19,6 +19,7 @@ from agent_core.activation import (  # noqa: E402
     validate_hosted_activation_manifest,
 )
 from agent_core.model import TaskSpec  # noqa: E402
+from agent_core.trusted_run_instance import build_trusted_status_run_spec  # noqa: E402
 from tools.agent_hosted_repository_worker import HostedRunInterrupted  # noqa: E402
 from tools.run_hosted_repository_once import (  # noqa: E402
     AUTHORIZATION_ENV,
@@ -31,10 +32,22 @@ from tools.run_hosted_repository_once import (  # noqa: E402
 
 MANIFEST = ROOT / "agent_core" / "examples" / "hosted_readonly_single_run_activation.json"
 TASK = ROOT / "agent_core" / "examples" / "keirin_readonly_status_task.json"
+TOKEN = "0123456789abcdef"
+INSTANCE = build_trusted_status_run_spec(TOKEN, repo_root=ROOT)
 
 
 def payload():
     return json.loads(MANIFEST.read_text(encoding="utf-8"))
+
+
+def runtime_env():
+    return {
+        AUTHORIZATION_ENV: "true",
+        PROJECT_URL_ENV: "https://example.supabase.co",
+        PUBLISHABLE_KEY_ENV: "publishable-fixture-value",
+        OWNER_BEARER_ENV: "owner-fixture-value",
+        GITHUB_TOKEN_ENV: "github-fixture-value",
+    }
 
 
 class HostedActivationManifestTest(unittest.TestCase):
@@ -102,21 +115,30 @@ class HostedActivationManifestTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "single_run_runtime_authorization_required"):
             run_once(
-                ["--execute-once", "--worker-id", "worker-test"],
+                ["--execute-once", "--instance-token", TOKEN, "--worker-id", "worker-test"],
                 env={},
                 worker_factory=worker_factory,
             )
         self.assertFalse(called)
 
-    def test_one_shot_host_success_is_single_run_and_redacts_runtime_secrets(self):
+    def test_one_shot_host_rejects_invalid_instance_before_credentials_or_factory(self):
+        called = False
+
+        def worker_factory(**_kwargs):
+            nonlocal called
+            called = True
+            raise AssertionError("worker factory must not be reached")
+
+        with self.assertRaisesRegex(ValueError, "invalid_trusted_run_instance_token"):
+            run_once(
+                ["--execute-once", "--instance-token", "bad", "--worker-id", "worker-test"],
+                env={AUTHORIZATION_ENV: "true"},
+                worker_factory=worker_factory,
+            )
+        self.assertFalse(called)
+
+    def test_one_shot_host_success_binds_exact_instance_and_redacts_runtime_secrets(self):
         captured = {}
-        secrets = {
-            AUTHORIZATION_ENV: "true",
-            PROJECT_URL_ENV: "https://example.supabase.co",
-            PUBLISHABLE_KEY_ENV: "publishable-fixture-value",
-            OWNER_BEARER_ENV: "owner-fixture-value",
-            GITHUB_TOKEN_ENV: "github-fixture-value",
-        }
 
         class Worker:
             def run_next(self, *, worker_id, lease_seconds):
@@ -124,7 +146,7 @@ class HostedActivationManifestTest(unittest.TestCase):
                 captured["lease_seconds"] = lease_seconds
                 return SimpleNamespace(
                     claimed=True,
-                    task_id="keirin-readonly-status-check",
+                    task_id=INSTANCE.task_id,
                     execution_enabled=True,
                     outcome=SimpleNamespace(status="completed"),
                     blocked_reason=None,
@@ -135,7 +157,7 @@ class HostedActivationManifestTest(unittest.TestCase):
             return Worker()
 
         recovery = SimpleNamespace(
-            task_id="keirin-readonly-status-check",
+            task_id=INSTANCE.task_id,
             classification="completed_verified_no_reexecution",
             checkpoint_status="completed",
             verified=True,
@@ -154,8 +176,13 @@ class HostedActivationManifestTest(unittest.TestCase):
         stream = io.StringIO()
         with redirect_stdout(stream):
             code = run_once(
-                ["--execute-once", "--worker-id", "worker-test", "--lease-seconds", "180"],
-                env=secrets,
+                [
+                    "--execute-once",
+                    "--instance-token", TOKEN,
+                    "--worker-id", "worker-test",
+                    "--lease-seconds", "180",
+                ],
+                env=runtime_env(),
                 worker_factory=worker_factory,
                 recovery_factory=recovery_factory,
             )
@@ -164,29 +191,27 @@ class HostedActivationManifestTest(unittest.TestCase):
         self.assertEqual(captured["worker_id"], "worker-test")
         self.assertEqual(captured["lease_seconds"], 180)
         self.assertIs(captured["worker_kwargs"]["execution_authorized"], True)
+        self.assertEqual(captured["worker_kwargs"]["target_spec"].to_dict(), INSTANCE.to_dict())
+        self.assertEqual(captured["recovery_task_id"], INSTANCE.task_id)
         report = stream.getvalue()
+        self.assertIn(f'"task_id": "{INSTANCE.task_id}"', report)
         self.assertIn('"recovery_classification": "completed_verified_no_reexecution"', report)
         self.assertIn('"reexecution_allowed": false', report)
         for value in ("publishable-fixture-value", "owner-fixture-value", "github-fixture-value"):
             self.assertNotIn(value, report)
 
-    def test_one_shot_host_interruption_stops_and_inspects_without_retry(self):
-        secrets = {
-            AUTHORIZATION_ENV: "true",
-            PROJECT_URL_ENV: "https://example.supabase.co",
-            PUBLISHABLE_KEY_ENV: "publishable-fixture-value",
-            OWNER_BEARER_ENV: "owner-fixture-value",
-            GITHUB_TOKEN_ENV: "github-fixture-value",
-        }
+    def test_one_shot_host_interruption_inspects_same_instance_without_retry(self):
+        captured = {}
 
         class Worker:
             def run_next(self, **_kwargs):
                 raise HostedRunInterrupted("ambiguous")
 
         class Inspector:
-            def inspect(self, _spec):
+            def inspect(self, spec):
+                captured["recovery_task_id"] = spec.task_id
                 return SimpleNamespace(
-                    task_id="keirin-readonly-status-check",
+                    task_id=spec.task_id,
                     classification="running_expired_with_observation_only",
                     checkpoint_status="running",
                     verified=None,
@@ -196,13 +221,17 @@ class HostedActivationManifestTest(unittest.TestCase):
         stream = io.StringIO()
         with redirect_stdout(stream):
             code = run_once(
-                ["--execute-once", "--worker-id", "worker-test"],
-                env=secrets,
-                worker_factory=lambda **_kwargs: Worker(),
+                ["--execute-once", "--instance-token", TOKEN, "--worker-id", "worker-test"],
+                env=runtime_env(),
+                worker_factory=lambda **kwargs: (
+                    captured.setdefault("target_spec", kwargs["target_spec"]), Worker()
+                )[1],
                 recovery_factory=lambda **_kwargs: Inspector(),
             )
 
         self.assertEqual(code, 2)
+        self.assertEqual(captured["target_spec"].task_id, INSTANCE.task_id)
+        self.assertEqual(captured["recovery_task_id"], INSTANCE.task_id)
         self.assertIn('"interrupted": true', stream.getvalue())
         self.assertIn('"reexecution_allowed": false', stream.getvalue())
 
