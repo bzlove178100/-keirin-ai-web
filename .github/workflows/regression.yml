@@ -28,6 +28,8 @@ jobs:
         run: python tests/test_agent_core.py
       - name: Verify safe action error persistence
         run: python tests/test_safe_action_errors.py
+      - name: Verify persistence redaction static contract
+        run: python tests/test_persistence_redaction_static.py
       - name: Verify ephemeral diagnostic sink isolation
         run: python tests/test_ephemeral_diagnostics.py
       - name: Run interrupted and competing runner checks
