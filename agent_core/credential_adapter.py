@@ -12,7 +12,7 @@ from .credential_provider import (
     _seconds,
 )
 from .model import ActionResult, ArtifactUpdate
-from .runner import Action, BlockedAction
+from .runner import Action, BlockedAction, SafeActionError
 
 CREDENTIAL_CONTEXT_KEY = "_agent_credential_snapshot_v1"
 
@@ -234,13 +234,13 @@ class CredentialBoundToolAdapter:
                         raise KeyboardInterrupt("credential_bound_provider_action_interrupted")
                     if provider_interrupted is SystemExit:
                         raise SystemExit("credential_bound_provider_action_interrupted")
-                    raise RuntimeError(provider_failure)
+                    raise SafeActionError(provider_failure)
 
                 if _contains_credential_material(
                     provider_result,
                     secret_values=secret_values,
                 ):
-                    raise RuntimeError("credential_material_return_forbidden")
+                    raise SafeActionError("credential_material_return_forbidden")
                 return provider_result
 
             wrapped[action_name] = invoke
