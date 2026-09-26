@@ -41,3 +41,12 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: ephemeral-ci-only
         run: python tests/run_agent_checkpoint_postgres.py
+      - name: Test synthetic secret storage SQL and ACL contract
+        env:
+          AGENT_EPHEMERAL_DB_TEST: '1'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGDATABASE: agent_checkpoint_ci
+          PGUSER: postgres
+          PGPASSWORD: ephemeral-ci-only
+        run: python tests/run_vault_postgres_contract.py
