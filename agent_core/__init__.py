@@ -26,6 +26,7 @@ from .hosted_checkpoint import (
     HostedCheckpointConflict,
     HostedCheckpointError,
     HostedCheckpointIntegrityError,
+    HostedCheckpointNotFound,
     HostedCheckpointRecord,
     HostedCheckpointSummary,
 )
@@ -66,6 +67,7 @@ from .runtime import BoundRuntime, RuntimeBinding, RuntimeManifest
 from .runtime_bridge import BridgeResponse, BridgeToolAdapter, RuntimeBridge
 from .scheduling import DAILY_REPORT_2100_JST, DailySchedule
 from .store import FileStateStore
+from .trusted_run_enqueue import TrustedRunAlreadyUsed, TrustedRunEnqueuer, TrustedRunEnqueueResult
 from .trusted_run_instance import (
     TRUSTED_RUN_ID_PREFIX,
     TrustedRunInstance,
@@ -107,6 +109,7 @@ __all__ = [
     "HostedCheckpointConflict",
     "HostedCheckpointError",
     "HostedCheckpointIntegrityError",
+    "HostedCheckpointNotFound",
     "HostedCheckpointRecord",
     "HostedCheckpointSummary",
     "HostedExecutionNotAuthorized",
@@ -139,6 +142,9 @@ __all__ = [
     "TaskSpec",
     "TaskState",
     "ToolRegistry",
+    "TrustedRunAlreadyUsed",
+    "TrustedRunEnqueueResult",
+    "TrustedRunEnqueuer",
     "TrustedRunInstance",
     "build_activity_report",
     "build_trusted_status_run_spec",

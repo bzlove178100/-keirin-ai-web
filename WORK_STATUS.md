@@ -10,14 +10,15 @@ Updated: 2026-09-26 (Asia/Tokyo).
 
 Unless the user explicitly authorizes a new, specific boundary:
 
-- deployed hosted runtime task execution: **OFF**;
+- deployed hosted task/provider execution: **OFF**;
 - production prediction: **OFF**;
 - keirin prediction DB writes: **OFF**;
 - automatic external keirin race-data fetching: **OFF**;
 - provider generation/write bindings: **unbound**;
-- report delivery / live 21:00 scheduling: **OFF / unconfigured**.
+- report delivery / live 21:00 scheduling: **OFF / unconfigured**;
+- scheduler / recurrence: **OFF**.
 
-Agent-only checkpoint/activity persistence and queue coordination in staging are authorized and active. After the first bounded read-only integration trial, `race_predictions` was directly rechecked at **0 rows**.
+Agent-only checkpoint/activity persistence and queue coordination in staging are authorized and active. Exact-task lease acquisition is also deployed, but it does not execute a task. `race_predictions` was directly rechecked at **0 rows** after the exact-claim migration/deployment.
 
 ## Keirin prospective evaluation
 
@@ -36,105 +37,76 @@ Key merged milestones:
 - PR #45–#47: queue planning, interruption safety, locking and immutable TaskSpec fingerprint binding.
 - PR #52 / #54: owner-only hosted checkpoint persistence and strict `HostedCheckpointClient`.
 - PR #56: owner-only append/read activity persistence and strict `HostedActivityClient`.
-- PR #57 (`6600d8174bc52f6dd3937e8f5a4acccd05871261`): crash-safe queue lease/fencing, bounded attempts, strict `HostedQueueClient`, explicit expired-lease reconciliation and PostgreSQL fencing tests.
-- PR #58 (`e21dca79a08e21b12979cf886fceaf3c69c33763`): fail-closed `HostedWorkerCoordinator` with no provider execution.
-- PR #59 (`783997d8788810ea405db04e4e72da14ea9a2980`): explicitly gated `HostedReadOnlyWorker` / `HostedLeaseStateStore`; execution denied by default before queue claim.
-- PR #60 (`b110f5bf890d6e6dad2dfc64497167177cf7f89b`): credential-isolated `SupabaseEdgeTransport` and activation checklist.
-- PR #62 (`5bc2b67576db2a9e24970d55e678ebf2ce0410de`): SHA-pinned repository/file/CI observation and same-SHA verification.
-- PR #63 (`d1d670d54624754b59634348c6d9d44c120995ee`): closed-by-default hosted repository composition, durable observation/verification evidence, trusted TaskSpec scope, lease fencing around provider reads and non-retry interruption semantics.
-- PR #64 (`71babd01734554bb7aae00295dabbbd1ec292399`): read-only interruption recovery inspection and hard wall-clock deadline enforcement.
-- PR #65 (`826e59163280f1f461f58f9c8a8a5a5dc6bbc34d`): proposal-only recovery decisions and a committed closed single-run activation manifest. The manifest remains `activation_enabled=false`, one task maximum, no scheduler/recurrence, exact trusted repository/task/actions and read-only GitHub permissions.
+- PR #57 (`6600d8174bc52f6dd3937e8f5a4acccd05871261`): crash-safe queue lease/fencing, bounded attempts, strict queue client and explicit expired-lease reconciliation.
+- PR #58–#60: fail-closed worker coordination, explicit execution gate and credential-isolated Supabase Edge transport.
+- PR #62–#64: SHA-pinned GitHub observation/CI verification, durable provider evidence, recovery inspection and hard run deadline.
+- PR #65 (`826e59163280f1f461f58f9c8a8a5a5dc6bbc34d`): proposal-only recovery decisions and committed closed single-run activation manifest.
+- PR #66 (`a76ea6336251348ea165183c904f3a0069fc4824`): records the first bounded read-only integration trial and adds a fail-closed standalone one-shot host entrypoint.
+- PR #67 (`6c7802a62909aeaaf288395c39f041237ab6f6f3`): strict trusted run-instance identity contract; fresh run IDs are separate from the completed template task.
+- PR #68 (`6bc7585a941751f96ee5557310b7e3181bdd28bb`): exact-task queue-claim RPC/client preparation so a bounded host does not consume an unrelated FIFO task.
+- PR #69 (`c1e1386a9260b47f08506f76d357f13487dbb930`): hosted repository worker can be permanently bound to one exact trusted run instance before any claim.
+- PR #70 (`8ed4a5d841494b17d90ca2ced44fc34ba2892884`): one-shot CLI requires a fresh instance token and recovery inspection remains bound to the same exact task identity.
+- PR #71 (`3bf8e0aa2a8bc22d510f0469c54e841ef4ffed4c`): separate owner-only exact-claim Edge path and credential-isolated routing; exact claim is queue coordination only, not execution.
 
 ## Hosted staging/runtime state
 
 Authorized staging project: `keirin-ai-staging` (`omamgmyyqnawlagbemcm`).
 
-Current durable coordination includes owner-scoped `agent_tasks` / `agent_task_events`, immutable TaskSpec identity, revision CAS, FIFO claim, attempt budget, lease owner/generation/expiry, fenced saves and explicit expired-lease reconcile-to-blocked. No always-on worker is active.
+Current durable coordination includes owner-scoped `agent_tasks` / `agent_task_events`, immutable TaskSpec identity, revision CAS, FIFO and exact-task claim primitives, attempt budget, lease owner/generation/expiry, fenced saves and explicit expired-lease reconcile-to-blocked. No always-on worker is active.
 
-`supabase/functions/agent-runtime-dev` was re-read immediately before the first bounded trial as version **6 / ACTIVE**, `verify_jwt=true`, service `v6-owner-queue-lease-fencing`. Its contract still reported `runtime_task_execution_enabled=false`; production prediction, prediction DB writes and automatic external fetch remained disabled.
+Deployed functions relevant to the agent:
+
+- `agent-runtime-dev`: **v6 / ACTIVE / verify_jwt=true**. Its safety contract still reports `runtime_task_execution_enabled=false`.
+- `agent-exact-claim-dev`: **v1 / ACTIVE / verify_jwt=true**, service `v1-owner-trusted-run-exact-claim`. It accepts only `queue_claim_task` for fresh trusted run-instance IDs and reports task execution, production prediction, prediction DB writes, external race-data fetch, provider generation and report delivery all disabled.
+
+Staging database verification after applying `agent_runtime_exact_task_claim`:
+
+- `public.agent_claim_task(text,text,integer)` exists;
+- `authenticated` can execute it;
+- `anon` cannot execute it;
+- `race_predictions` count remained `0`.
+
+The deployed exact-claim function source/metadata was read back successfully. A separate owner-authenticated live HTTP claim was deliberately not performed because there is no newly authorized live run instance.
 
 ## First bounded live read-only integration trial
 
 The user explicitly authorized exactly one live read-only trial. That authorization has been **consumed** and is not permission for another run or recurrence.
 
-Trusted task:
+Trusted template task `keirin-readonly-status-check` completed once with revision `6`, attempt count `1/1`, lease generation `1`, cleared lease, no error/blocked reason, durable GitHub observation and verification evidence, and no prediction-table writes.
 
-- task id: `keirin-readonly-status-check`;
-- fingerprint: `sha256-v1:f9af0209ae2545d096d9c04cf4cfe5d434b90407bfc6aaa73ca0c6445d749403`;
-- actions: `github.read_main`, `github.verify_ci` only;
-- repository: `bzlove178100/-keirin-ai-web`;
-- one worker / one claim / no recurrence.
+Observed/final GitHub SHA for that trial was `826e59163280f1f461f58f9c8a8a5a5dc6bbc34d`; all four required same-SHA CI workflows were verified successful. The completed template task must never be automatically replayed and corresponds to `completed_verified_no_reexecution`.
 
-Durable staging result:
+The trial proves real GitHub read-only provider access plus real staging queue/checkpoint/activity persistence. It does **not** prove an always-on autonomous host, scheduler/recurrence, generation-provider execution, report delivery, production prediction or prediction DB writes.
 
-- final status `completed`;
-- revision `6`;
-- attempt count `1 / 1`;
-- lease generation `1`;
-- lease owner and expiry cleared on completion;
-- completed step `read-current-state`;
-- `last_error=null`, `blocked_reason=null`;
-- append-only ledger contains claim, task/step start, fenced saves, GitHub observation, GitHub verification, step verification/completion, lease release and task completion.
+## Current code-only slice: trusted run-instance enqueue
 
-Pinned GitHub observation:
+Branch: `agent-run-instance-enqueue-v1-20260926`.
 
-- observed/final `main`: `826e59163280f1f461f58f9c8a8a5a5dc6bbc34d`;
-- `AI_AGENT_REQUIREMENTS.md`: blob `55aee582794dee98be821812f39121e73d3efa18`, 6393 bytes;
-- `AGENTS.md`: blob `be0b87cdd8c5cc562d68469d72af17c08989158e`, 5959 bytes;
-- `WORK_STATUS.md`: blob `f38da208c8ee3337020af47aa955db35e31e13f6`, 8893 bytes.
+Purpose: prepare a safe way to create or verify one fresh trusted run-instance checkpoint **without claiming or executing it**.
 
-Same-SHA `main` push CI was verified `completed / success` for all four required workflows:
+Current implementation under review:
 
-- regression: run `36212528769`;
-- collection progress UI regression: run `36212528579`;
-- PostgreSQL checkpoint contract: run `36212528834`;
-- agent runtime read-only smoke: run `36212528642`.
-
-The durable `github_verification` evidence records `verified=true`, and the final main re-read matched the observed SHA. Post-run `race_predictions` remained 0.
-
-### What this trial proves
-
-It proves real GitHub read-only provider access, pinned requirement/status file reads, same-SHA CI verification, real staging queue/checkpoint/activity persistence, one bounded claim/completion/lease release and durable post-run evidence.
-
-### What this trial does not prove
-
-The run was orchestrated through the connected ChatGPT GitHub and Supabase control surfaces. It therefore does **not** prove that deployed `agent-runtime-dev` independently executed the Python worker from an owner browser/session, and it does not prove an always-on autonomous host, scheduler, recurrence, generation-provider execution or report delivery.
-
-The completed trusted task must not be automatically replayed. Its durable state corresponds to `completed_verified_no_reexecution`.
-
-## PR #66 — standalone one-shot host preparation
-
-Branch: `record-live-readonly-trial-20260926`.
-
-This branch records the live trial in `LIVE_READONLY_TRIAL_20260926.md` and prepares a standalone fail-closed one-shot host path without performing another live run.
-
-Current implementation:
-
-- `agent_core/single_run_host.py` contains the provider-neutral one-shot host contract.
-- `tools/run_hosted_repository_once.py` is a thin CLI wrapper.
-- execution requires both `--execute-once` and runtime-only `KEIRIN_AGENT_SINGLE_RUN_AUTHORIZED=true`;
-- runtime credentials are read from environment only and omitted from output;
-- the committed closed activation manifest is validated before an authorized worker is constructed;
-- exactly one `run_next` call is permitted by the entrypoint;
-- after normal completion it performs read-only recovery inspection before exit;
-- `HostedRunInterrupted` is a stop signal: inspect durable state and exit, never retry automatically;
-- scheduler and recurrence remain absent.
-
-Regression coverage verifies the runtime authorization gate, closed manifest, one-shot construction, secret redaction and interruption-to-inspection behavior.
+- hosted checkpoint errors distinguish confirmed not-found from uniqueness/CAS conflicts;
+- `TrustedRunEnqueuer.ensure_queued(spec)` validates the strict trusted run-instance contract before persistence;
+- first use creates exactly one queued revision-0 checkpoint with task-id idempotency key;
+- repeated use is idempotent only while the exact task remains pristine queued/pending;
+- concurrent identical creation is re-read and accepted only if the persisted immutable spec is still pristine;
+- running, blocked, failed or completed instances fail closed and are never silently reused;
+- no `queue_claim*`, provider action, scheduler or task execution is performed by the enqueue helper;
+- `tools/enqueue_trusted_run_instance.py` is preparation only and has not been run against staging.
 
 ## Current agent state
 
-The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, strict hosted clients, credential-isolated Edge transport, SHA-pinned repository/CI observation, durable provider evidence, recovery inspection/proposals, hard deadline enforcement, a closed single-run manifest, one completed bounded integration trial and a standalone one-shot host entrypoint under CI review.
+The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, durable provider evidence, recovery inspection/proposals, hard deadline enforcement, a closed single-run manifest, one completed bounded live integration trial and a one-shot host path bound to fresh exact run instances.
 
-It is still **not** an always-on self-contained autonomous agent. No scheduler/recurrence is active and the deployed Edge runtime still reports task execution OFF.
+It is still **not** an always-on self-contained autonomous agent. No scheduler/recurrence is active, provider generation/write bindings remain unbound, and deployed runtime task execution remains OFF.
 
 ## Next action / next boundary
 
-1. finish PR #66 CI and merge only after required workflows pass;
-2. do **not** perform another live task run under the already-consumed authorization;
-3. next design a safe unique run-instance/enqueue contract, because the exact trusted task id is now completed and must not be silently reused;
-4. only after that code/test preparation, request a new explicit authorization before another live hosted execution;
-5. keep generation providers, recurring scheduler, prediction writes, race-data auto-fetch and report delivery as separate later boundaries.
+1. finish the trusted run-instance enqueue code/tests and merge only after required CI passes;
+2. do **not** enqueue/claim/execute another live run under the already-consumed authorization;
+3. after code-only enqueue preparation is merged, a new explicit live-run authorization is required before creating and executing a fresh hosted run instance;
+4. generation providers, recurring scheduler, prediction writes, race-data auto-fetch and report delivery remain separate later boundaries.
 
 No race screenshots, owner token or credential resend is needed for the current code-only work.
 
