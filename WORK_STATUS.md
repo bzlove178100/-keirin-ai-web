@@ -20,7 +20,7 @@ Unless the user explicitly authorizes a new, specific boundary:
 
 Agent-only checkpoint/activity persistence and queue coordination in staging are authorized and active. Exact-task lease acquisition is deployed. No always-on worker is active.
 
-Latest direct staging verification after PR #77:
+Latest direct read-only staging verification: 2026-09-26, credential-provider work (no live run started):
 
 - single-active trusted-run guard: **present**;
 - fresh trusted tasks currently `queued` / `running`: **0**;
@@ -56,6 +56,10 @@ Key merged milestones:
 - PR #75 (`8b17f67c8858fedf5494c738217169e33f1336fe`): added a database-level partial unique guard allowing at most one fresh `keirin-readonly-status-check.*` task in `queued` or `running` per owner; also made enqueue fail closed when another distinct trusted run owns the active slot. All required PR workflows passed before merge. The guard migration was then applied to staging.
 - PR #76 (`2eda84c768edb53e9e9429b7f18761a37bac7ffa`): bound manual one-shot authorization to one exact instance token through `KEIRIN_AGENT_SINGLE_RUN_INSTANCE_TOKEN`, made the standalone host self-enqueue/verify the same pristine TaskSpec before worker construction, and retained exact-task claim plus same-instance recovery. All four PR workflows passed before merge.
 - PR #77 (`ead3368968deb2f4c889f3061f07371a0610977f`): added a **manual `workflow_dispatch`-only** GitHub Actions one-shot host with `contents:read` / `actions:read`, fixed concurrency, 5-minute timeout, exact token confirmation and static safety regression. It has **not been dispatched** in this work. No schedule or recurrence was added.
+
+- PR #78 (`5ddae8161abba6d8d4ffee725c16db6b9b5d45f8`): synchronized this work-status record before authentication-boundary work.
+- PR #79 (`4ad117907e4416d8ebeba9d14209884cf1f0c5ed`): added redacted local credential preflight, HTTPS-origin/exact-instance validation and known-expiry TTL rejection before the manual one-shot worker. Unknown expiry remains explicit; `AUTH_SESSION_LIFECYCLE.md` defines the refresh-provider boundary. All four PR workflows passed.
+- PR #80 (`d85e6c008fc725accf5fd63a19a6c945457c37d4`): completed `CredentialProvider`, redacted `CredentialSnapshot`, static in-memory access provider, typed errors, package exports and regression integration. Added 19 tests, including fail-closed scopes/lifetimes, revocation and rotation without immutable TaskSpec changes or completed-task replay. Rejected malformed/non-finite TTL and timestamp inputs; removed untrusted lookup/scope values from errors. All 36 Python regression commands passed locally and all four required PR workflows passed before merge. The four main push workflows and Pages deployment also passed at this merge SHA.
 
 ## Hosted staging/runtime state
 
@@ -121,6 +125,8 @@ The independently hosted manual path is now prepared in code:
 9. AgentRunner state changes are fenced/CAS-persisted and recovery stays on the same identity;
 10. the workflow stops after one job and has no cron/schedule/recurrence trigger.
 
+`tools/inspect_manual_host_config.py` now checks runtime configuration locally before the worker call. Known-expired/short bearer TTL and instance/origin mismatches fail closed. Opaque expiry may support the bounded manual path but is not long-lived readiness.
+
 The workflow references runtime configuration through GitHub Actions variables/secrets:
 
 - `SUPABASE_PROJECT_URL`;
@@ -134,13 +140,17 @@ The workflow has **not been dispatched**. A future dispatch is a new live-execut
 
 ## Current agent state
 
-The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, durable provider evidence, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host and a manual GitHub Actions host.
+The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, durable provider evidence, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight and a tested provider-neutral static credential boundary.
 
 It is still **not** an always-on self-contained autonomous agent. No scheduler/recurrence is active, provider generation/write bindings remain unbound, report delivery is not configured, and deployed runtime task execution remains OFF.
 
 ## Next work / next boundary
 
-Code-only work may continue without another live-run authorization. Safe next work is to improve configuration/preflight diagnostics for the manual host and design the authentication/session lifecycle needed for a genuinely independent long-lived host, while keeping scheduling disabled.
+Code-only work may continue without another live-run authorization. The static credential-provider boundary is complete; it is not wired into the host and cannot refresh. Provider/account metadata is host configuration, not remote identity verification. Revocation blocks new snapshots but does not invalidate already issued copies or remotely revoke a token.
+
+Next: implement the refresh-capable provider and a host-only secret-store boundary with access-only snapshot issuance, expiry/refresh state transitions, provider/account identity and scope validation, single refresh ownership, and `blocked_auth` on refresh failure. Runners/adapters must never receive durable refresh material. Credential rotation must remain separate from immutable TaskSpec identity, and refresh must not enqueue/retry/replay work.
+
+See `AUTH_SESSION_LIFECYCLE.md` for the current static contract and remaining boundaries. No long-lived host, scheduler or recurrence may be activated by this code-only work.
 
 A future manual workflow dispatch or any other new hosted execution requires a new explicit live-run authorization. Do not infer such authorization from code merge, workflow presence, or prior one-run approvals.
 
