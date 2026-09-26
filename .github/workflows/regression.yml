@@ -40,6 +40,8 @@ jobs:
         run: python tests/test_agent_github_readonly_host.py
       - name: Verify SHA-pinned GitHub observation and CI
         run: python tests/test_agent_github_sha_bridge.py
+      - name: Verify closed hosted repository composition and interrupted persistence
+        run: python tests/test_hosted_repository_worker.py
       - name: Verify broad agent capability contracts
         run: python tests/test_agent_capability_catalog.py
       - name: Verify hosted state schema activation contract
