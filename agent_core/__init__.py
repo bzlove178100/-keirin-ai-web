@@ -13,6 +13,12 @@ from .activation import (
 )
 from .adapters import Capability, CallableReadOnlyGitHubAdapter, ToolRegistry
 from .capability_catalog import CapabilityContract, capability_by_action, capability_catalog
+from .credential_adapter import (
+    CREDENTIAL_CONTEXT_KEY,
+    CredentialBoundToolAdapter,
+    CredentialRequirement,
+    require_credential_snapshot,
+)
 from .credential_provider import (
     CredentialProvider,
     CredentialSnapshot,
@@ -123,6 +129,11 @@ __all__ = [
     "CredentialRefreshInProgress",
     "HostCredentialSource",
     "RefreshingCredentialProvider",
+
+    "CREDENTIAL_CONTEXT_KEY",
+    "CredentialBoundToolAdapter",
+    "CredentialRequirement",
+    "require_credential_snapshot",
 
     "CredentialProvider",
     "CredentialSnapshot",
