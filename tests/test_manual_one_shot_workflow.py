@@ -43,6 +43,14 @@ class ManualOneShotWorkflowTest(unittest.TestCase):
         self.assertIn("GITHUB_TOKEN: ${{ github.token }}", self.text)
         self.assertNotIn("service_role", self.text.lower())
 
+    def test_redacted_preflight_runs_before_exact_instance_host(self):
+        preflight = "python tools/inspect_manual_host_config.py"
+        execution = "python tools/run_hosted_repository_once.py"
+        self.assertIn(preflight, self.text)
+        self.assertIn("--minimum-known-ttl-seconds 300", self.text)
+        self.assertIn("--require-manual-ready", self.text)
+        self.assertLess(self.text.index(preflight), self.text.index(execution))
+
     def test_entrypoint_is_one_shot_exact_instance_host(self):
         self.assertIn("python tools/run_hosted_repository_once.py", self.text)
         self.assertIn("--execute-once", self.text)
