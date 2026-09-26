@@ -185,7 +185,10 @@ class HostedReadOnlyWorker:
                 raise RuntimeError("read_only_action_reported_write_artifact")
         return value
 
-    def _guarded_actions(self) -> dict[str, Any]:
+    def _scope_failure(self, lease: HostedQueueLease) -> str | None:
+        return None
+
+    def _guarded_actions(self, store: HostedLeaseStateStore | None = None) -> dict[str, Any]:
         guarded: dict[str, Any] = {}
         for action, implementation in self.registry.actions().items():
             capability = self.registry.capability(action)
@@ -261,6 +264,11 @@ class HostedReadOnlyWorker:
             },
         )
 
+        scope_failure = self._scope_failure(lease)
+        if scope_failure:
+            self._release_blocked(lease, worker_id=worker_id, lease_seconds=lease_seconds, reason=scope_failure)
+            return HostedReadOnlyWorkerResult(True, lease.task_id, True, blocked_reason=scope_failure)
+
         missing, non_read = self._preflight(lease.spec)
         if missing:
             reason = "preflight_missing_actions:" + ",".join(missing)
@@ -288,7 +296,7 @@ class HostedReadOnlyWorker:
             worker_id=worker_id,
             lease_seconds=lease_seconds,
         )
-        outcome = AgentRunner(store, self._guarded_actions()).run(lease.spec)
+        outcome = AgentRunner(store, self._guarded_actions(store)).run(lease.spec)
         return HostedReadOnlyWorkerResult(
             claimed=True,
             task_id=lease.task_id,
