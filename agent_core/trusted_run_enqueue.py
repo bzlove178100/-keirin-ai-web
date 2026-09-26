@@ -29,6 +29,8 @@ class TrustedRunEnqueuer:
     repeated call is idempotent only while the exact immutable task remains queued at
     revision zero with its pending state and task-id idempotency key. Any running,
     blocked, failed or completed record is treated as consumed and fails closed.
+    Database persistence additionally enforces at most one active trusted status-run
+    instance per owner, so concurrent coordinators cannot activate distinct run IDs.
     """
 
     def __init__(self, checkpoints: HostedCheckpointClient):
@@ -55,10 +57,15 @@ class TrustedRunEnqueuer:
         except HostedCheckpointNotFound:
             try:
                 created = self.checkpoints.create(spec, idempotency_key=spec.task_id)
-            except HostedCheckpointConflict:
-                # A concurrent creator may have won after the absence check. Re-read
-                # the exact immutable spec and accept only a pristine matching row.
-                existing = self.checkpoints.get(spec)
+            except HostedCheckpointConflict as conflict:
+                # Either an identical concurrent creator won, or the database-level
+                # single-active guard rejected this distinct fresh instance because
+                # another trusted run is already queued/running. Re-read only this
+                # exact identity; absence means a different active run owns the slot.
+                try:
+                    existing = self.checkpoints.get(spec)
+                except HostedCheckpointNotFound as missing:
+                    raise TrustedRunAlreadyUsed("another_trusted_run_instance_is_active") from conflict
                 return TrustedRunEnqueueResult(self._assert_pristine(existing, spec), False)
             return TrustedRunEnqueueResult(self._assert_pristine(created, spec), True)
 
