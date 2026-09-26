@@ -76,6 +76,8 @@ jobs:
         run: python tests/test_hosted_readonly_worker.py
       - name: Verify hosted Edge transport credential isolation and failure handling
         run: python tests/test_hosted_transport.py
+      - name: Verify exact-claim Edge routing isolation
+        run: python tests/test_exact_claim_routing_transport.py
       - name: Set up Node for Web capture checks
         uses: actions/setup-node@v4
       - name: Run Web capture checks
@@ -98,7 +100,7 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Type-check hosted runtime entrypoint
-        run: deno check supabase/functions/agent-runtime-dev/index.ts
-      - name: Run engine, training-input, and hosted runtime contract tests
-        run: deno test tests/phase32_contract_test.ts tests/training_input_test.ts tests/agent_runtime_dev_test.ts
+      - name: Type-check hosted runtime and exact-claim entrypoints
+        run: deno check supabase/functions/agent-runtime-dev/index.ts supabase/functions/agent-exact-claim-dev/index.ts
+      - name: Run engine, training-input, hosted runtime, and exact-claim contract tests
+        run: deno test tests/phase32_contract_test.ts tests/training_input_test.ts tests/agent_runtime_dev_test.ts tests/agent_exact_claim_dev_test.ts

@@ -91,10 +91,11 @@ def run_once(
     github_token = _required(runtime_env, GITHUB_TOKEN_ENV)
 
     if worker_factory is None or recovery_factory is None or interrupted_type is None:
-        from tools.agent_hosted_repository_worker import HostedRunInterrupted, prepare_repository_worker
+        from tools.agent_hosted_repository_worker import HostedRunInterrupted
+        from tools.prepare_exact_run_instance_worker import prepare_exact_run_instance_worker
         from tools.prepare_hosted_recovery import prepare_hosted_recovery
 
-        worker_factory = worker_factory or prepare_repository_worker
+        worker_factory = worker_factory or prepare_exact_run_instance_worker
         recovery_factory = recovery_factory or prepare_hosted_recovery
         interrupted_type = interrupted_type or HostedRunInterrupted
 

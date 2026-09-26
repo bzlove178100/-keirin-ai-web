@@ -159,3 +159,33 @@ class SupabaseEdgeTransport:
         if isinstance(value, (list, tuple)):
             return any(self._contains_credentials(v) for v in value)
         return False
+
+
+class ExactClaimRoutingTransport:
+    """Route only exact-task acquisition to the narrow exact-claim Edge function.
+
+    All checkpoint/activity/fenced-save/recovery traffic remains on the existing
+    agent runtime. The router contains no credentials itself; both child transports
+    retain their existing credential-isolation and no-retry behavior.
+    """
+
+    def __init__(self, *, default_transport: SupabaseEdgeTransport, exact_claim_transport: SupabaseEdgeTransport):
+        if not isinstance(default_transport, SupabaseEdgeTransport):
+            raise TypeError("default_transport_required")
+        if not isinstance(exact_claim_transport, SupabaseEdgeTransport):
+            raise TypeError("exact_claim_transport_required")
+        if default_transport.function_slug == exact_claim_transport.function_slug:
+            raise ValueError("exact_claim_transport_must_be_separate")
+        self._default = default_transport
+        self._exact = exact_claim_transport
+
+    def __repr__(self) -> str:
+        return (
+            "ExactClaimRoutingTransport(default='<redacted edge transport>', "
+            "exact_claim='<redacted edge transport>')"
+        )
+
+    def __call__(self, mode: str, payload: dict[str, Any]) -> Mapping[str, Any]:
+        if mode == "queue_claim_task":
+            return self._exact(mode, payload)
+        return self._default(mode, payload)
