@@ -20,8 +20,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from agent_core.durable_secret_store import DurableVersionedSecretStore
 from agent_core.postgres_host_profile import PostgresHostProfile
+from agent_core.postgres_host_factory import StrictPostgresConnectionFactory
 from agent_core.postgres_secret_process import ProcessDeadlinePostgresSecretBackend
 from agent_core.refresh_credentials import CredentialBinding
+from agent_core.versioned_secret_store import SecretStoreError
 
 HOST = "db.synthetic.invalid"
 PASSWORD = "SYNTHETIC:tls-ci-only"
@@ -110,20 +112,19 @@ def tls_factory(**kwargs):
     if os.environ.get("AGENT_EPHEMERAL_TLS_TEST") != "1":
         raise RuntimeError("refusing_non_ephemeral_tls")
     profile = _profile(int(os.environ["SYNTHETIC_TLS_PORT"]), Path(os.environ["SYNTHETIC_TLS_CA"]))
-    connection = psycopg.connect(**profile.connection_parameters(), password=PASSWORD, **kwargs)
+    # Resolve this synthetic source only inside the deadline child. No live secret
+    # facility, environment password or configured production factory is introduced.
+    return StrictPostgresConnectionFactory(
+        profile, driver_connect=psycopg.connect, password_source=lambda: PASSWORD,
+    )(**kwargs)
+
+
+def _must_block_store(store):
     try:
-        observed = connection.execute(
-            "SELECT session_user,current_user,current_database(),pg_is_in_recovery(),"
-            "current_setting('transaction_read_only'),"
-            "(SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid())"
-        ).fetchone()
-        if observed != ("secret_test_host_a", "secret_test_host_a", "agent_checkpoint_ci", False, "off", True):
-            raise RuntimeError("synthetic_tls_session_invalid")
-        connection.commit()
-        return connection
-    except BaseException:
-        connection.close()
-        raise
+        store.read(BINDING)
+    except SecretStoreError:
+        return
+    raise AssertionError("synthetic_factory_expected_rejection_missing")
 
 
 def _must_reject(profile):
@@ -175,6 +176,26 @@ def main():
             updated = replace(current, version=current.version + 1)
             assert store.compare_and_swap(BINDING, expected_version=current.version, replacement=updated) == updated
             assert store.read(BINDING) == updated
+            # Even an otherwise valid TLS session must be rejected if ambient
+            # configuration or the actual login's privileges changed.
+            os.environ["PGSERVICE"] = "SYNTHETIC:unapproved"
+            try:
+                _must_block_store(store)
+            finally:
+                del os.environ["PGSERVICE"]
+            for enable, disable in (
+                ("ALTER ROLE secret_test_host_a CREATEDB", "ALTER ROLE secret_test_host_a NOCREATEDB"),
+                ("GRANT secret_test_host_b TO secret_test_host_a", "REVOKE secret_test_host_b FROM secret_test_host_a"),
+                ("ALTER ROLE secret_test_host_a SET default_transaction_read_only=on", "ALTER ROLE secret_test_host_a RESET default_transaction_read_only"),
+            ):
+                with _admin(port, ca) as admin:
+                    admin.execute(enable)
+                try:
+                    _must_block_store(store)
+                finally:
+                    with _admin(port, ca) as admin:
+                        admin.execute(disable)
+            assert store.read(BINDING) == updated
             _must_reject(replace(_profile(port, ca), hostname="wrong.synthetic.invalid"))
             _must_reject(replace(_profile(port, ca), root_certificate=str(directory / "wrong-ca.crt")))
             # Positive control after negatives rules out an unavailable server.
@@ -189,6 +210,7 @@ def main():
                 with _admin(port, ca, encrypted=False) as admin:
                     assert admin.execute("SELECT 1").fetchone() == (1,)
     print("Synthetic TLS PostgreSQL: verified TLS process read/CAS, wrong hostname/CA, expired certificate and plaintext rejection PASS")
+    print("Synthetic strict factory: ambient rejection, session/privilege/read-write checks and verified handoff PASS")
 
 
 if __name__ == "__main__":

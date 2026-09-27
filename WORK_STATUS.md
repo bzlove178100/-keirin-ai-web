@@ -193,7 +193,7 @@ All four PR workflows, four main workflows and Pages passed before this TLS slic
 ambient configuration and bootstrap review. No live factory or secure-TLS claim is
 introduced by that review.
 
-The current code-only slice adds `PostgresHostProfile`, a non-secret configuration
+PR #104 (`343d7316c5d845674bcbd1d09402c1fb138d4719`) added `PostgresHostProfile`, a non-secret configuration
 contract with one explicit hostname/address/port, dedicated-login validation, an
 absolute CA-file path, fixed verify-full TLS, disabled GSS encryption, minimum TLS 1.2
 and read-write session selection. It performs no I/O and supplies no credentials.
@@ -204,8 +204,26 @@ and ephemeral certificates. It checks TLS read/CAS through the process wrapper a
 wrong CA/hostname, expired certificate and plaintext-server rejection. Positive
 controls establish server/account availability. Certificate keys are generated only in
 temporary directories; no key or certificate artifact is committed/uploaded. CI uses
-pinned test-only psycopg 3.2.10 and cryptography 46.0.0. Actual TLS results must be
-confirmed on the PR head before merge; Docker is unavailable in the local workspace.
+pinned test-only psycopg 3.2.10 and cryptography 46.0.0. All four PR workflows, four main
+workflows and Pages passed, including the actual TLS success/rejection cases.
+
+The current slice adds `StrictPostgresConnectionFactory`, with inert construction and
+injected driver/password source. Before reading the source it rejects all PG-prefixed
+environment variables, selected OpenSSL/trust overrides, default service/password/SSL
+files in both HOME and the POSIX account home, and any noncanonical adapter limits.
+It requires SCRAM-SHA-256 password authentication (no passfile/client-certificate fallback) and
+performs catalog-qualified preflight before returning an idle connection: exact session/
+current user and database, TLS, primary/read-write state, nonprivileged login with no
+role memberships, and the actual server timeout values. Errors remain fixed and no
+source/connection retry is introduced. Driver/source/cleanup hangs still require the
+outer process deadline. Local factory/profile/static checks total 15 passing tests.
+
+TLS CI now invokes this factory inside the process child with synthetic credentials and
+checks ambient PGSERVICE rejection, added CREATEDB privilege, role membership and
+read-only role configuration, followed by restored successful readback. CI must pass
+on the actual head before merge. No real bootstrap source or live factory is configured.
+CA ownership/race protection, OS loader/OpenSSL configuration integrity, logging, host
+supervisor and actual secret-source custody remain separate operational gates.
 
 ## Current agent state
 
@@ -219,8 +237,8 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. integrate an unbound factory with strict ambient-configuration rejection and session-identity checks;
-2. qualify bootstrap custody, ambient configuration and deployment-specific supervisor/network faults;
+1. qualify the trust-file ownership/replacement boundary and an injected bootstrap-source lifecycle with synthetic data;
+2. qualify OS/loader configuration integrity, host logging and deployment-specific supervisor/network faults;
 3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
 4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 

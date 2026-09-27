@@ -23,12 +23,29 @@ The next slice adds a separate Docker TLS fixture in `tests/run_secret_tls_contr
 It generates a temporary CA, valid/expired server certificates and a distinct wrong CA;
 performs process-wrapped TLS read/CAS; and rejects wrong hostname/CA, expired certificates
 and a reachable plaintext server. Private keys stay in disposable files and are removed
-with the fixture. CI evidence must be checked before calling this slice verified.
+with the fixture. PR #104 passed the TLS suite and all required PR/main workflows.
 
 `PostgresHostProfile` fixes transport settings and rejects malformed/multiple targets,
 DSN-like input and known privileged login names without I/O. It is a parameter policy,
 not an endpoint allowlist, privilege audit or live factory. It accepts operator-approved
 configuration only; callers must not derive it from task inputs or override its output.
+
+The current slice adds `StrictPostgresConnectionFactory` for use inside a trusted
+top-level deadline-child factory. It accepts an injected driver and password source;
+construction performs no I/O. Calls reject noncanonical timeouts and ambient libpq/TLS
+configuration before accessing the source, require a nonempty bounded password and
+disable client-certificate/passfile fallback and require SCRAM-SHA-256 authentication.
+Session preflight checks actual identity,
+database, TLS, primary/read-write status, privilege flags, absence of role memberships
+and server timeout values, then commits the preflight SELECT transaction before
+returning the connection. Every failure closes/rejects with fixed outward errors.
+
+Ambient rejection is intentionally strict: any `PG*` variable, `OPENSSL_CONF`,
+`OPENSSL_MODULES`, `SSL_CERT_FILE` or `SSL_CERT_DIR`, or default `.pgpass`,
+`.pg_service.conf` / `.postgresql` in either home location blocks the factory. It does
+not mutate the environment or inspect file contents. This is not proof against an
+already-compromised interpreter/driver, OS loader configuration or TOCTOU changes.
+Deployment must provide a controlled host environment and protected trust/config files.
 
 ## Proposed live profile and evidence still required
 
@@ -56,9 +73,8 @@ an external supervisor remain required even with process isolation.
 
 ## Next executable validation
 
-After the ephemeral TLS fixture passes, implement an unbound factory that enforces
-the profile, rejects unsafe ambient configuration and validates actual session identity.
-Qualify secret-source custody, trust-file ownership and host supervisor limits separately.
+After strict factory CI passes, qualify trust-file ownership/replacement, the injected
+bootstrap-source lifecycle and host supervisor limits with synthetic fixtures.
 Keep real endpoints, credentials, staging migration, provider refresh and hosted execution
 out of this code/CI-only sequence.
 
@@ -72,3 +88,7 @@ out of this code/CI-only sequence.
   certificate chain/hostname verification and root certificate handling.
 
 These references establish client behavior, not the security of an untested deployment.
+
+The factory also follows the documented [libpq environment defaults](https://www.postgresql.org/docs/17/libpq-envars.html)
+and `sslcertmode=disable` behavior in the connection-parameter reference. The client
+certificate option requires compatible libpq; CI uses the pinned psycopg binary driver.
