@@ -144,16 +144,38 @@ All 13 synthetic fault tests and 20 related regression checks pass locally. PR #
 initial implementation head `0af417c67f686cd6c7a731935d7791ecfd97982c` passed all four
 PR workflows, including PostgreSQL 17 host tests with `psycopg[binary]==3.2.10` for
 real-driver read/CAS, lock/statement cancellation, two-connection CAS and cleanup.
-The final slice also normalizes interrupt subclasses to fixed built-in exceptions;
-CI must be rechecked on that exact final head before merge.
+The final slice also normalizes interrupt subclasses to fixed built-in exceptions.
+PR #101 merged as `a8f8be90f231bbbaa3ba54f777977d4e8c78a5c4` after all four final-head
+PR workflows passed. Main's four workflows and Pages deployment also passed.
 No live factory, credentials, migration or runtime binding is configured.
 
 The injected factory is trusted host code: it must honor timeout arguments, use a fresh
 idle dedicated primary connection, avoid pools/retries/telemetry, and own verified TLS
 and bootstrap-secret custody. Server/connect limits are not a hard process deadline for
-DNS, network blackholes or uncooperative cleanup. A reviewed host deadline and actual
-network-fault evidence remain pre-activation gates. Standard error messages/repr/tracebacks
+DNS, network blackholes or uncooperative cleanup. Standard error messages/repr/tracebacks
 are redacted; diagnostic systems that capture frame locals are prohibited for secret paths.
+
+The next code-only slice adds `ProcessDeadlinePostgresSecretBackend`, an unbound opt-in
+wrapper with one spawned process per operation. It bounds child startup/DB I/O waiting,
+then uses TERM/KILL with two bounded 250ms reap waits. Driver rollback/close stays in
+the child. A child timeout/crash or incomplete reply cannot prove a CAS result and is
+classified ambiguous without replay. An unreaped child quarantines that adapter instance.
+Only a clean process exit permits reading the capped 64KiB anonymous-memory JSON reply;
+no exception object or partial pipe frame is received by the parent. Child stdout/stderr
+is discarded before factory execution. Shared response memory is cleared after reaping,
+without claiming complete erasure of Python, driver or OS copies.
+
+Synthetic tests cover connect/execute/commit/rollback/close hangs, ignored TERM and KILL
+cleanup, a synthetic durable commit with lost acknowledgement, malformed IPC, parent
+interrupts, quarantine and output redaction. Actual pinned psycopg/libpq is tested against
+a loopback TCP endpoint that accepts connections but never answers PostgreSQL startup.
+This does not establish behavior against live Vault or production networks.
+
+The trusted factory must be an importable top-level function with side-effect-free imports,
+resolve host credentials in the child, and not spawn descendants or enable telemetry/core
+dumps. No real factory is bound. OS creation/scheduling and unkillable kernel work cannot
+be absolutely bounded by Python; host supervisor, memory/process limits, secure IPC/memory
+policy, TLS/primary/bootstrap review and actual deployment qualification remain open.
 
 ## Current agent state
 
@@ -167,8 +189,8 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. add host process/network-fault deadline evidence for the injected adapter;
-2. review trusted factory/TLS/bootstrap configuration; keep credentials synthetic;
+1. review trusted factory/TLS/primary/bootstrap configuration and child-host operational limits using synthetic data;
+2. qualify the process wrapper against the disposable PostgreSQL fixture and deployment-specific supervisor/network faults;
 3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
 4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 
