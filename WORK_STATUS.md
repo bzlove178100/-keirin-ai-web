@@ -264,8 +264,14 @@ lease, process deadline, PostgreSQL adapter and durable store through recovery c
 - terminal record revocation survives fresh clients and cannot be resurrected;
 - child processes and named PostgreSQL sessions are checked for cleanup.
 
-Local factory/profile/trust/adapter checks: 36 passing tests. This environment lacks
-Docker, so actual TLS/PostgreSQL recovery execution is gated on the PR-head CI.
+Local factory/profile/trust/adapter checks: 36 passing tests, plus 14 durable/redaction
+checks. Local process checks had 11 passes and two libpq-blackhole failures because
+psycopg was absent; Docker is also absent locally. CI with pinned psycopg passed all
+13 process tests and actual TLS/PostgreSQL recovery. All four PR workflows passed at
+`b8628af525fce3157ce22e1eb336e742867e1ce6` (PostgreSQL run `36329334807`).
+The first CI exposed Docker reassigning its ephemeral published port on abrupt
+restart. The fixture now rediscovers that port; CI confirmed reassignment and successful
+recovery. TLS hostname/pin and fail-closed behavior were not relaxed.
 The existing dedicated process tests retain coverage for uncooperative cleanup,
 TERM/KILL and quarantine. This slice modifies only synthetic tests, their CI time
 budget and documentation. No production configuration or activation gate changes.
@@ -284,7 +290,7 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. verify the added full-stack TLS recovery cases on the exact PR head before merging;
+1. keep exact-head CI as the merge gate; synthetic full-stack recovery is verified at the SHA above;
 2. qualify OS/loader configuration integrity, host logging and deployment-specific supervisor/network faults;
 3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
 4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
