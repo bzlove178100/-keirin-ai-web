@@ -34,9 +34,10 @@ The current slice adds `StrictPostgresConnectionFactory` for use inside a truste
 top-level deadline-child factory. It accepts an injected driver and password source;
 construction performs no I/O. Calls reject noncanonical timeouts and ambient libpq/TLS
 configuration before accessing the source, require a nonempty bounded password and
-disable client-certificate/passfile fallback. Session preflight checks actual identity,
+disable client-certificate/passfile fallback and require SCRAM-SHA-256 authentication.
+Session preflight checks actual identity,
 database, TLS, primary/read-write status, privilege flags, absence of role memberships
-and server timeout values, then commits the read-only preflight transaction before
+and server timeout values, then commits the preflight SELECT transaction before
 returning the connection. Every failure closes/rejects with fixed outward errors.
 
 Ambient rejection is intentionally strict: any `PG*` variable, `OPENSSL_CONF`,

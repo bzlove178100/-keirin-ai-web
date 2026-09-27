@@ -211,7 +211,7 @@ The current slice adds `StrictPostgresConnectionFactory`, with inert constructio
 injected driver/password source. Before reading the source it rejects all PG-prefixed
 environment variables, selected OpenSSL/trust overrides, default service/password/SSL
 files in both HOME and the POSIX account home, and any noncanonical adapter limits.
-It fixes password-only authentication (no passfile/client-certificate fallback) and
+It requires SCRAM-SHA-256 password authentication (no passfile/client-certificate fallback) and
 performs catalog-qualified preflight before returning an idle connection: exact session/
 current user and database, TLS, primary/read-write state, nonprivileged login with no
 role memberships, and the actual server timeout values. Errors remain fixed and no

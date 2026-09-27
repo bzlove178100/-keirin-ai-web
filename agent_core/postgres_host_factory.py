@@ -87,7 +87,7 @@ class StrictPostgresConnectionFactory:
             connection = self._connect(
                 **self._profile.connection_parameters(), **limits,
                 password=password, passfile=os.devnull, sslcertmode="disable",
-                application_name="agent-secret-host",
+                require_auth="scram-sha-256", application_name="agent-secret-host",
             )
             password = None
             if connection.autocommit is not False:

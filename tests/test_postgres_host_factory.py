@@ -101,6 +101,7 @@ class FactoryTests(unittest.TestCase):
         self.assertEqual(self.events, ["source", "connect"])
         self.assertEqual(self.kwargs["sslmode"], "verify-full")
         self.assertEqual(self.kwargs["sslcertmode"], "disable")
+        self.assertEqual(self.kwargs["require_auth"], "scram-sha-256")
         self.assertEqual(self.kwargs["passfile"], os.devnull)
         self.assertEqual(self.connection.calls, ["cursor", "execute", "fetch", "fetch", "close", "commit"])
 
