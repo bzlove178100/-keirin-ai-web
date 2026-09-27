@@ -202,6 +202,11 @@ class BackendTests(unittest.TestCase):
         for cls in (KeyboardInterrupt, SystemExit):
             backend = self.backend(factory_error=cls(MARKER))
             self.assert_safe(cls, lambda: backend.read(KEY))
+            class LeakySubclass(cls):
+                def __str__(self):
+                    return MARKER
+            backend = self.backend(factory_error=LeakySubclass())
+            self.assert_safe(cls, lambda: backend.read(KEY))
 
     def test_timeout_configuration_rejected_without_io(self):
         for kwargs in ({"connect_timeout_seconds": 0}, {"connect_timeout_seconds": 1},

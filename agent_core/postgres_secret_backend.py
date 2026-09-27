@@ -129,8 +129,10 @@ class PostgresSecretBackend:
             committed = True
         except BaseException as error:
             failed = True
-            if isinstance(error, (KeyboardInterrupt, SystemExit)):
-                interrupted = type(error)
+            if isinstance(error, KeyboardInterrupt):
+                interrupted = KeyboardInterrupt
+            elif isinstance(error, SystemExit):
+                interrupted = SystemExit
             # Only this exact private-function rejection can prove a CAS conflict.
             # SQLSTATE P0002 alone also describes missing secret/read records.
             try:

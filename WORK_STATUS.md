@@ -140,8 +140,12 @@ read-back validation, parameterized fixed SQL, explicit commit-before-success, f
 outward errors and no retries. Exact CAS conflict requires the private function's fixed
 SQLSTATE/message and successful rollback; other failures after write submission remain
 ambiguous. Connection/driver/cleanup errors are never serialized or logged by the adapter.
-Synthetic fault tests pass locally. PostgreSQL 17 host tests are wired into CI with
-`psycopg[binary]==3.2.10`; CI results must be checked on the actual PR head before merge.
+All 13 synthetic fault tests and 20 related regression checks pass locally. PR #101's
+initial implementation head `0af417c67f686cd6c7a731935d7791ecfd97982c` passed all four
+PR workflows, including PostgreSQL 17 host tests with `psycopg[binary]==3.2.10` for
+real-driver read/CAS, lock/statement cancellation, two-connection CAS and cleanup.
+The final slice also normalizes interrupt subclasses to fixed built-in exceptions;
+CI must be rechecked on that exact final head before merge.
 No live factory, credentials, migration or runtime binding is configured.
 
 The injected factory is trusted host code: it must honor timeout arguments, use a fresh
@@ -163,8 +167,8 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. verify the bounded host adapter PR head through synthetic regression and PostgreSQL 17 CI;
-2. add host process/network-fault deadline evidence and review trusted factory/TLS/bootstrap configuration; keep credentials synthetic;
+1. add host process/network-fault deadline evidence for the injected adapter;
+2. review trusted factory/TLS/bootstrap configuration; keep credentials synthetic;
 3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
 4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 
