@@ -293,6 +293,9 @@ Four dedicated synthetic tests pass locally, including actual child kernel state
 parent-state preservation, no-spawn rejection, syscall/readback failure and early child
 exit. Three static redaction tests also pass. Exact PR-head CI remains the merge gate.
 Real TLS compatibility and existing hang/KILL/log-output cases run in PostgreSQL CI.
+Initial CI correctly rejected setup-python's injected LD_LIBRARY_PATH. The affected
+test commands now explicitly start Python without that variable; application code
+still rejects every LD_ override and does not silently clean its own environment.
 
 This is not a complete host sandbox or live deployment qualification. Trusted
 launcher/import integrity, environment mutation races, parent memory, existing root/
