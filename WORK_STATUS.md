@@ -1,6 +1,6 @@
 # Work status
 
-Updated: 2026-09-27 (Asia/Tokyo).
+Updated: 2026-09-28 (Asia/Tokyo).
 
 ## Product direction
 
@@ -245,6 +245,33 @@ exists. TLS CI exercises sealed-CA read/CAS, candidate-CA replacement rejection,
 bootstrap revocation and actual temporary-role password rotation. These new CI cases
 must pass on the PR head before merge. No real trust pin, secret source or endpoint is bound.
 
+## Synthetic host recovery qualification (2026-09-28)
+
+GitHub main and PR #106 were rechecked at
+`c65bf40bf0035f6c85096211e24acde858a15879` (merged).
+The TLS CI fixture now composes the strict factory, sealed trust snapshot, bootstrap
+lease, process deadline, PostgreSQL adapter and durable store through recovery cases:
+
+- expired, stale-version and revoked bootstrap leases and wrong TLS hostname reject
+  both reads and CAS with fixed context-free errors; restored configuration reads
+  the unchanged record;
+- real TLS COMMIT followed by child crash returns ambiguous, fresh read-back finds
+  exactly the committed version, and stale CAS cannot replay it;
+- deadline termination during a real row lock leaves the record unchanged;
+- a new parent interpreter and its child recover the same committed record;
+- paused disposable PostgreSQL rejects reads and leaves interrupted CAS ambiguous;
+  unpause and abrupt DB restart preserve the committed record;
+- terminal record revocation survives fresh clients and cannot be resurrected;
+- child processes and named PostgreSQL sessions are checked for cleanup.
+
+Local factory/profile/trust/adapter checks: 36 passing tests. This environment lacks
+Docker, so actual TLS/PostgreSQL recovery execution is gated on the PR-head CI.
+The existing dedicated process tests retain coverage for uncooperative cleanup,
+TERM/KILL and quarantine. This slice modifies only synthetic tests, their CI time
+budget and documentation. No production configuration or activation gate changes.
+Deployment supervisor/loader/logging qualification, actual secret custody and
+existing-session revocation remain unproven operational gates.
+
 ## Current agent state
 
 The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract, an offline full credential-stack composition path, a credential-gated provider-action boundary, persistence-safe action/verifier error handling, ephemeral diagnostic metadata and a static persistence-redaction audit.
@@ -257,7 +284,7 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. consolidate host readiness evidence and verify the full injected bootstrap/trust/process stack against restart and recovery cases;
+1. verify the added full-stack TLS recovery cases on the exact PR head before merging;
 2. qualify OS/loader configuration integrity, host logging and deployment-specific supervisor/network faults;
 3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
 4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
