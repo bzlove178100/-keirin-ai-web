@@ -19,6 +19,17 @@ application name, and read/write requirement. Its `sslmode=disable` is intention
 limited to this isolated plaintext fixture and is **not an approved live profile**.
 Passing this test does not demonstrate TLS, Vault encryption or deployment readiness.
 
+The next slice adds a separate Docker TLS fixture in `tests/run_secret_tls_contract.py`.
+It generates a temporary CA, valid/expired server certificates and a distinct wrong CA;
+performs process-wrapped TLS read/CAS; and rejects wrong hostname/CA, expired certificates
+and a reachable plaintext server. Private keys stay in disposable files and are removed
+with the fixture. CI evidence must be checked before calling this slice verified.
+
+`PostgresHostProfile` fixes transport settings and rejects malformed/multiple targets,
+DSN-like input and known privileged login names without I/O. It is a parameter policy,
+not an endpoint allowlist, privilege audit or live factory. It accepts operator-approved
+configuration only; callers must not derive it from task inputs or override its output.
+
 ## Proposed live profile and evidence still required
 
 These are engineering requirements for a later, separately reviewed host factory.
@@ -45,10 +56,11 @@ an external supervisor remain required even with process isolation.
 
 ## Next executable validation
 
-Create an isolated TLS-enabled PostgreSQL fixture with an ephemeral test CA and server
-certificate. Test valid hostname/CA, wrong hostname/CA and plaintext downgrade rejection,
-then implement an unbound strict factory profile against it. Keep real endpoints, real
-credentials, staging migration, provider refresh and hosted execution out of that change.
+After the ephemeral TLS fixture passes, implement an unbound factory that enforces
+the profile, rejects unsafe ambient configuration and validates actual session identity.
+Qualify secret-source custody, trust-file ownership and host supervisor limits separately.
+Keep real endpoints, credentials, staging migration, provider refresh and hosted execution
+out of this code/CI-only sequence.
 
 ## Official references checked
 

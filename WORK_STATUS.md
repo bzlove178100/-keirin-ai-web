@@ -181,18 +181,31 @@ PR #102's 13 process tests and 33 related regression tests passed locally; its f
 PR workflows, four main workflows and Pages deployment passed. Main was rechecked at
 that merge SHA before starting the current process/PostgreSQL integration slice.
 
-The current slice adds `tests/postgres_secret_process_contract.py`, invoked by the
+PR #103 (`de51b5033c1137b3968c31770cc8d6b7660f9ae5`) added `tests/postgres_secret_process_contract.py`, invoked by the
 disposable SQL contract runner. It exercises the process wrapper through direct
 synthetic database logins, fresh-process read-back, stale/cross-binding denial,
 two-child CAS, a real PostgreSQL commit followed by a lost child acknowledgement,
 deadline termination during a lock wait, terminal revocation and client/server cleanup.
 This fixture uses plaintext loopback connections and synthetic credentials only.
-CI on the actual PR head must pass before this slice can be merged.
+All four PR workflows, four main workflows and Pages passed before this TLS slice.
 
 `HOST_SECRET_CONNECTION_REVIEW.md` records the official libpq TLS/hostname, primary,
 ambient configuration and bootstrap review. No live factory or secure-TLS claim is
-introduced. The next concrete validation is an ephemeral TLS PostgreSQL fixture and
-strict unbound factory profile, including certificate/name/downgrade rejection.
+introduced by that review.
+
+The current code-only slice adds `PostgresHostProfile`, a non-secret configuration
+contract with one explicit hostname/address/port, dedicated-login validation, an
+absolute CA-file path, fixed verify-full TLS, disabled GSS encryption, minimum TLS 1.2
+and read-write session selection. It performs no I/O and supplies no credentials.
+Local profile and static-redaction checks pass; no live connection factory is bound.
+
+`tests/run_secret_tls_contract.py` creates disposable loopback PostgreSQL 17 containers
+and ephemeral certificates. It checks TLS read/CAS through the process wrapper and
+wrong CA/hostname, expired certificate and plaintext-server rejection. Positive
+controls establish server/account availability. Certificate keys are generated only in
+temporary directories; no key or certificate artifact is committed/uploaded. CI uses
+pinned test-only psycopg 3.2.10 and cryptography 46.0.0. Actual TLS results must be
+confirmed on the PR head before merge; Docker is unavailable in the local workspace.
 
 ## Current agent state
 
@@ -206,7 +219,7 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. test an ephemeral TLS-enabled PostgreSQL fixture and strict unbound host connection profile;
+1. integrate an unbound factory with strict ambient-configuration rejection and session-identity checks;
 2. qualify bootstrap custody, ambient configuration and deployment-specific supervisor/network faults;
 3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
 4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
