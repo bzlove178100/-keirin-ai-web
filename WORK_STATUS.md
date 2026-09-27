@@ -155,7 +155,7 @@ and bootstrap-secret custody. Server/connect limits are not a hard process deadl
 DNS, network blackholes or uncooperative cleanup. Standard error messages/repr/tracebacks
 are redacted; diagnostic systems that capture frame locals are prohibited for secret paths.
 
-The next code-only slice adds `ProcessDeadlinePostgresSecretBackend`, an unbound opt-in
+PR #102 (`b039772e6cc28a362faf4d662ce947722591f6d8`) added `ProcessDeadlinePostgresSecretBackend`, an unbound opt-in
 wrapper with one spawned process per operation. It bounds child startup/DB I/O waiting,
 then uses TERM/KILL with two bounded 250ms reap waits. Driver rollback/close stays in
 the child. A child timeout/crash or incomplete reply cannot prove a CAS result and is
@@ -177,6 +177,23 @@ dumps. No real factory is bound. OS creation/scheduling and unkillable kernel wo
 be absolutely bounded by Python; host supervisor, memory/process limits, secure IPC/memory
 policy, TLS/primary/bootstrap review and actual deployment qualification remain open.
 
+PR #102's 13 process tests and 33 related regression tests passed locally; its four
+PR workflows, four main workflows and Pages deployment passed. Main was rechecked at
+that merge SHA before starting the current process/PostgreSQL integration slice.
+
+The current slice adds `tests/postgres_secret_process_contract.py`, invoked by the
+disposable SQL contract runner. It exercises the process wrapper through direct
+synthetic database logins, fresh-process read-back, stale/cross-binding denial,
+two-child CAS, a real PostgreSQL commit followed by a lost child acknowledgement,
+deadline termination during a lock wait, terminal revocation and client/server cleanup.
+This fixture uses plaintext loopback connections and synthetic credentials only.
+CI on the actual PR head must pass before this slice can be merged.
+
+`HOST_SECRET_CONNECTION_REVIEW.md` records the official libpq TLS/hostname, primary,
+ambient configuration and bootstrap review. No live factory or secure-TLS claim is
+introduced. The next concrete validation is an ephemeral TLS PostgreSQL fixture and
+strict unbound factory profile, including certificate/name/downgrade rejection.
+
 ## Current agent state
 
 The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract, an offline full credential-stack composition path, a credential-gated provider-action boundary, persistence-safe action/verifier error handling, ephemeral diagnostic metadata and a static persistence-redaction audit.
@@ -189,8 +206,8 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. review trusted factory/TLS/primary/bootstrap configuration and child-host operational limits using synthetic data;
-2. qualify the process wrapper against the disposable PostgreSQL fixture and deployment-specific supervisor/network faults;
+1. test an ephemeral TLS-enabled PostgreSQL fixture and strict unbound host connection profile;
+2. qualify bootstrap custody, ambient configuration and deployment-specific supervisor/network faults;
 3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
 4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 
