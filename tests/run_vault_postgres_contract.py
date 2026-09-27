@@ -6,8 +6,10 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 PSQL = [
     "psql", "-X", "--set", "ON_ERROR_STOP=1", "--quiet", "--tuples-only", "--no-align"
 ]
@@ -177,6 +179,8 @@ def main() -> None:
             raise SystemExit("synthetic_vault_contract_failed")
 
         _run_independent_session_race()
+        from postgres_secret_host_contract import run_host_contract
+        run_host_contract()
     finally:
         _cleanup()
 
