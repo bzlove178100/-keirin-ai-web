@@ -251,6 +251,14 @@ def _run_recovery(port, ca, server_name, current):
         time.sleep(0.25)
     else:
         raise AssertionError("synthetic_restart_not_ready")
+    # Docker may reassign an ephemeral published host port on container restart.
+    # Refresh fixture discovery; never weaken the TLS hostname/pin or retry CAS.
+    restarted_port = int(_command(["docker", "port", server_name, "5432/tcp"]).rsplit(":", 1)[1])
+    print("Synthetic restart port reassigned:", restarted_port != port)
+    port = restarted_port
+    os.environ["SYNTHETIC_TLS_PORT"] = str(port)
+    with _admin(port, ca) as admin:
+        assert admin.execute("SELECT 1").fetchone() == (1,)
     assert _store().read(BINDING) == current
 
     revoked = replace(current, version=current.version + 1, state="revoked",
