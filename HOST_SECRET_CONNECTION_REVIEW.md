@@ -89,12 +89,37 @@ an external supervisor remain required even with process isolation.
 
 ## Next executable validation
 
-After pinned-trust/bootstrap CI passes, consolidate host readiness evidence and exercise
-restart/recovery composition, then qualify host supervisor/logging limits with synthetic fixtures.
+PR #107 verified synthetic TLS process/server restart, crash-after-commit, lease/TLS
+rejection, DB pause and terminal record revocation.
+
+The next code-only slice rejects LD_/DYLD_ variables and selected Python import/debug
+overrides before spawn, without reading/logging values or silently sanitizing them.
+After redirecting stdout/stderr, each deadline child sets and verifies RLIMIT_CORE=(0,0),
+Linux dumpable=0 and no_new_privs=1, and sets umask 077 before decoding secret IPC or
+calling the factory. Failure exits the child: reads stay unavailable, writes ambiguous,
+without retry. Parent resource limits/privileges are unchanged; unsupported OS/syscall
+behavior fails closed.
+
+This does not secure an already modified interpreter/loader, eliminate environment
+check/spawn races or protect imports executed before the spawned child target. Imports
+must remain trusted and side-effect-free. A trusted launcher must supply a fixed clean
+environment before interpreter startup. no_new_privs does not remove existing privileges;
+trusted code can change dumpable again. Root/kernel/ptrace capabilities, swap, telemetry,
+database/platform logs and parent memory remain outside these safeguards.
+
+Next qualify external supervision (whole-process-group cleanup on parent death and
+cgroup memory/process/CPU limits), controlled launcher/image integrity and platform/
+database log settings in disposable fixtures. Current child deadlines do not prove
+those deployment properties. No real host is declared ready by these tests.
 Keep real endpoints, credentials, staging migration, provider refresh and hosted execution
 out of this code/CI-only sequence.
 
 ## Official references checked
+
+OS references checked 2026-09-28:
+- [Python resource limits](https://docs.python.org/3.12/library/resource.html)
+- [Linux dumpable control](https://www.man7.org/linux/man-pages/man2/PR_SET_DUMPABLE.2const.html)
+- [Linux no_new_privs](https://www.man7.org/linux/man-pages/man2/PR_SET_NO_NEW_PRIVS.2const.html)
 
 - [PostgreSQL 17 connection parameters](https://www.postgresql.org/docs/17/libpq-connect.html):
   `host` / `hostaddr`, per-host connection timeout, `sslmode`, `gssencmode` and
