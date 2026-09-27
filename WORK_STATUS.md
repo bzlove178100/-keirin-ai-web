@@ -73,6 +73,7 @@ Key merged milestones:
 - PR #96 (`a6ec19dd709cce78c870afa30d882977ea72adbf`): added the reusable synthetic-only durable-backend conformance harness, covering CAS/conflict, read-back, new-client persistence and injected ambiguous outcomes. It does not establish multi-process or real backend safety.
 - PR #97 (`ba982f9da0d0c237dd6de39f5e98865d90431d15`): added a synthetic-only SQLite backend under `tests/support`, ran the reusable harness against it, and verified a two-process CAS race with one winner and one conflict. The 2 dedicated tests, 2 harness tests and 11 durable-store tests passed locally; all four PR workflows passed before merge. No encryption or production backend readiness is implied.
 - PR #98 (`15bc909133a688b1db87bb780532912afcfec38b`): selected Vault plus private PostgreSQL metadata for an offline prototype and recorded the current isolation/key-lifecycle/operational blockers. Added and executed a catalog-only inventory without reading secret rows. All four PR workflows passed before merge.
+- PR #100 (`c4799d024b5862f81733ad63081f710e77624a70`): extended the synthetic PostgreSQL 17 fixture to the full refresh record and verified independent two-session CAS, full validation, rollback and revocation. This is the confirmed main base for the bounded host adapter slice.
 
 ## Hosted staging/runtime state
 
@@ -128,12 +129,31 @@ lifecycle, bootstrap credential, logging/restore and real-backend fault-test evi
 `ops/credential_vault_inventory.sql` was executed successfully as a catalog-only query;
 it is an inventory, not a readiness check.
 
-The initial SQL/ACL prototype in `tests/support/vault_postgres_contract.sql` has passed
-the dedicated PostgreSQL 17 CI step on PR #99 (implementation head `40bdb16`). It verifies
-scoped session identities, cross-binding/API denial, stale CAS, rollback of both secret
-and metadata updates, and terminal revocation using synthetic markers. Its reduced
-record schema and single-connection identity switching do not prove full-record integrity,
-independent-session concurrency, real Vault encryption or staging readiness.
+The SQL/ACL prototype in `tests/support/vault_postgres_contract.sql` now validates the
+full refresh record and has independent-session CAS coverage through PR #100. It verifies
+scoped identities, cross-binding/API denial, stale CAS, rollback and terminal revocation
+using synthetic markers. It does not prove real Vault encryption or staging readiness.
+
+The current code-only slice adds `PostgresSecretBackend`: a binding-pinned, injected
+host connection factory, startup connection/statement/lock limits, strict record and
+read-back validation, parameterized fixed SQL, explicit commit-before-success, fixed
+outward errors and no retries. Exact CAS conflict requires the private function's fixed
+SQLSTATE/message and successful rollback; other failures after write submission remain
+ambiguous. Connection/driver/cleanup errors are never serialized or logged by the adapter.
+All 13 synthetic fault tests and 20 related regression checks pass locally. PR #101's
+initial implementation head `0af417c67f686cd6c7a731935d7791ecfd97982c` passed all four
+PR workflows, including PostgreSQL 17 host tests with `psycopg[binary]==3.2.10` for
+real-driver read/CAS, lock/statement cancellation, two-connection CAS and cleanup.
+The final slice also normalizes interrupt subclasses to fixed built-in exceptions;
+CI must be rechecked on that exact final head before merge.
+No live factory, credentials, migration or runtime binding is configured.
+
+The injected factory is trusted host code: it must honor timeout arguments, use a fresh
+idle dedicated primary connection, avoid pools/retries/telemetry, and own verified TLS
+and bootstrap-secret custody. Server/connect limits are not a hard process deadline for
+DNS, network blackholes or uncooperative cleanup. A reviewed host deadline and actual
+network-fault evidence remain pre-activation gates. Standard error messages/repr/tracebacks
+are redacted; diagnostic systems that capture frame locals are prohibited for secret paths.
 
 ## Current agent state
 
@@ -147,8 +167,8 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. extend the reduced PostgreSQL fixture record to the full refresh-record schema and test independent-session CAS;
-2. implement the host adapter with bounded injected connection handling and fixed errors; keep all credentials synthetic during code/CI verification;
+1. add host process/network-fault deadline evidence for the injected adapter;
+2. review trusted factory/TLS/bootstrap configuration; keep credentials synthetic;
 3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
 4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 
