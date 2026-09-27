@@ -181,6 +181,8 @@ def main() -> None:
         _run_independent_session_race()
         from postgres_secret_host_contract import run_host_contract
         run_host_contract()
+        from postgres_secret_process_contract import run_process_contract
+        run_process_contract()
     finally:
         _cleanup()
 

@@ -47,6 +47,7 @@ jobs:
         timeout-minutes: 2
         run: python tests/test_postgres_secret_process.py
       - name: Test synthetic secret storage SQL and ACL contract
+        timeout-minutes: 3
         env:
           AGENT_EPHEMERAL_DB_TEST: '1'
           PGHOST: 127.0.0.1
