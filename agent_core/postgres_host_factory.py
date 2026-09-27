@@ -3,9 +3,13 @@ from pathlib import Path
 import os
 import pwd
 import re
+import math
+import time
 
 from .durable_secret_store import DurableSecretBackendUnavailable
 from .postgres_host_profile import PostgresHostProfile
+from .bootstrap_lease import validate_lease
+from .host_trust import snapshot_trust
 
 _LIMITS = re.compile(
     r"-c statement_timeout=([1-9][0-9]{0,4}) -c lock_timeout=([1-9][0-9]{0,4}) "
@@ -50,12 +54,18 @@ class StrictPostgresConnectionFactory:
     supervisor limits and actual secret-source custody remain operator review gates.
     """
 
-    def __init__(self, profile, *, driver_connect, password_source):
-        if type(profile) is not PostgresHostProfile or not callable(driver_connect) or not callable(password_source):
+    def __init__(self, profile, *, driver_connect, password_source, lease_is_current,
+                 trusted_ca_sha256, clock=time.time):
+        if (type(profile) is not PostgresHostProfile or not callable(driver_connect)
+                or not callable(password_source) or not callable(lease_is_current) or not callable(clock)
+                or type(trusted_ca_sha256) is not str or re.fullmatch(r"[0-9a-f]{64}", trusted_ca_sha256) is None):
             raise ValueError("postgres_host_factory_configuration_invalid")
         self._profile = profile
         self._connect = driver_connect
         self._password_source = password_source
+        self._lease_is_current = lease_is_current
+        self._trusted_ca_sha256 = trusted_ca_sha256
+        self._clock = clock
 
     def __repr__(self):
         return "StrictPostgresConnectionFactory(<redacted>)"
@@ -66,6 +76,8 @@ class StrictPostgresConnectionFactory:
         password = None
         accepted = False
         interrupted = None
+        trust = None
+        lease = None
         try:
             if set(limits) != {"connect_timeout", "options", "autocommit", "prepare_threshold"}:
                 raise ValueError("connection_limits_invalid")
@@ -80,12 +92,21 @@ class StrictPostgresConnectionFactory:
             if not (1 <= lock <= statement <= 30000 and idle == statement):
                 raise ValueError("connection_limits_invalid")
             _assert_clean_environment()
-            password = self._password_source()
-            if type(password) is not str or not password or len(password) > 16384 or "\x00" in password:
-                raise ValueError("bootstrap_password_invalid")
+            trust = snapshot_trust(self._profile.root_certificate, self._trusted_ca_sha256)
+            lease = self._password_source()
+            now = self._clock()
+            if type(now) not in {int, float} or not math.isfinite(now):
+                raise ValueError("bootstrap_clock_invalid")
+            anchor = time.monotonic()
+            validate_lease(lease, self._profile, now)
+            if self._lease_is_current(lease.version) is not True:
+                raise ValueError("bootstrap_lease_not_current")
+            password = lease.password
+            parameters = self._profile.connection_parameters()
+            parameters["sslrootcert"] = trust.path
             # Explicit password is required: no .pgpass/client-certificate fallback.
             connection = self._connect(
-                **self._profile.connection_parameters(), **limits,
+                **parameters, **limits,
                 password=password, passfile=os.devnull, sslcertmode="disable",
                 require_auth="scram-sha-256", application_name="agent-secret-host",
             )
@@ -105,6 +126,15 @@ class StrictPostgresConnectionFactory:
             cursor.close()
             cursor = None
             connection.commit()
+            after = self._clock()
+            if (type(after) not in {int, float} or not math.isfinite(after) or after < now
+                    or time.monotonic() - anchor >= lease.expires_at - now):
+                raise ValueError("bootstrap_lease_expired")
+            validate_lease(lease, self._profile, after)
+            if self._lease_is_current(lease.version) is not True:
+                raise ValueError("bootstrap_lease_not_current")
+            trust.close()
+            trust = None
             accepted = True
         except BaseException as error:
             if isinstance(error, KeyboardInterrupt):
@@ -113,6 +143,12 @@ class StrictPostgresConnectionFactory:
                 interrupted = SystemExit
         finally:
             password = None
+            lease = None
+            if trust is not None:
+                try:
+                    trust.close()
+                except BaseException:
+                    pass
             if not accepted and connection is not None:
                 # Cleanup is still inside the outer child deadline. No raw error leaks.
                 try:

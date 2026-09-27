@@ -207,7 +207,7 @@ temporary directories; no key or certificate artifact is committed/uploaded. CI 
 pinned test-only psycopg 3.2.10 and cryptography 46.0.0. All four PR workflows, four main
 workflows and Pages passed, including the actual TLS success/rejection cases.
 
-The current slice adds `StrictPostgresConnectionFactory`, with inert construction and
+PR #105 (`5e5af7a632875ca183b002f2a9c1ae48ea8335b7`) added `StrictPostgresConnectionFactory`, with inert construction and
 injected driver/password source. Before reading the source it rejects all PG-prefixed
 environment variables, selected OpenSSL/trust overrides, default service/password/SSL
 files in both HOME and the POSIX account home, and any noncanonical adapter limits.
@@ -220,10 +220,30 @@ outer process deadline. Local factory/profile/static checks total 15 passing tes
 
 TLS CI now invokes this factory inside the process child with synthetic credentials and
 checks ambient PGSERVICE rejection, added CREATEDB privilege, role membership and
-read-only role configuration, followed by restored successful readback. CI must pass
-on the actual head before merge. No real bootstrap source or live factory is configured.
-CA ownership/race protection, OS loader/OpenSSL configuration integrity, logging, host
-supervisor and actual secret-source custody remain separate operational gates.
+read-only role configuration, followed by restored successful readback. All four PR
+workflows, four main workflows and Pages passed. No real bootstrap source or live
+factory is configured.
+
+The current slice pins the CA to a reviewed SHA-256 and copies verified bytes into a
+sealed Linux memfd before obtaining credentials. The bounded 128KiB read walks directory
+FDs with no symlinks, checks ownership/permissions, regular-file/single-link state and
+metadata stability, and rejects mismatched hashes. The driver receives only the sealed
+`/proc/self/fd` path, kept open through verification and then closed. Root and the host
+account remain trusted; kernel/OS loader integrity and deployment policy are not proven.
+
+The injected bootstrap contract now returns a redacted `BootstrapPasswordLease` with
+login/database, version, expiration and password, plus a version-current callback.
+It validates before connection and again after preflight, checks wall/monotonic elapsed
+time, and rejects rotation/revocation/expiration without retry or credential caching.
+A new independent connection may acquire a newly authorized version. This does not
+revoke already-open DB sessions or perform provider refresh/real credential rotation.
+
+Local checks: 5 trust-file tests, 15 factory/lifecycle tests and 3 static-redaction tests
+pass. The local Python build omitted seal constants; verified Linux UAPI values are used
+while still requiring the real kernel seal operations to succeed. No writable fallback
+exists. TLS CI exercises sealed-CA read/CAS, candidate-CA replacement rejection, synthetic
+bootstrap revocation and actual temporary-role password rotation. These new CI cases
+must pass on the PR head before merge. No real trust pin, secret source or endpoint is bound.
 
 ## Current agent state
 
@@ -237,7 +257,7 @@ Code-only work may continue without another live-run authorization.
 
 Next safe slice:
 
-1. qualify the trust-file ownership/replacement boundary and an injected bootstrap-source lifecycle with synthetic data;
+1. consolidate host readiness evidence and verify the full injected bootstrap/trust/process stack against restart and recovery cases;
 2. qualify OS/loader configuration integrity, host logging and deployment-specific supervisor/network faults;
 3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
 4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.

@@ -1,6 +1,7 @@
 """Disposable Docker PostgreSQL TLS contract. All keys/passwords are synthetic."""
 from contextlib import contextmanager
 from dataclasses import replace
+from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
@@ -21,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 from agent_core.durable_secret_store import DurableVersionedSecretStore
 from agent_core.postgres_host_profile import PostgresHostProfile
 from agent_core.postgres_host_factory import StrictPostgresConnectionFactory
+from agent_core.bootstrap_lease import BootstrapPasswordLease
 from agent_core.postgres_secret_process import ProcessDeadlinePostgresSecretBackend
 from agent_core.refresh_credentials import CredentialBinding
 from agent_core.versioned_secret_store import SecretStoreError
@@ -115,7 +117,17 @@ def tls_factory(**kwargs):
     # Resolve this synthetic source only inside the deadline child. No live secret
     # facility, environment password or configured production factory is introduced.
     return StrictPostgresConnectionFactory(
-        profile, driver_connect=psycopg.connect, password_source=lambda: PASSWORD,
+        profile, driver_connect=psycopg.connect,
+        trusted_ca_sha256=os.environ["SYNTHETIC_TLS_CA_SHA256"],
+        password_source=lambda: BootstrapPasswordLease(
+            profile.login, profile.database, int(os.environ.get("SYNTHETIC_BOOTSTRAP_VERSION", "1")),
+            int(time.time()) + 60,
+            PASSWORD if os.environ.get("SYNTHETIC_BOOTSTRAP_VERSION", "1") == "1" else "SYNTHETIC:rotated-ci-only",
+        ),
+        lease_is_current=lambda version: (
+            os.environ.get("SYNTHETIC_BOOTSTRAP_REVOKED") != "1"
+            and version == int(os.environ.get("SYNTHETIC_BOOTSTRAP_VERSION", "1"))
+        ),
     )(**kwargs)
 
 
@@ -171,11 +183,36 @@ def main():
                 admin.execute("INSERT INTO agent_credential_private.host_bindings VALUES ('secret_test_host_a',%s)", (key,))
             os.environ["SYNTHETIC_TLS_PORT"] = str(port)
             os.environ["SYNTHETIC_TLS_CA"] = str(ca)
+            # Pin comes from fixture provisioning; never derive it in the factory
+            # from an untrusted candidate file on each connection.
+            os.environ["SYNTHETIC_TLS_CA_SHA256"] = sha256(ca.read_bytes()).hexdigest()
             store = DurableVersionedSecretStore(ProcessDeadlinePostgresSecretBackend(tls_factory, BINDING))
             current = store.read(BINDING)
             updated = replace(current, version=current.version + 1)
             assert store.compare_and_swap(BINDING, expected_version=current.version, replacement=updated) == updated
             assert store.read(BINDING) == updated
+            original_ca = ca.read_bytes()
+            ca.write_bytes((directory / "wrong-ca.crt").read_bytes())
+            try:
+                _must_block_store(store)
+            finally:
+                ca.write_bytes(original_ca)
+            assert store.read(BINDING) == updated
+            os.environ["SYNTHETIC_BOOTSTRAP_REVOKED"] = "1"
+            try:
+                _must_block_store(store)
+            finally:
+                del os.environ["SYNTHETIC_BOOTSTRAP_REVOKED"]
+            with _admin(port, ca) as admin:
+                admin.execute("ALTER ROLE secret_test_host_a PASSWORD 'SYNTHETIC:rotated-ci-only'")
+            try:
+                _must_block_store(store)  # Old lease/password cannot connect.
+                os.environ["SYNTHETIC_BOOTSTRAP_VERSION"] = "2"
+                assert store.read(BINDING) == updated
+            finally:
+                with _admin(port, ca) as admin:
+                    admin.execute("ALTER ROLE secret_test_host_a PASSWORD 'SYNTHETIC:tls-ci-only'")
+                os.environ["SYNTHETIC_BOOTSTRAP_VERSION"] = "1"
             # Even an otherwise valid TLS session must be rejected if ambient
             # configuration or the actual login's privileges changed.
             os.environ["PGSERVICE"] = "SYNTHETIC:unapproved"
@@ -211,6 +248,7 @@ def main():
                     assert admin.execute("SELECT 1").fetchone() == (1,)
     print("Synthetic TLS PostgreSQL: verified TLS process read/CAS, wrong hostname/CA, expired certificate and plaintext rejection PASS")
     print("Synthetic strict factory: ambient rejection, session/privilege/read-write checks and verified handoff PASS")
+    print("Synthetic pinned trust/bootstrap: sealed CA TLS, CA replacement rejection, revocation and password rotation PASS")
 
 
 if __name__ == "__main__":

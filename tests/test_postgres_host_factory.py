@@ -3,12 +3,16 @@ import os
 import sys
 import traceback
 import unittest
+import tempfile
+from dataclasses import replace
+from hashlib import sha256
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from agent_core.durable_secret_store import DurableSecretBackendUnavailable
 from agent_core.postgres_host_factory import StrictPostgresConnectionFactory
 from agent_core.postgres_host_profile import PostgresHostProfile
+from agent_core.bootstrap_lease import BootstrapPasswordLease
 
 MARKER = "SYNTHETIC:postgres://private-password"
 LIMITS = dict(connect_timeout=5, options="-c statement_timeout=5000 -c lock_timeout=1000 "
@@ -56,8 +60,14 @@ class Connection:
 
 class FactoryTests(unittest.TestCase):
     def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.ca = Path(self.directory.name) / "ca.crt"
+        self.ca.write_bytes(b"SYNTHETIC:CA")
+        self.pin = sha256(self.ca.read_bytes()).hexdigest()
         self.profile = PostgresHostProfile("db.synthetic.invalid", "127.0.0.1", 5432,
-                                           "agent_checkpoint_ci", "secret_test_host_a", "/tmp/ca.crt")
+                                           "agent_checkpoint_ci", "secret_test_host_a", str(self.ca))
+        self.lease = BootstrapPasswordLease(self.profile.login, self.profile.database, 1, 200, MARKER)
+        self.current_version = 1
         self.events = []
         self.connection = Connection()
         self.env = patch.dict(os.environ, {}, clear=True)
@@ -68,19 +78,22 @@ class FactoryTests(unittest.TestCase):
     def tearDown(self):
         self.files.stop()
         self.env.stop()
+        self.directory.cleanup()
 
     def source(self):
         self.events.append("source")
-        return MARKER
+        return self.lease
 
     def connect(self, **kwargs):
         self.events.append("connect")
         self.kwargs = kwargs
         return self.connection
 
-    def factory(self, source=None, connect=None):
+    def factory(self, source=None, connect=None, clock=lambda: 100):
         return StrictPostgresConnectionFactory(self.profile, driver_connect=connect or self.connect,
-                                               password_source=source or self.source)
+                                               password_source=source or self.source,
+                                               lease_is_current=lambda version: version == self.current_version,
+                                               trusted_ca_sha256=self.pin, clock=clock)
 
     def assert_safe(self, operation, expected=DurableSecretBackendUnavailable):
         try:
@@ -168,6 +181,57 @@ class FactoryTests(unittest.TestCase):
             def broken():
                 raise cls(MARKER)
             self.assert_safe(lambda: self.factory(source=broken)(**LIMITS), cls)
+
+    def test_trust_replacement_rejected_before_source(self):
+        self.ca.write_bytes(b"SYNTHETIC:changed")
+        self.assert_safe(lambda: self.factory()(**LIMITS))
+        self.assertEqual(self.events, [])
+
+    def test_driver_reads_immutable_snapshot_not_replaced_path(self):
+        seen = []
+        def connect(**kwargs):
+            self.ca.write_bytes(b"SYNTHETIC:changed")
+            seen.append(Path(kwargs["sslrootcert"]).read_bytes())
+            return self.connect(**kwargs)
+        self.factory(connect=connect)(**LIMITS)
+        self.assertEqual(seen, [b"SYNTHETIC:CA"])
+        self.assertFalse(Path(self.kwargs["sslrootcert"]).exists())
+
+    def test_invalid_expired_or_revoked_lease_never_connects(self):
+        for field, value in (("version", True), ("version", -1), ("login", "other"),
+                             ("database", "other"), ("expires_at", 100), ("password", "")):
+            self.events.clear()
+            self.assert_safe(lambda: self.factory(source=lambda: replace(self.lease, **{field: value}))(**LIMITS))
+            self.assertNotIn("connect", self.events)
+        self.current_version = 2
+        self.assert_safe(lambda: self.factory()(**LIMITS))
+        self.assertNotIn("connect", self.events)
+
+    def test_rotation_during_connect_closes_without_retry(self):
+        def connect(**kwargs):
+            self.current_version = 2
+            return self.connect(**kwargs)
+        self.assert_safe(lambda: self.factory(connect=connect)(**LIMITS))
+        self.assertEqual(self.events, ["source", "connect"])
+        self.assertIn("rollback", self.connection.calls)
+
+    def test_expiry_and_clock_rollback_during_connect(self):
+        for times in ((100, 200), (100, 99)):
+            clock = iter(times)
+            self.connection = Connection()
+            self.assert_safe(lambda: self.factory(clock=lambda: next(clock))(**LIMITS))
+            self.assertIn("rollback", self.connection.calls)
+
+    def test_new_connection_acquires_new_version_without_replay(self):
+        factory = self.factory()
+        factory(**LIMITS)
+        self.connection = Connection()
+        self.lease = replace(self.lease, version=2, password="SYNTHETIC:rotated")
+        self.current_version = 2
+        factory(**LIMITS)
+        self.assertEqual(self.kwargs["password"], "SYNTHETIC:rotated")
+        self.assertEqual(self.events, ["source", "connect"] * 2)
+        self.assertNotIn(MARKER, repr(self.lease))
 
 
 if __name__ == "__main__":

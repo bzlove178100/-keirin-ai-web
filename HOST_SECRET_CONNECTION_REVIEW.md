@@ -47,6 +47,22 @@ not mutate the environment or inspect file contents. This is not proof against a
 already-compromised interpreter/driver, OS loader configuration or TOCTOU changes.
 Deployment must provide a controlled host environment and protected trust/config files.
 
+The current slice adds a reviewed CA hash and a sealed Linux memory snapshot. Protected
+directory FDs and no-follow opens reject symlinks, mutable permissions, unexpected owner,
+multiple links and nonregular/oversized files. The content hash, metadata stability and
+kernel write/grow/shrink seals are required; unsupported kernels fail closed. Only the
+sealed descriptor path reaches libpq. The configured hash must come from approved
+provisioning, never from the candidate file during each connection. The trusted host/root
+account, kernel and profile/pin distribution remain security assumptions.
+
+Bootstrap sources now provide an immutable redacted lease plus a version-current check.
+The factory checks exact login/database, version, expiration and current/revoked state
+before connecting and after preflight; it rejects stale/expired leases without replay.
+The callback owns authoritative source state. It must return exactly True only for the
+currently authorized version, perform no hidden retries and expose no secret in errors.
+It is checked at handoff, not continuously: closing or revoking existing DB sessions and
+distributed rotation orchestration remain outside this contract. No real source is bound.
+
 ## Proposed live profile and evidence still required
 
 These are engineering requirements for a later, separately reviewed host factory.
@@ -73,8 +89,8 @@ an external supervisor remain required even with process isolation.
 
 ## Next executable validation
 
-After strict factory CI passes, qualify trust-file ownership/replacement, the injected
-bootstrap-source lifecycle and host supervisor limits with synthetic fixtures.
+After pinned-trust/bootstrap CI passes, consolidate host readiness evidence and exercise
+restart/recovery composition, then qualify host supervisor/logging limits with synthetic fixtures.
 Keep real endpoints, credentials, staging migration, provider refresh and hosted execution
 out of this code/CI-only sequence.
 
