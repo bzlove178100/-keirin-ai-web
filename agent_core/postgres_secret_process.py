@@ -13,6 +13,7 @@ from .durable_secret_store import (
 )
 from .postgres_secret_backend import PostgresSecretBackend, _MAX_BIGINT, _strict_record
 from .refresh_credentials import CredentialBinding
+from .host_process_safety import assert_safe_spawn_environment, harden_secret_child
 
 _MAX_MESSAGE = 65536
 _STOP_GRACE_SECONDS = 0.25
@@ -26,6 +27,7 @@ def _child(factory, binding, limits, request, buffer, length):
         with open(os.devnull, "wb", buffering=0) as sink:
             os.dup2(sink.fileno(), 1)
             os.dup2(sink.fileno(), 2)
+        harden_secret_child()
         message = {"status": "unavailable"}
         write = False
         try:
@@ -112,6 +114,7 @@ class ProcessDeadlinePostgresSecretBackend:
         length = None
         interrupted = None
         try:
+            assert_safe_spawn_environment()
             if self._quarantined or type(key) is not str or key != self._key:
                 raise ValueError("secret_process_request_invalid")
             if write:

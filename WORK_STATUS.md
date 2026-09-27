@@ -278,6 +278,28 @@ budget and documentation. No production configuration or activation gate changes
 Deployment supervisor/loader/logging qualification, actual secret custody and
 existing-session revocation remain unproven operational gates.
 
+## Child OS safeguards (code-only, 2026-09-28)
+
+PR #107 is merged at `7b7328fcc6ecaab499caff0a83573e4d103cf046`; its final-head four
+PR workflows, four main workflows and Pages all passed. Main was rechecked before
+starting this slice.
+
+The process secret backend now rejects loader/Python import/debug overrides before
+spawning. The child, after silencing stdout/stderr and before request decode/factory
+execution, verifies core limits zero, Linux dumpable zero and no_new_privs one; it
+also uses umask 077. Rejection/failure never authorizes secret work or retries an
+ambiguous write. The parent is not hardened/mutated by these child-only controls.
+Four dedicated synthetic tests pass locally, including actual child kernel state,
+parent-state preservation, no-spawn rejection, syscall/readback failure and early child
+exit. Three static redaction tests also pass. Exact PR-head CI remains the merge gate.
+Real TLS compatibility and existing hang/KILL/log-output cases run in PostgreSQL CI.
+
+This is not a complete host sandbox or live deployment qualification. Trusted
+launcher/import integrity, environment mutation races, parent memory, existing root/
+ptrace privileges, swap, external supervisor/cgroup limits and platform/database log
+policy remain explicit gates in `HOST_SECRET_CONNECTION_REVIEW.md`. All activation
+switches remain unchanged; no real credentials or services are connected.
+
 ## Current agent state
 
 The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract, an offline full credential-stack composition path, a credential-gated provider-action boundary, persistence-safe action/verifier error handling, ephemeral diagnostic metadata and a static persistence-redaction audit.
