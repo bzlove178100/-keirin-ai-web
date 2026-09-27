@@ -56,3 +56,10 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: ephemeral-ci-only
         run: python tests/run_vault_postgres_contract.py
+      - name: Install pinned ephemeral certificate generator
+        run: python -m pip install 'cryptography==46.0.0'
+      - name: Test ephemeral PostgreSQL TLS and strict host profile
+        timeout-minutes: 4
+        env:
+          AGENT_EPHEMERAL_TLS_TEST: '1'
+        run: python tests/run_secret_tls_contract.py
