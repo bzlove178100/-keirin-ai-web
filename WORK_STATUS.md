@@ -2,6 +2,8 @@
 
 Updated: 2026-09-29 (Asia/Tokyo).
 
+This file is the current resumption snapshot. Detailed historical implementation notes remain available in Git history and merged PRs; they are intentionally not duplicated here.
+
 ## Product direction
 
 `AI_AGENT_REQUIREMENTS.md` is authoritative. The target is a broad autonomous AI agent for research, text/image/video/code generation, learning/evaluation, task execution, recovery and reporting. Keirin AI is the first major execution target, not the only scope.
@@ -16,484 +18,133 @@ Unless the user explicitly authorizes a new, specific boundary:
 - automatic external keirin race-data fetching: **OFF**;
 - provider generation/write bindings: **unbound**;
 - report delivery / live 21:00 scheduling: **OFF / unconfigured**;
-- scheduler / recurrence: **OFF**.
+- scheduler / recurrence: **OFF**;
+- no real provider/OAuth refresh exchange is connected;
+- no real durable secret backend is activated.
 
-Agent-only checkpoint/activity persistence and queue coordination in staging are authorized and active. Exact-task lease acquisition is deployed. No always-on worker is active.
+Agent-only checkpoint/activity persistence and queue coordination in staging were separately authorized. Exact-task lease acquisition is deployed. No always-on worker is active.
 
-Latest direct read-only staging verification: 2026-09-26 during authentication-boundary work; no live run was started:
+## Verified repository state
 
-- single-active trusted-run guard: **present**;
-- fresh trusted tasks currently `queued` / `running`: **0**;
-- `race_predictions`: **0 rows**;
-- `agent-runtime-dev`: **v6 / ACTIVE / verify_jwt=true**;
-- `agent-exact-claim-dev`: **v1 / ACTIVE / verify_jwt=true**.
+Current verified main through PR #120:
 
-## Keirin prospective evaluation
+`408d22f494111620607904a5860709239ca2eb14`
 
-- Owner-only dry-run remains the validation path.
-- Unknown odds are not invented.
-- Probabilities remain uncalibrated for monetary EV / production promotion.
-- First eligible new prospective history: 2026-09-24 Ito Onsen 1R, 7 riders, all 210 model probabilities, 72 confirmed pre-race trifecta odds, valid chronology and supervised-training eligibility.
-- Real prospective collection remains 1 distinct eligible prediction time. Four more distinct times are required to reach the evaluator's five-time technical minimum; boundary purging can require more. Five is not evidence of accuracy or profitability.
+PR #120 (`Qualify Docker daemon restart recovery`) merged after all exact-head PR workflows passed. The four post-merge main runs for that SHA also passed:
 
-## Shared autonomous-agent milestones
+- `keirin-ai regression`;
+- `collection progress UI regression`;
+- `agent checkpoint PostgreSQL contract`;
+- Pages build/deployment.
 
-Key merged milestones:
-
-- PR #32–#37: broad goal, `TaskSpec`, durable state, activity ledger, permission model, reconciliation, runtime bridge, provider-neutral read-only adapters and report contracts.
-- PR #40: verified GitHub read-only provider path.
-- PR #45–#47: queue planning, interruption safety, locking and immutable TaskSpec fingerprint binding.
-- PR #52 / #54: owner-only hosted checkpoint persistence and strict `HostedCheckpointClient`.
-- PR #56: owner-only append/read activity persistence and strict `HostedActivityClient`.
-- PR #57 (`6600d8174bc52f6dd3937e8f5a4acccd05871261`): crash-safe queue lease/fencing, bounded attempts, strict queue client and explicit expired-lease reconciliation.
-- PR #58–#60: fail-closed worker coordination, explicit execution gate and credential-isolated Supabase Edge transport.
-- PR #62–#64: SHA-pinned GitHub observation/CI verification, durable provider evidence, recovery inspection and hard run deadline.
-- PR #65 (`826e59163280f1f461f58f9c8a8a5a5dc6bbc34d`): proposal-only recovery decisions and committed closed single-run activation manifest.
-- PR #66–#72: bounded integration evidence, trusted run-instance identity, exact-task claim, exact worker binding, exact-claim Edge path and idempotent enqueue preparation.
-- PR #75 (`8b17f67c8858fedf5494c738217169e33f1336fe`): one-active-fresh-trusted-run-per-owner database guard after the two-run concurrency defect was found.
-- PR #76 (`2eda84c768edb53e9e9429b7f18761a37bac7ffa`): exact runtime instance-token binding and self-enqueue/verify before worker construction.
-- PR #77 (`ead3368968deb2f4c889f3061f07371a0610977f`): manual `workflow_dispatch`-only one-shot host with read-only GitHub permissions, fixed concurrency and timeout; it has not been dispatched by current code-only work.
-- PR #79 (`4ad117907e4416d8ebeba9d14209884cf1f0c5ed`): redacted runtime credential preflight and authentication/session lifecycle boundary.
-- PR #80 (`d85e6c008fc725accf5fd63a19a6c945457c37d4`): static `CredentialProvider`, redacted `CredentialSnapshot`, typed lifetime/scope/revocation failures, 19 tests and CI integration.
-- PR #81: synchronized this status before refresh-provider implementation.
-- PR #82 (`f684bfc3e8409558d508ad521113caaf88420253`): `RefreshingCredentialProvider` and `HostCredentialSource` boundary. It exposes access-only credential snapshots, pins provider/account/capabilities, validates TTL, prevents simultaneous refresh in one provider object, makes refresh failure terminal `blocked_auth`, prioritizes revoke, prevents clock rollback from extending TTL and preserves immutable TaskSpec identity across credential rotation. Its 26 dedicated tests and all required PR/main workflows passed; Pages also passed.
-- PR #83 (`30920f298c3ac8083ca764935369edc7e28b5237`): offline/reference versioned refresh-secret store and exchange boundary with strict version CAS/fencing, durable `refreshing` ownership before provider contact, rotated-secret persistence before access return, explicit `blocked_auth` / `blocked_ambiguous`, read-back handling for ambiguous store writes, operator-only recovery, revocation and concurrency/fault-injection tests. Provider exceptions are converted to fixed outward errors after leaving exception handlers. All required PR/main workflows and Pages passed.
-- PR #84 (`02e71c2a587cf3f55ee5b6d1671c5b5a9489fbea`): synchronized the verified PR #83 boundary and staging safety state.
-- PR #85 (`df6100cd6ba4bfea834659417ef482ad78922456`): hardened secret-store safe metadata and error redaction. Persisted failure values are fixed classifications, refresh attempt IDs use a log-safe format, store/recovery failures are mapped to fixed outward errors and malicious error-payload tests were added. Required PR workflows passed before merge.
-- PR #86 (`f0594f6376f82805d311d9bd9a0ab4b0bc1aba6c`): added `DurableVersionedSecretStore` and a provider-neutral durable-backend contract. Binding keys are opaque SHA-256 identifiers, stored records/CAS read-back are validated, backend conflict/ambiguous/unavailable conditions are mapped to fixed errors, and fake-backend fault injection verifies composition with `VersionedHostCredentialSource`. No real backend was connected.
-- PR #87 (`6031eac456cfeb834e9fcb31a20da7b671099e99`): added `CredentialBoundToolAdapter` and per-action `CredentialRequirement`. Credentials are acquired before provider actions/verifiers, access-only snapshots are injected only into local in-memory action context, auth failures block before provider invocation and terminal blocked tasks do not silently retry. No real provider was connected.
-- PR #88 (`719245a36c56d0c431ef2cd65cb1befdb5122eb6`): hardened the credential-gated provider boundary so credential-source/provider-action exception payloads are not persisted, provider `BlockedAction` reasons are replaced with fixed classifications, and action results containing a credential snapshot or any access-secret value are rejected. Dedicated leak/regression tests passed. All four PR workflows passed before merge; all four main push workflows and Pages deployment passed after merge.
-- PR #89 (`b9f4abdbd9bcd29239af08df151345bec24ea910e`): synchronized this status through the durable authentication and credential-gating work.
-- PR #90 (`0c7021371d0829766454ef847a93903e747139e4`): added the offline composition contract `DurableSecretBackend -> DurableVersionedSecretStore -> VersionedHostCredentialSource -> RefreshingCredentialProvider -> CredentialBoundToolAdapter`. The factory accepts no raw refresh secret and performs no network I/O, seeding, migration, dispatch or background work. End-to-end fake-backend/exchange tests cover successful rotation, ambiguous exchange, ambiguous durable commit read-back, CAS claim conflict, revocation, completed-task no-replay and absence of access/refresh credential material from `FileStateStore` task/activity persistence. All four required PR workflows passed before merge.
-- PR #91 (`315c9e87cc607f0669cef2f5752dd27ec1e55ce2`): introduced `SafeActionError` and changed `AgentRunner` so arbitrary untyped action/verifier exception text is never written to durable task/activity state by default. Credential-gated action failures use fixed safe codes, runtime-bridge `blocked_reason` values are treated as untrusted, and read-only worker invariant failures use explicit safe classifications. The first PR CI run exposed one expected invariant-code mismatch; it was fixed by classifying that known internal read-only violation with `SafeActionError`, after which all four PR workflows passed. After merge, all four main push workflows and Pages deployment also passed.
-- PR #92 (`e13a6a9e9507e9545b332a81c08620b65a673f74`): synchronized this status through the safe action-error milestone.
-- PR #93 (`8b777c439b1571c8b17f25f1dae4edbb2ab7931a`): added an explicitly injected host-only ephemeral diagnostic sink. It receives only constrained metadata (task/step/action, phase, attempt, retry flag, fixed classification and sanitized exception class name), never exception text/repr, task inputs, args, results, credential snapshots or provider responses. Sink failure is best-effort and cannot change retry/task semantics. Dedicated tests and all four PR workflows passed before merge; the queried main workflow set completed with no failures observed.
-- PR #94 (`b39ee38c4b6bd791e60d204c17e28b6cf509349c`): added an AST-based persistence-redaction guard so future caught exception objects cannot flow directly into `last_error`, `blocked_reason`, durable events or `BlockedAction`, and pinned runtime-bridge blocked handling to `runtime_bridge_blocked`. PR regression, collection-progress and PostgreSQL-contract workflows passed before merge; post-merge main workflows were checked separately.
-- PR #95: added `REAL_AUTH_INTEGRATION_REQUIREMENTS.md` as the pre-activation security and operational gate for any concrete backend or provider refresh exchange.
-- PR #96 (`a6ec19dd709cce78c870afa30d882977ea72adbf`): added the reusable synthetic-only durable-backend conformance harness, covering CAS/conflict, read-back, new-client persistence and injected ambiguous outcomes. It does not establish multi-process or real backend safety.
-- PR #97 (`ba982f9da0d0c237dd6de39f5e98865d90431d15`): added a synthetic-only SQLite backend under `tests/support`, ran the reusable harness against it, and verified a two-process CAS race with one winner and one conflict. The 2 dedicated tests, 2 harness tests and 11 durable-store tests passed locally; all four PR workflows passed before merge. No encryption or production backend readiness is implied.
-- PR #98 (`15bc909133a688b1db87bb780532912afcfec38b`): selected Vault plus private PostgreSQL metadata for an offline prototype and recorded the current isolation/key-lifecycle/operational blockers. Added and executed a catalog-only inventory without reading secret rows. All four PR workflows passed before merge.
-- PR #100 (`c4799d024b5862f81733ad63081f710e77624a70`): extended the synthetic PostgreSQL 17 fixture to the full refresh record and verified independent two-session CAS, full validation, rollback and revocation. This is the confirmed main base for the bounded host adapter slice.
+Do not treat a later main SHA as verified until its required workflows are checked again.
 
 ## Hosted staging/runtime state
 
 Authorized staging project: `keirin-ai-staging` (`omamgmyyqnawlagbemcm`).
 
-Durable coordination includes owner-scoped `agent_tasks` / `agent_task_events`, immutable TaskSpec identity, revision CAS, FIFO and exact-task claim primitives, attempt budget, lease owner/generation/expiry, fenced saves, explicit expired-lease reconcile-to-blocked and the single-active trusted-run guard.
-
-Deployed agent functions:
-
-- `agent-runtime-dev`: **v6 / ACTIVE / verify_jwt=true**. Its safety contract reports `runtime_task_execution_enabled=false`.
-- `agent-exact-claim-dev`: **v1 / ACTIVE / verify_jwt=true**. It accepts only exact fresh trusted status-run claim operations and does not enable task/provider execution.
-
-PR #82–#98 did not deploy a new Edge Function, apply a secret-store migration, perform a real authentication refresh or start a live hosted run.
-
-Read-only secret-backend catalog review on 2026-09-27 confirmed PostgreSQL `17.6`,
-`supabase_vault` `0.3.1`, and effective schema/object access for `service_role` to the
-Vault secret/decrypted views and create/update functions. `anon`, `authenticated` and
-`authenticator` lack the inspected schema/read/execute privileges. No secret rows or
-keys were read. Existing role grants were not changed. This review did not recheck the
-earlier task counts or deployed function versions above.
-
-## Bounded live read-only validation history
-
-The previous one-run authorization is consumed and is not permission for another live run. During that authorization window two distinct fresh trusted read-only run instances completed; this was treated as a defect even though they remained in the read-only status-task family. Both rows are terminal. PR #75 added the database-level single-active guard; PR #76 added exact instance authorization; PR #77 prepared a serialized manual one-shot host. No further live run has been used to test those later controls.
-
-A future workflow dispatch or any new hosted execution requires a new explicit live-run authorization. Code merge, workflow presence, persistence authorization or earlier one-run approvals are not execution authorization.
-
-## Credential / authentication boundary
-
-Current implemented layers:
-
-1. **Static access provider** — in-memory bounded/manual-host credential snapshots, no refresh.
-2. **Generic refresh provider** — access-only grants from an injected `HostCredentialSource`; exact provider/account/capability match, TTL enforcement, monotonic elapsed time, local single-flight refresh, terminal auth failure and revoke semantics.
-3. **Versioned refresh source/store contract** — version-CAS refresh ownership, attempt fencing, rotation generation, durable blocking on ambiguous provider/store outcomes and explicit evidence-based recovery.
-4. **Durable backend adapter contract** — backend-neutral CAS/read/write adapter with opaque binding keys, strict schema/integrity checks and fixed failure mapping. The implementation is tested against synthetic fixtures only; no real secret backend is connected.
-5. **Credential-gated provider adapter** — per-action capability/TTL policy, pre-action credential acquisition, local access-only snapshot injection, fixed auth/provider failure classifications and result leak detection.
-6. **Offline full-stack composition** — a dependency-injection factory composes the durable backend/store/source/provider/gated-adapter chain without accepting raw refresh material or activating a service.
-7. **Persistence-safe action errors** — `AgentRunner` persists only validated `SafeActionError` codes or fixed redacted classifications for untyped action/verifier exceptions; runtime bridge blocked payloads are not copied into persistent state.
-8. **Ephemeral diagnostics** — optional host-injected failure metadata sink, explicitly non-durable and payload-free; it cannot weaken the persistent redaction contract.
-9. **Static redaction audit** — CI scans the core for direct caught-exception flows into persistent error fields/events and verifies fixed runtime-bridge block classification.
-
-`InMemoryVersionedSecretStore` is reference/fault-test only. `DurableVersionedSecretStore` defines the contract around a future host-only durable backend but is not itself a configured production backend. `RefreshExchange` remains an interface only; no real OAuth/authentication refresh is configured or called.
-
-Runners/adapters receive no refresh-secret handle. Provider actions receive only an access snapshot through the credential-gated local context. The wrapper rejects action results that contain the snapshot or access secret and replaces provider exception text with fixed classifications before `AgentRunner` persistence.
-
-`REAL_AUTH_INTEGRATION_REQUIREMENTS.md` is the current pre-activation review contract for any future real backend/exchange. It requires encrypted host-only secret ownership, distributed atomic CAS, bounded/no-blind-retry refresh I/O, durable rotated-secret persistence before access return, explicit `blocked_ambiguous` recovery, revocation precedence, fixed audit metadata, crash/restart testing and a staged activation sequence that does not bind live task execution in the same change.
-
-`STAGING_SECRET_BACKEND_DESIGN.md` selects Vault plus private PostgreSQL metadata for an
-offline prototype. It specifies a dedicated database identity, narrow private functions,
-atomic secret/metadata CAS, primary read-back and fixed failure classification. Activation
-is blocked pending effective isolation (including current service-role Vault access), key
-lifecycle, bootstrap credential, logging/restore and real-backend fault-test evidence.
-`ops/credential_vault_inventory.sql` was executed successfully as a catalog-only query;
-it is an inventory, not a readiness check.
-
-The SQL/ACL prototype in `tests/support/vault_postgres_contract.sql` now validates the
-full refresh record and has independent-session CAS coverage through PR #100. It verifies
-scoped identities, cross-binding/API denial, stale CAS, rollback and terminal revocation
-using synthetic markers. It does not prove real Vault encryption or staging readiness.
-
-The current code-only slice adds `PostgresSecretBackend`: a binding-pinned, injected
-host connection factory, startup connection/statement/lock limits, strict record and
-read-back validation, parameterized fixed SQL, explicit commit-before-success, fixed
-outward errors and no retries. Exact CAS conflict requires the private function's fixed
-SQLSTATE/message and successful rollback; other failures after write submission remain
-ambiguous. Connection/driver/cleanup errors are never serialized or logged by the adapter.
-All 13 synthetic fault tests and 20 related regression checks pass locally. PR #101's
-initial implementation head `0af417c67f686cd6c7a731935d7791ecfd97982c` passed all four
-PR workflows, including PostgreSQL 17 host tests with `psycopg[binary]==3.2.10` for
-real-driver read/CAS, lock/statement cancellation, two-connection CAS and cleanup.
-The final slice also normalizes interrupt subclasses to fixed built-in exceptions.
-PR #101 merged as `a8f8be90f231bbbaa3ba54f777977d4e8c78a5c4` after all four final-head
-PR workflows passed. Main's four workflows and Pages deployment also passed.
-No live factory, credentials, migration or runtime binding is configured.
-
-The injected factory is trusted host code: it must honor timeout arguments, use a fresh
-idle dedicated primary connection, avoid pools/retries/telemetry, and own verified TLS
-and bootstrap-secret custody. Server/connect limits are not a hard process deadline for
-DNS, network blackholes or uncooperative cleanup. Standard error messages/repr/tracebacks
-are redacted; diagnostic systems that capture frame locals are prohibited for secret paths.
-
-PR #102 (`b039772e6cc28a362faf4d662ce947722591f6d8`) added `ProcessDeadlinePostgresSecretBackend`, an unbound opt-in
-wrapper with one spawned process per operation. It bounds child startup/DB I/O waiting,
-then uses TERM/KILL with two bounded 250ms reap waits. Driver rollback/close stays in
-the child. A child timeout/crash or incomplete reply cannot prove a CAS result and is
-classified ambiguous without replay. An unreaped child quarantines that adapter instance.
-Only a clean process exit permits reading the capped 64KiB anonymous-memory JSON reply;
-no exception object or partial pipe frame is received by the parent. Child stdout/stderr
-is discarded before factory execution. Shared response memory is cleared after reaping,
-without claiming complete erasure of Python, driver or OS copies.
-
-Synthetic tests cover connect/execute/commit/rollback/close hangs, ignored TERM and KILL
-cleanup, a synthetic durable commit with lost acknowledgement, malformed IPC, parent
-interrupts, quarantine and output redaction. Actual pinned psycopg/libpq is tested against
-a loopback TCP endpoint that accepts connections but never answers PostgreSQL startup.
-This does not establish behavior against live Vault or production networks.
-
-The trusted factory must be an importable top-level function with side-effect-free imports,
-resolve host credentials in the child, and not spawn descendants or enable telemetry/core
-dumps. No real factory is bound. OS creation/scheduling and unkillable kernel work cannot
-be absolutely bounded by Python; host supervisor, memory/process limits, secure IPC/memory
-policy, TLS/primary/bootstrap review and actual deployment qualification remain open.
-
-PR #102's 13 process tests and 33 related regression tests passed locally; its four
-PR workflows, four main workflows and Pages deployment passed. Main was rechecked at
-that merge SHA before starting the current process/PostgreSQL integration slice.
-
-PR #103 (`de51b5033c1137b3968c31770cc8d6b7660f9ae5`) added `tests/postgres_secret_process_contract.py`, invoked by the
-disposable SQL contract runner. It exercises the process wrapper through direct
-synthetic database logins, fresh-process read-back, stale/cross-binding denial,
-two-child CAS, a real PostgreSQL commit followed by a lost child acknowledgement,
-deadline termination during a lock wait, terminal revocation and client/server cleanup.
-This fixture uses plaintext loopback connections and synthetic credentials only.
-All four PR workflows, four main workflows and Pages passed before this TLS slice.
-
-`HOST_SECRET_CONNECTION_REVIEW.md` records the official libpq TLS/hostname, primary,
-ambient configuration and bootstrap review. No live factory or secure-TLS claim is
-introduced by that review.
-
-PR #104 (`343d7316c5d845674bcbd1d09402c1fb138d4719`) added `PostgresHostProfile`, a non-secret configuration
-contract with one explicit hostname/address/port, dedicated-login validation, an
-absolute CA-file path, fixed verify-full TLS, disabled GSS encryption, minimum TLS 1.2
-and read-write session selection. It performs no I/O and supplies no credentials.
-Local profile and static-redaction checks pass; no live connection factory is bound.
-
-`tests/run_secret_tls_contract.py` creates disposable loopback PostgreSQL 17 containers
-and ephemeral certificates. It checks TLS read/CAS through the process wrapper and
-wrong CA/hostname, expired certificate and plaintext-server rejection. Positive
-controls establish server/account availability. Certificate keys are generated only in
-temporary directories; no key or certificate artifact is committed/uploaded. CI uses
-pinned test-only psycopg 3.2.10 and cryptography 46.0.0. All four PR workflows, four main
-workflows and Pages passed, including the actual TLS success/rejection cases.
-
-PR #105 (`5e5af7a632875ca183b002f2a9c1ae48ea8335b7`) added `StrictPostgresConnectionFactory`, with inert construction and
-injected driver/password source. Before reading the source it rejects all PG-prefixed
-environment variables, selected OpenSSL/trust overrides, default service/password/SSL
-files in both HOME and the POSIX account home, and any noncanonical adapter limits.
-It requires SCRAM-SHA-256 password authentication (no passfile/client-certificate fallback) and
-performs catalog-qualified preflight before returning an idle connection: exact session/
-current user and database, TLS, primary/read-write state, nonprivileged login with no
-role memberships, and the actual server timeout values. Errors remain fixed and no
-source/connection retry is introduced. Driver/source/cleanup hangs still require the
-outer process deadline. Local factory/profile/static checks total 15 passing tests.
-
-TLS CI now invokes this factory inside the process child with synthetic credentials and
-checks ambient PGSERVICE rejection, added CREATEDB privilege, role membership and
-read-only role configuration, followed by restored successful readback. All four PR
-workflows, four main workflows and Pages passed. No real bootstrap source or live
-factory is configured.
-
-The current slice pins the CA to a reviewed SHA-256 and copies verified bytes into a
-sealed Linux memfd before obtaining credentials. The bounded 128KiB read walks directory
-FDs with no symlinks, checks ownership/permissions, regular-file/single-link state and
-metadata stability, and rejects mismatched hashes. The driver receives only the sealed
-`/proc/self/fd` path, kept open through verification and then closed. Root and the host
-account remain trusted; kernel/OS loader integrity and deployment policy are not proven.
-
-The injected bootstrap contract now returns a redacted `BootstrapPasswordLease` with
-login/database, version, expiration and password, plus a version-current callback.
-It validates before connection and again after preflight, checks wall/monotonic elapsed
-time, and rejects rotation/revocation/expiration without retry or credential caching.
-A new independent connection may acquire a newly authorized version. This does not
-revoke already-open DB sessions or perform provider refresh/real credential rotation.
-
-Local checks: 5 trust-file tests, 15 factory/lifecycle tests and 3 static-redaction tests
-pass. The local Python build omitted seal constants; verified Linux UAPI values are used
-while still requiring the real kernel seal operations to succeed. No writable fallback
-exists. TLS CI exercises sealed-CA read/CAS, candidate-CA replacement rejection, synthetic
-bootstrap revocation and actual temporary-role password rotation. These new CI cases
-must pass on the PR head before merge. No real trust pin, secret source or endpoint is bound.
-
-## Synthetic host recovery qualification (2026-09-28)
-
-GitHub main and PR #106 were rechecked at
-`c65bf40bf0035f6c85096211e24acde858a15879` (merged).
-The TLS CI fixture now composes the strict factory, sealed trust snapshot, bootstrap
-lease, process deadline, PostgreSQL adapter and durable store through recovery cases:
-
-- expired, stale-version and revoked bootstrap leases and wrong TLS hostname reject
-  both reads and CAS with fixed context-free errors; restored configuration reads
-  the unchanged record;
-- real TLS COMMIT followed by child crash returns ambiguous, fresh read-back finds
-  exactly the committed version, and stale CAS cannot replay it;
-- deadline termination during a real row lock leaves the record unchanged;
-- a new parent interpreter and its child recover the same committed record;
-- paused disposable PostgreSQL rejects reads and leaves interrupted CAS ambiguous;
-  unpause and abrupt DB restart preserve the committed record;
-- terminal record revocation survives fresh clients and cannot be resurrected;
-- child processes and named PostgreSQL sessions are checked for cleanup.
-
-Local factory/profile/trust/adapter checks: 36 passing tests, plus 14 durable/redaction
-checks. Local process checks had 11 passes and two libpq-blackhole failures because
-psycopg was absent; Docker is also absent locally. CI with pinned psycopg passed all
-13 process tests and actual TLS/PostgreSQL recovery. All four PR workflows passed at
-`b8628af525fce3157ce22e1eb336e742867e1ce6` (PostgreSQL run `36329334807`).
-The first CI exposed Docker reassigning its ephemeral published port on abrupt
-restart. The fixture now rediscovers that port; CI confirmed reassignment and successful
-recovery. TLS hostname/pin and fail-closed behavior were not relaxed.
-The existing dedicated process tests retain coverage for uncooperative cleanup,
-TERM/KILL and quarantine. This slice modifies only synthetic tests, their CI time
-budget and documentation. No production configuration or activation gate changes.
-Deployment supervisor/loader/logging qualification, actual secret custody and
-existing-session revocation remain unproven operational gates.
-
-## Child OS safeguards (code-only, 2026-09-28)
-
-PR #107 is merged at `7b7328fcc6ecaab499caff0a83573e4d103cf046`; its final-head four
-PR workflows, four main workflows and Pages all passed. Main was rechecked before
-starting this slice.
-
-The process secret backend now rejects loader/Python import/debug overrides before
-spawning. The child, after silencing stdout/stderr and before request decode/factory
-execution, verifies core limits zero, Linux dumpable zero and no_new_privs one; it
-also uses umask 077. Rejection/failure never authorizes secret work or retries an
-ambiguous write. The parent is not hardened/mutated by these child-only controls.
-Four dedicated synthetic tests pass locally, including actual child kernel state,
-parent-state preservation, no-spawn rejection, syscall/readback failure and early child
-exit. Three static redaction tests also pass. Exact PR-head CI remains the merge gate.
-Real TLS compatibility and existing hang/KILL/log-output cases run in PostgreSQL CI.
-Initial CI correctly rejected setup-python's injected LD_LIBRARY_PATH. The affected
-test commands now explicitly start Python without that variable; application code
-still rejects every LD_ override and does not silently clean its own environment.
-
-This is not a complete host sandbox or live deployment qualification. Trusted
-launcher/import integrity, environment mutation races, parent memory, existing root/
-ptrace privileges, swap, external supervisor/cgroup limits and platform/database log
-policy remain explicit gates in `HOST_SECRET_CONNECTION_REVIEW.md`. All activation
-switches remain unchanged; no real credentials or services are connected.
-
-## Parent-death guard (code-only, 2026-09-28)
-
-Main and merged PR #108 were rechecked at
-`e333fd5d7c8b0d84c3e9a6e460509a1b11bf6cf8`; all four main workflows and Pages passed.
-The next slice adds child-only Linux SIGKILL on creating-thread death, with kernel
-read-back and parent PID checks before and after registration, before decoding the
-request or acquiring credentials. Any failure exits without a success reply.
-
-Four new local synthetic tests pass: actual parent TERM/KILL with child SIGKILL and
-subreaper wait/reap, invalid/already-changed parent, registration/readback/race failures,
-and early guard failure with no factory call or reply. Four existing OS-safety tests
-also pass. PostgreSQL/TLS compatibility remains an exact-PR-head CI merge gate;
-the local environment does not have psycopg or Docker.
-
-Initial PR CI exposed three legacy fake-process tests unpacking IPC arguments from
-the old tuple tail. The fixture now unpacks the explicit child signature and checks
-the captured parent PID. The existing ambiguous-write/interruption/quarantine
-expectations are unchanged; corrected-head CI is required before merge.
-
-This guards the direct child only, not descendants, pre-target imports, secure memory
-erasure or platform logging. External supervisor/cgroup resource limits, egress policy
-and log custody remain unqualified. All existing activation switches remain unchanged.
-
-## Synthetic resource limits (code/CI only, 2026-09-28)
-
-PR #109 is merged at `aaf1925c47f937be7c58d19e1808633ffd17a5b3`; its corrected-head
-four PR workflows, four main workflows and Pages passed. The legacy process-fixture
-signature fix also passed all 11 locally runnable process tests.
-
-The next slice adds an explicitly gated, disposable Docker/cgroup-v2 qualification
-runner. It verifies configured and kernel-effective 128 MiB memory, zero swap,
-24 tasks and 0.5 CPU bandwidth before bounded stress. Actual CPU throttle, memory
-OOM-kill and process-creation denial must have matching kernel event counters.
-Existing child OS/parent-death contracts run under the same limits. Each fixture is
-non-root, read-only, capability-dropped, no-new-privileges, network-disabled and uses
-no Docker log persistence; containers are removed on both success and failure.
-
-Local gate, unsafe-configuration and timeout-cleanup tests pass (3 tests), as do
-the existing parent-death tests (4 tests). Syntax checks pass. Docker is absent
-locally; real cgroup enforcement and compatibility are required in the new CI job
-before merge, not inferred from local unit tests.
-
-Actual cgroup qualification passed at PR #110 head
-`f8034fb5a34d923537f4a5557c1fe2b8ccd28d8a` (run `36363270091`, job
-`108744547145`): CPU throttling, physical-page memory OOM, pids denial and existing
-OS/parent-death guard compatibility all succeeded. The memory probe touches every
-4 KiB page so virtual allocation alone cannot satisfy the test. The complete final
-PR-head workflow set, including PostgreSQL/TLS recovery, remains the merge gate.
-
-This is synthetic qualification, not a deployment, runtime activation or production
-sizing choice. Supervisor crash/group cleanup, reviewed image/launcher integrity,
-egress allowlisting, platform/database logs and real secret custody remain gates.
-No real credentials, migrations, provider execution or other activation switches change.
-
-## Synthetic supervisor faults (code/CI only, 2026-09-28)
-
-Main was rechecked at merged PR #110,
-`a61bc30d95306f9edda1f65c31460fe481a61f37`. Its final-head four PR workflows,
-four main workflows and Pages passed.
-
-The resource qualification fixture now adds a PID-1 supervisor, child and detached
-grandchild, all ignoring TERM. Independent cases inject abrupt supervisor exit
-without cleanup and forced container stop after a one-second grace period. The
-observer checks the three-process topology and common cgroup before the fault,
-then requires stable pidfd exit evidence, disappearance of original /proc start-time
-identities, an empty/removed cgroup and removal of the named container.
-
-Four local observer tests and three existing fixture tests pass; syntax/diff checks
-pass. Local process IDs are virtualized without matching /proc identity, so the local
-pidfd test uses controlled proc evidence. Actual host /proc, detached descendant
-termination and reaping MUST pass Docker CI with no mocks or fallback before merge.
-
-Actual Docker qualification passed at PR #111 head
-`81dc6683ffeaeadef6be7b7d2737c09d64a95414` (run `36371864038`, host job
-`108769725811`): both abrupt supervisor crash and forced-stop cases verified
-detached descendant termination, original process identity removal and cgroup/
-container cleanup. Resource limits and existing child-guard compatibility also
-passed. All four workflows passed at that head, including PostgreSQL/TLS recovery.
-Final-head CI remains required after this evidence-only status update.
-
-This qualifies container-internal PID-1 failure and forced stop only. Docker daemon,
-host and external controller failures/restart reconciliation remain untested, as do
-deployment-specific egress, image/launcher trust, logging and real secret custody.
-No runtime code, real secrets, migrations or activation switches are changed.
-
-## Synthetic external-controller recovery (code/CI only, 2026-09-28)
-
-Main was rechecked at merged PR #111,
-`e5fd63600aa3c3c96f9be7ad5e2137558e9d0ac2`; its final-head four PR workflows,
-four main workflows and Pages passed.
-
-The next fixture kills an external controller with SIGKILL before creation-receipt
-persistence and after the synthetic process tree starts. It confirms an orphan remains,
-then invokes a fresh interpreter using a private temporary run intent. Exact run label,
-name, image, restrictions and full receipted ID are checked before immutable-ID removal.
-Duplicate/mismatched candidates fail closed. A second fresh recovery is an absent/no-op;
-an unrelated sentinel must survive, and running descendants must pass pidfd/proc/cgroup
-cleanup checks. No real operation is resumed or replayed.
-
-Local verification: five recovery tests, four supervisor observer tests and three
-resource-fixture tests pass; syntax and diff checks pass. Actual Docker controller
-crash/restart cases require final-head CI, since Docker is not available locally.
-
-Actual Docker recovery passed at PR #112 head
-`27806dca8f96bc33754e79b0f022fc1ec4dbe8d2` (run `36409303587`, job
-`108885452374`): pre-receipt and running-tree controller SIGKILL, fresh-interpreter
-removal, second-recovery no-op, unrelated sentinel preservation and descendant
-reaping all passed. Existing resource and supervisor fault cases also passed.
-The complete final-head workflow set remains the merge gate after this status update.
-
-This is a synthetic test harness, not an activated recovery service. The Docker daemon
-and outer CI observer stay alive. Host/daemon failure, adversarial custody, concurrent
-controllers, launcher/image trust, egress and logs remain separate deployment gates.
-Real credentials, migrations, hosted execution and all production switches stay OFF.
-
-## Synthetic network and Docker logging (code/CI only, 2026-09-28)
-
-Main was rechecked at merged PR #112,
-`a149d3b33f73a5ad08e12ce057bc15802b3d4fe7`; its final-head four PR workflows,
-four main workflows and Pages passed.
-
-The next slice checks loopback-only interfaces/routes, a local TCP positive control,
-and routing-unreachable failures for external numeric TCP/UDP IPv4/IPv6 probes (or
-explicitly disabled IPv6). No DNS lookup or real endpoint is used. A disposable
-`json-file` logging positive control must record two synthetic stdout/stderr markers;
-the default `none` profile must expose neither marker nor log path. Generic connection
-or log-command errors cannot satisfy the evidence check. Both containers are removed.
-
-Local verification: six network/log evidence tests, three fixture tests and five
-controller recovery tests pass, plus syntax/diff checks. Actual Docker socket/log-driver
-behavior must pass final-head CI; Docker is unavailable locally.
-
-Actual Docker probes passed at PR #113 head
-`1cd7c91411e2d5a03d6535fc504641de4e678b09` (run `36410377867`, job
-`108888906582`): network isolation plus `json-file` positive control and `none`
-log suppression all passed, alongside prior resource/supervisor/controller contracts.
-The complete final-head workflow set remains the merge gate after this status update.
-
-Scope remains the synthetic no-network container and its Docker log driver. Approved
-destination allowlisting, network-enabled TLS composition, host/platform/database logs,
-image provenance and launcher trust remain unqualified. No real credentials or runtime
-activation is introduced; production and live-execution switches remain unchanged.
-
-## Verified resumption and plan-log correction (2026-09-29)
-
-Main is verified at PR #117 merge `8551bd11df542b7cd8a1e5252c8bef07324b43af`.
-All four final PR-head workflows and all four main workflows plus Pages passed.
-The older sections above are historical; the following merged work supersedes their
-open image/launcher, synthetic egress and core database-log items:
-
-- PR #114 pins an approved immutable image digest and explicit Python entrypoint.
-- PR #115 qualifies a dedicated internal network with exact two-member identity,
-  approved-endpoint positive control and blocked external numeric destination.
-- PR #116 checks effective PostgreSQL core logging policy and observes server-error
-  logs with a positive control while requiring a synthetic Bind marker to be absent.
-- PR #117 checks auto_explain and pgAudit parameter settings. It does not prove actual
-  loaded-module plan redaction: dotted custom-setting readback alone is insufficient.
-
-The current code-only correction requires auto_explain plan logging to be disabled,
-even when parameter-list logging is suppressed. A new real-module synthetic CI case
-requires an unsafe custom-plan marker as a positive control, rejects strict handoff
-with a loaded/enabled module, and checks successful protected queries leave no marker
-once plan logging is disabled. Factory and static-redaction tests pass locally (16+3);
-Docker is unavailable locally, so exact final-head CI is mandatory before merge.
-Initial CI proved the unsafe custom-plan positive control, then rejected the fixture's
-attempt to read privileged session_preload_libraries as the dedicated login. The fixture
-now checks the module's registered sample_rate default instead; no role grant or
-production policy is relaxed. Corrected-head CI remains required.
-No real secret source, hosted setting, migration or activation switch is changed.
-
-Next: after this correction's exact-head CI, qualify the remaining deployment-specific
-platform log custody/access/retention and TLS composition under host limits. Actual
-pgAudit behavior, daemon/host failure and real credential custody remain unqualified.
-Do not treat synthetic or custom-GUC evidence as end-to-end platform qualification.
-
-## Current agent state
-
-The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract, an offline full credential-stack composition path, a credential-gated provider-action boundary, persistence-safe action/verifier error handling, ephemeral diagnostic metadata and a static persistence-redaction audit.
-
-It is still **not** an always-on self-contained autonomous agent. No scheduler/recurrence is active, provider generation/write bindings remain unbound, report delivery is not configured, deployed runtime task execution remains OFF, and no real durable secret backend or real provider refresh exchange is connected.
+Last bounded read-only staging verification remains from the authentication-boundary work; no new live run was started in PR #101-#120 work:
+
+- single-active trusted-run guard: present;
+- fresh trusted tasks observed then `queued` / `running`: 0;
+- `race_predictions`: 0 rows;
+- `agent-runtime-dev`: v6 / ACTIVE / `verify_jwt=true`;
+- `agent-exact-claim-dev`: v1 / ACTIVE / `verify_jwt=true`.
+
+A previous one-run authorization is consumed. A future workflow dispatch or any new hosted execution requires new explicit live-run authorization. Code merge, persistence authorization, workflow presence or old approvals are not execution authorization.
+
+## Current autonomous-agent capability
+
+Implemented and merged foundations include:
+
+- durable owner-scoped checkpoint/activity state;
+- crash-safe queue lease/fencing, attempt limits and expired-lease reconciliation;
+- immutable TaskSpec identity, exact-task claim and one-active-fresh-trusted-run guard;
+- fail-closed hosted worker coordination with runtime execution gate kept OFF;
+- credential-isolated hosted transport and SHA-pinned GitHub/CI observation;
+- hard run deadlines and proposal-only recovery decisions;
+- manual one-shot host workflow, not automatically dispatched;
+- static and refresh-capable credential-provider abstractions;
+- version/CAS refresh-secret ownership, rotation and ambiguous-state recovery semantics;
+- durable secret-backend adapter contract;
+- credential-gated provider-action boundary;
+- persistence-safe fixed action/verifier errors and static redaction audit;
+- host-only ephemeral diagnostic metadata sink;
+- offline full credential-stack composition without live provider binding.
+
+The project is still **not** an always-on self-contained autonomous agent. Scheduler/recurrence, provider write/generation, real secret custody, real refresh exchange, hosted task execution and report delivery remain disabled/unconfigured.
+
+## Secret backend / PostgreSQL boundary
+
+PR #100 established synthetic PostgreSQL 17 full refresh-record/CAS behavior.
+
+PR #101-#106 added and qualified the bounded host adapter stack:
+
+- injected PostgreSQL connection creation with fixed error classification and no automatic retry;
+- process deadline/TERM/KILL/quarantine semantics for hangs and ambiguous writes;
+- real PostgreSQL integration and lost-ack/read-back recovery;
+- explicit verify-full TLS profile and wrong CA/name/expired/plaintext rejection;
+- strict connection factory with ambient PG/OpenSSL override rejection and direct-login/privilege/session checks;
+- reviewed CA SHA-256, sealed Linux memfd trust snapshot and bootstrap credential version/expiry/revocation fencing.
+
+No live endpoint, live bootstrap secret, Vault migration or production factory is bound.
+
+## Host/process hardening and recovery qualification
+
+Merged synthetic/code-only qualification now covers:
+
+- PR #107: child loader/Python environment guards, core-dump suppression, Linux dumpable/no_new_privs and private umask;
+- PR #108: Linux parent-death SIGKILL guard before secret acquisition;
+- PR #109-#110: disposable cgroup-v2 resource enforcement for memory, swap, PID and CPU limits;
+- PR #111: PID-namespace supervisor crash/forced-stop descendant cleanup;
+- PR #112: external-controller SIGKILL and fresh-interpreter exact reconciliation;
+- PR #113: no-network evidence and Docker log-driver positive/negative controls;
+- PR #114: approved immutable Python image digest plus fixed launcher;
+- PR #115: dedicated internal Docker network with exact membership and synthetic permitted-destination/blocked-egress evidence;
+- PR #116: effective PostgreSQL core log-policy checks and observed Bind-marker absence;
+- PR #117: auto_explain/pgAudit configuration preflight;
+- PR #118: correction requiring auto_explain plan logging itself to be disabled before secret handoff; real loaded-module synthetic positive control proves parameter-list suppression alone is insufficient because custom plans can contain bound constants;
+- PR #119: PostgreSQL TLS handshake composed inside the hardened client/container and exact internal network. Valid reviewed synthetic CA/hostname succeeds; wrong hostname and wrong CA fail. The probe is held behind a release marker until exact network membership is verified;
+- PR #120: actual Docker daemon restart on the GitHub-hosted Linux/systemd profile with `live-restore=false` and `restart=no`. The synthetic secret-host process tree must not resurrect; a fresh interpreter removes the exact immutable target, a second reconciliation is absent/no-op, prior PIDs/cgroup are gone, and an unrelated sentinel survives.
+
+PR #119 intentionally performs only the TLS handshake in the hardened client and supplies no database credential. It does not by itself qualify database authentication/secret operations inside that exact container composition.
+
+PR #120 intentionally qualifies only the exercised GitHub-hosted Linux/systemd Docker-daemon profile. It does not prove host reboot/power-loss recovery, hostile daemon/root custody or a production supervisor.
+
+## Logging / credential-custody status
+
+Current evidence includes fixed outward errors, no exception payload persistence, child stdout/stderr suppression, Docker `none` log-driver tests, PostgreSQL core Bind-redaction checks and loaded `auto_explain` protection.
+
+Still unqualified or deployment-specific:
+
+- platform/host log custody, access and retention;
+- actual pgAudit module behavior (configuration preflight exists, behavioral qualification does not);
+- tracing/frame-local/host telemetry policy in a real deployment;
+- real bootstrap credential facility, ownership, rotation and revocation;
+- real Vault encryption/key lifecycle and current staging Vault grant remediation;
+- production/root/kernel/ptrace/swap and operator custody;
+- host reboot/power-loss recovery and production deployment supervisor behavior.
+
+Synthetic evidence must not be described as end-to-end platform or production qualification.
+
+## Keirin prospective evaluation
+
+Owner-only dry-run remains the validation path. Unknown odds are not invented. Probabilities remain uncalibrated for monetary EV / production promotion.
+
+The recorded first eligible prospective sample is 2026-09-24 Ito Onsen 1R (7 riders, all 210 model probabilities, 72 confirmed pre-race trifecta odds, valid chronology). The last recorded state had one distinct eligible prediction time; the evaluator's technical minimum is five distinct times and boundary purging can require more. Five is not evidence of accuracy or profitability.
 
 ## Next work / next boundary
 
 Code-only work may continue without another live-run authorization.
 
-Next safe slice:
+Next safe work should stay inside synthetic/CI boundaries and close remaining operational evidence without activating real secrets or execution. Preferred order:
 
-1. keep exact-head CI as the merge gate; synthetic full-stack recovery is verified at the SHA above;
-2. require the loaded auto_explain plan-log correction to pass CI, then qualify remaining platform log custody, TLS under host limits and deployment-specific faults;
-3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
-4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
+1. keep exact-head CI and post-merge main verification as merge gates;
+2. qualify another narrowly testable deployment boundary only when the environment can produce real evidence; do not simulate platform custody claims that CI cannot prove;
+3. update `HOST_SECRET_CONNECTION_REVIEW.md` as old open items are superseded by PR #114-#120 evidence;
+4. review actual pgAudit behavioral qualification only with a pinned/reproducible module source or image; do not install an unpinned package merely to make the test pass;
+5. after documented operational gates are closed, prepare a **separate** staging migration/review for a real backend. Do not combine migration, credentials and task execution in one change;
+6. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 
 No race screenshots or owner credential resend is needed for the current code-only work.
 
