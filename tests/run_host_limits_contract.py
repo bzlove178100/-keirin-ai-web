@@ -104,6 +104,8 @@ def main():
     from host_controller_recovery import run_controller_probe
     for phase in ("before-receipt", "running"):
         run_controller_probe(image_id, phase)
+    from host_daemon_recovery import run_daemon_recovery_probe
+    run_daemon_recovery_probe(image_id)
     from host_logging_contract import run_logging_probe
     for driver in ("json-file", "none"):
         run_logging_probe(image_id, driver)
