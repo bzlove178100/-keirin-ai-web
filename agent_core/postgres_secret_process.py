@@ -13,13 +13,13 @@ from .durable_secret_store import (
 )
 from .postgres_secret_backend import PostgresSecretBackend, _MAX_BIGINT, _strict_record
 from .refresh_credentials import CredentialBinding
-from .host_process_safety import assert_safe_spawn_environment, harden_secret_child
+from .host_process_safety import assert_safe_spawn_environment, guard_secret_parent, harden_secret_child
 
 _MAX_MESSAGE = 65536
 _STOP_GRACE_SECONDS = 0.25
 
 
-def _child(factory, binding, limits, request, buffer, length):
+def _child(factory, binding, limits, request, buffer, length, parent_pid):
     # Never pickle an exception or use a Queue/Pipe result that can leave the parent
     # blocked on a partial frame. Only bounded JSON in anonymous shared memory.
     # The parent reads it only after a clean process exit.
@@ -27,6 +27,7 @@ def _child(factory, binding, limits, request, buffer, length):
         with open(os.devnull, "wb", buffering=0) as sink:
             os.dup2(sink.fileno(), 1)
             os.dup2(sink.fileno(), 2)
+        guard_secret_parent(parent_pid)
         harden_secret_child()
         message = {"status": "unavailable"}
         write = False
@@ -131,7 +132,7 @@ class ProcessDeadlinePostgresSecretBackend:
             buffer = context.RawArray("B", _MAX_MESSAGE)
             length = context.RawValue("I", 0)
             process = context.Process(target=_child, args=(
-                self._factory, self._binding, self._limits, request, buffer, length,
+                self._factory, self._binding, self._limits, request, buffer, length, os.getpid(),
             ), daemon=True)
             deadline = time.monotonic() + self._timeout
             # Conservative before start: a startup failure may occur after spawning.

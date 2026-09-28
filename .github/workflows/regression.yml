@@ -79,6 +79,9 @@ jobs:
       - name: Verify child OS safeguards and pre-spawn environment rejection
         # Provision a clean test interpreter before startup; production rejects overrides.
         run: env -u LD_LIBRARY_PATH python tests/test_host_process_safety.py
+      - name: Test synthetic parent crash child termination
+        timeout-minutes: 2
+        run: env -u LD_LIBRARY_PATH python tests/test_secret_parent_death.py
       - name: Verify reusable durable backend conformance harness
         run: python tests/test_durable_backend_conformance.py
       - name: Verify synthetic SQLite backend across processes

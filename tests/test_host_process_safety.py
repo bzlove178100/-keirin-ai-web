@@ -80,7 +80,7 @@ class HostProcessSafetyTests(unittest.TestCase):
                 buffer = context.RawArray("B", 65536)
                 length = context.RawValue("I", 0)
                 request = json.dumps(dict(key=KEY, expected=0, replacement=record(1), write=write)).encode()
-                child = context.Process(target=failed_guard_child, args=(guarded_factory, BINDING, {}, request, buffer, length))
+                child = context.Process(target=failed_guard_child, args=(guarded_factory, BINDING, {}, request, buffer, length, os.getpid()))
                 child.start()
                 try:
                     child.join(5)
