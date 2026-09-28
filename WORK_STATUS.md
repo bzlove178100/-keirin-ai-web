@@ -435,6 +435,12 @@ Local verification: six network/log evidence tests, three fixture tests and five
 controller recovery tests pass, plus syntax/diff checks. Actual Docker socket/log-driver
 behavior must pass final-head CI; Docker is unavailable locally.
 
+Actual Docker probes passed at PR #113 head
+`1cd7c91411e2d5a03d6535fc504641de4e678b09` (run `36410377867`, job
+`108888906582`): network isolation plus `json-file` positive control and `none`
+log suppression all passed, alongside prior resource/supervisor/controller contracts.
+The complete final-head workflow set remains the merge gate after this status update.
+
 Scope remains the synthetic no-network container and its Docker log driver. Approved
 destination allowlisting, network-enabled TLS composition, host/platform/database logs,
 image provenance and launcher trust remain unqualified. No real credentials or runtime
