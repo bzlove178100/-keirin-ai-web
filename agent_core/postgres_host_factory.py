@@ -39,8 +39,9 @@ SELECT session_user::text, current_user::text, pg_catalog.current_database(),
 
 def _extension_log_policy_safe(auto_duration, auto_parameter_length, pgaudit_parameter):
     # Missing custom GUCs mean the extension is not active in this session. If
-    # auto_explain is active, either plan logging must be disabled or Bind values
-    # must be suppressed. If pgAudit is active, parameter logging must stay off.
+    # auto_explain is active, plan logging must be disabled: suppressing the
+    # parameter list does not redact constants embedded in a custom plan.
+    # If pgAudit is active, parameter logging must stay off.
     if auto_duration is None and auto_parameter_length is None:
         auto_safe = True
     elif type(auto_duration) is str and type(auto_parameter_length) is str:
@@ -49,7 +50,7 @@ def _extension_log_policy_safe(auto_duration, auto_parameter_length, pgaudit_par
             parameter_length = int(auto_parameter_length)
         except ValueError:
             return False
-        auto_safe = duration == -1 or parameter_length == 0
+        auto_safe = duration == -1 and -1 <= parameter_length <= 2147483647
     else:
         auto_safe = False
     pgaudit_safe = pgaudit_parameter is None or pgaudit_parameter == "off"

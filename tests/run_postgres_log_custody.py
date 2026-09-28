@@ -13,6 +13,8 @@ from agent_core.durable_secret_store import DurableSecretBackendUnavailable
 from run_secret_tls_contract import _admin, _certificates, _server, PASSWORD, tls_factory
 
 LOG_SECRET = "SYNTHETIC:postgres-log-secret-marker-7d7b17"
+PLAN_POSITIVE = "SYNTHETIC:auto-explain-positive-9c3912"
+PLAN_PROTECTED = "SYNTHETIC:auto-explain-protected-41e821"
 LIMITS = dict(
     connect_timeout=5,
     options="-c statement_timeout=5000 -c lock_timeout=1000 -c idle_in_transaction_session_timeout=5000",
@@ -44,6 +46,73 @@ def apply_role_settings(port, ca, statements):
             admin.execute(statement)
 
 
+def server_logs(server_name):
+    result = subprocess.run(["docker", "logs", server_name], capture_output=True, timeout=10)
+    if result.returncode != 0:
+        raise AssertionError("synthetic_postgres_log_read_failed")
+    return result.stdout + result.stderr
+
+
+def prove_loaded_plan_guard(port, ca, server_name):
+    # LOAD the real module: arbitrary dotted GUC placeholders alone do not prove
+    # extension behavior. Positive control is confined to a synthetic admin session.
+    with _admin(port, ca) as admin:
+        admin.execute("LOAD 'auto_explain'")
+        admin.execute("SET auto_explain.log_parameter_max_length=0")
+        admin.execute("SET auto_explain.log_verbose=on")
+        admin.execute("SET auto_explain.sample_rate=1")
+        admin.execute("SET plan_cache_mode=force_custom_plan")
+        admin.execute("SET auto_explain.log_min_duration=0")
+        row = admin.execute("SELECT %s::text", (PLAN_POSITIVE,)).fetchone()
+        if row != (PLAN_POSITIVE,):
+            raise AssertionError("synthetic_plan_query_control_failed")
+    payload = server_logs(server_name)
+    if b"plan:" not in payload or PLAN_POSITIVE.encode() not in payload:
+        raise AssertionError("synthetic_plan_constant_positive_control_missing")
+
+    # Preload the actual extension in every fresh dedicated-role session. Even
+    # with its Bind list suppressed, an enabled plan logger must block handoff.
+    apply_role_settings(port, ca, (
+        "ALTER ROLE secret_test_host_a SET session_preload_libraries='auto_explain'",
+        "ALTER ROLE secret_test_host_a SET auto_explain.log_parameter_max_length=0",
+        "ALTER ROLE secret_test_host_a SET auto_explain.log_verbose=on",
+        "ALTER ROLE secret_test_host_a SET auto_explain.log_min_duration=0",
+    ))
+    try:
+        expect_factory_blocked()
+        apply_role_settings(port, ca, (
+            "ALTER ROLE secret_test_host_a SET auto_explain.log_min_duration=-1",
+        ))
+        connection = tls_factory(**LIMITS)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT current_setting('auto_explain.log_min_duration'), "
+                               "current_setting('auto_explain.sample_rate')")
+                # sample_rate was not set as a dotted placeholder for this role;
+                # its registered default proves LOAD without privileged GUC access.
+                if cursor.fetchone() != ('-1', '1'):
+                    raise AssertionError("synthetic_loaded_extension_control_missing")
+                cursor.execute("SELECT %s::text", (PLAN_PROTECTED,))
+                if cursor.fetchone() != (PLAN_PROTECTED,):
+                    raise AssertionError("synthetic_protected_plan_query_failed")
+            connection.commit()
+        finally:
+            connection.close()
+        payload = server_logs(server_name)
+        if PLAN_POSITIVE.encode() not in payload:
+            raise AssertionError("synthetic_plan_log_channel_missing")
+        if PLAN_PROTECTED.encode() in payload:
+            raise AssertionError("synthetic_protected_plan_constant_logged")
+    finally:
+        apply_role_settings(port, ca, (
+            "ALTER ROLE secret_test_host_a RESET session_preload_libraries",
+            "ALTER ROLE secret_test_host_a RESET auto_explain.log_parameter_max_length",
+            "ALTER ROLE secret_test_host_a RESET auto_explain.log_verbose",
+            "ALTER ROLE secret_test_host_a RESET auto_explain.log_min_duration",
+        ))
+    require_factory_open()
+
+
 def prove_bind_redaction(server_name):
     connection = tls_factory(**LIMITS)
     try:
@@ -61,10 +130,7 @@ def prove_bind_redaction(server_name):
         connection.close()
 
     # Observe the real disposable PostgreSQL stderr channel without printing it.
-    result = subprocess.run(["docker", "logs", server_name], capture_output=True, timeout=10)
-    if result.returncode != 0:
-        raise AssertionError("synthetic_postgres_log_read_failed")
-    payload = result.stdout + result.stderr
+    payload = server_logs(server_name)
     if b"division by zero" not in payload:
         raise AssertionError("synthetic_postgres_log_positive_control_missing")
     if LOG_SECRET.encode() in payload:
@@ -126,10 +192,9 @@ def main():
                     apply_role_settings(port, ca, disable)
                 require_factory_open()
 
-            # Active auto_explain is acceptable only when Bind values are explicitly
-            # suppressed. This also proves the real-server custom GUC readback path.
+            # A loaded extension may remain present, but plan logging must be off.
             safe_extension = (
-                "ALTER ROLE secret_test_host_a SET auto_explain.log_min_duration=10000",
+                "ALTER ROLE secret_test_host_a SET auto_explain.log_min_duration=-1",
                 "ALTER ROLE secret_test_host_a SET auto_explain.log_parameter_max_length=0",
                 "ALTER ROLE secret_test_host_a SET pgaudit.log_parameter=off",
             )
@@ -142,9 +207,10 @@ def main():
             ))
             require_factory_open()
 
+            prove_loaded_plan_guard(port, ca, server_name)
             prove_bind_redaction(server_name)
 
-    print("Synthetic PostgreSQL log custody: core/extension unsafe policy rejected and error Bind marker absent from observed server logs PASS")
+    print("Synthetic PostgreSQL log custody: loaded plan logger rejected, protected plan/Bind markers absent from observed server logs PASS")
 
 
 if __name__ == "__main__":
