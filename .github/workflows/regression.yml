@@ -84,6 +84,8 @@ jobs:
         run: env -u LD_LIBRARY_PATH python tests/test_secret_parent_death.py
       - name: Test synthetic host qualification gates and cleanup
         run: python tests/test_host_limits_fixture.py
+      - name: Test pinned launcher and image provenance contract
+        run: python tests/test_launcher_image_contract.py
       - name: Test supervisor exit and reaping evidence guards
         run: python tests/test_host_supervisor_contract.py
       - name: Test synthetic controller recovery identity and no-replay guards
