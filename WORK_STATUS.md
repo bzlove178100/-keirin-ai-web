@@ -1,6 +1,6 @@
 # Work status
 
-Updated: 2026-09-28 (Asia/Tokyo).
+Updated: 2026-09-29 (Asia/Tokyo).
 
 ## Product direction
 
@@ -446,6 +446,34 @@ destination allowlisting, network-enabled TLS composition, host/platform/databas
 image provenance and launcher trust remain unqualified. No real credentials or runtime
 activation is introduced; production and live-execution switches remain unchanged.
 
+## Verified resumption and plan-log correction (2026-09-29)
+
+Main is verified at PR #117 merge `8551bd11df542b7cd8a1e5252c8bef07324b43af`.
+All four final PR-head workflows and all four main workflows plus Pages passed.
+The older sections above are historical; the following merged work supersedes their
+open image/launcher, synthetic egress and core database-log items:
+
+- PR #114 pins an approved immutable image digest and explicit Python entrypoint.
+- PR #115 qualifies a dedicated internal network with exact two-member identity,
+  approved-endpoint positive control and blocked external numeric destination.
+- PR #116 checks effective PostgreSQL core logging policy and observes server-error
+  logs with a positive control while requiring a synthetic Bind marker to be absent.
+- PR #117 checks auto_explain and pgAudit parameter settings. It does not prove actual
+  loaded-module plan redaction: dotted custom-setting readback alone is insufficient.
+
+The current code-only correction requires auto_explain plan logging to be disabled,
+even when parameter-list logging is suppressed. A new real-module synthetic CI case
+requires an unsafe custom-plan marker as a positive control, rejects strict handoff
+with a loaded/enabled module, and checks successful protected queries leave no marker
+once plan logging is disabled. Factory and static-redaction tests pass locally (16+3);
+Docker is unavailable locally, so exact final-head CI is mandatory before merge.
+No real secret source, hosted setting, migration or activation switch is changed.
+
+Next: after this correction's exact-head CI, qualify the remaining deployment-specific
+platform log custody/access/retention and TLS composition under host limits. Actual
+pgAudit behavior, daemon/host failure and real credential custody remain unqualified.
+Do not treat synthetic or custom-GUC evidence as end-to-end platform qualification.
+
 ## Current agent state
 
 The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract, an offline full credential-stack composition path, a credential-gated provider-action boundary, persistence-safe action/verifier error handling, ephemeral diagnostic metadata and a static persistence-redaction audit.
@@ -459,7 +487,7 @@ Code-only work may continue without another live-run authorization.
 Next safe slice:
 
 1. keep exact-head CI as the merge gate; synthetic full-stack recovery is verified at the SHA above;
-2. qualify OS/loader configuration integrity, host logging and deployment-specific supervisor/network faults;
+2. require the loaded auto_explain plan-log correction to pass CI, then qualify remaining platform log custody, TLS under host limits and deployment-specific faults;
 3. close the documented operational gates and review a separate staging migration before real-backend conformance or provider refresh integration;
 4. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 

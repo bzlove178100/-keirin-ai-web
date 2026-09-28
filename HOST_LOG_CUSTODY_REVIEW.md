@@ -1,10 +1,10 @@
 # Host and PostgreSQL log custody review
 
-Updated: 2026-09-28 (Asia/Tokyo)
+Updated: 2026-09-29 (Asia/Tokyo)
 
 ## Verified base
 
-PR #116 is merged on main at `21e9ef0355895245332ce799c9c55f0f32fbc909`.
+PR #117 is merged on main at `8551bd11df542b7cd8a1e5252c8bef07324b43af`.
 Its post-merge regression, read-only smoke, collection UI, Pages, synthetic host/egress,
 PostgreSQL/TLS recovery and PostgreSQL Bind-redaction jobs all passed. Production
 prediction, prediction DB writes, automatic external race-data fetching, hosted
@@ -38,16 +38,28 @@ The same preflight now checks custom settings with missing-setting semantics so 
 without those extensions remains compatible:
 
 - If `auto_explain` settings are absent, the extension path is treated as inactive.
-- If `auto_explain` is active, either `auto_explain.log_min_duration = -1` must disable
-  plan logging or `auto_explain.log_parameter_max_length = 0` must suppress Bind values.
+- If `auto_explain` is loaded, `auto_explain.log_min_duration = -1` must disable
+  plan logging. Suppressing only the Bind parameter list is insufficient: a custom
+  verbose plan can contain the bound value as a constant.
 - If pgAudit is active, `pgaudit.log_parameter` must be `off`.
 - A partially visible or malformed `auto_explain` setting pair fails closed.
 
-This closes extension-specific parameter logging while allowing non-secret query/plan
-metadata where Bind values are explicitly suppressed. Unit tests cover absent, disabled,
-parameter-suppressed, malformed and unsafe states. The disposable PostgreSQL 17 contract
-also applies unsafe auto_explain/pgAudit role settings and requires rejection, then proves
-an active auto_explain configuration with parameter length zero is accepted.
+PR #117 checked custom GUC readback but did not load the actual extension in CI.
+The current correction rejects every enabled auto_explain plan logger, including
+`log_parameter_max_length=0`, and validates the parameter-length range. It preserves
+absent-extension compatibility and pgAudit's parameter-off gate.
+
+The new synthetic CI case explicitly LOADs auto_explain in an isolated admin session,
+forces custom plans with verbose logging and a suppressed parameter list, and requires
+a fixed synthetic marker to appear in the observed plan log. That positive control
+cannot use real credentials. It then preloads the actual module in the dedicated login,
+requires enabled plan logging to block strict handoff, disables plan logging and checks
+that a different bound marker is returned by a successful query but absent from logs.
+Missing module, missing positive-control evidence or leaked protected marker fails CI.
+This does not constitute behavioral qualification of the pgAudit module.
+
+Local factory tests (16) and persistence-redaction tests (3) pass. Docker is absent
+locally; actual loaded-extension evidence requires successful final-head PostgreSQL CI.
 
 A read-only hosted metadata review was performed without reading log messages or secret
 rows. It confirmed that the hosted PostgreSQL log stream is active and that extension
@@ -81,3 +93,10 @@ Before any real secret-backend migration or provider refresh integration, the re
 operational review must cover platform/provider log custody, privileged host/Docker/database
 administration, retention/access/restore behavior and deployment-specific daemon/host faults.
 No activation switch changes in this code/CI-only slice.
+
+## Reference checked for the correction (2026-09-29)
+
+[PostgreSQL 17 auto_explain](https://www.postgresql.org/docs/17/auto-explain.html)
+documents the distinct plan-duration, parameter-list and verbose-plan controls.
+The synthetic loaded-module test, rather than setting readback alone, is the required
+evidence for the custom-plan constant exposure and protected-session behavior.

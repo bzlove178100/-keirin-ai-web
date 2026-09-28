@@ -162,14 +162,19 @@ class FactoryTests(unittest.TestCase):
             (None, None, None),
             ("-1", "-1", None),
             ("-1", "-1", "off"),
-            ("0", "0", "off"),
-            ("10000", "0", "off"),
+            ("-1", "0", "off"),
+            ("-1", "256", "off"),
         ]
         for extension_fields in safe:
             with self.subTest(extension_fields=extension_fields):
                 self.connection = Connection(BASE_EXPECTED + extension_fields)
                 self.assertIs(self.factory()(**LIMITS), self.connection)
         unsafe = [
+            ("0", "0", "off"),
+            ("10000", "0", "off"),
+            ("-2", "0", "off"),
+            ("-1", "-2", "off"),
+            ("-1", "2147483648", "off"),
             ("10000", "-1", "off"),
             ("0", "256", "off"),
             ("bad", "0", "off"),
@@ -183,6 +188,7 @@ class FactoryTests(unittest.TestCase):
                 self.connection = Connection(BASE_EXPECTED + extension_fields)
                 self.assert_safe(lambda: self.factory()(**LIMITS))
                 self.assertIn("rollback", self.connection.calls)
+                self.assertIn("close", self.connection.calls)
                 self.assertNotIn("commit", self.connection.calls)
 
     def test_malformed_rows_and_boolean_lookalikes(self):
