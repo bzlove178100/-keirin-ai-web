@@ -375,6 +375,14 @@ pass. Local process IDs are virtualized without matching /proc identity, so the 
 pidfd test uses controlled proc evidence. Actual host /proc, detached descendant
 termination and reaping MUST pass Docker CI with no mocks or fallback before merge.
 
+Actual Docker qualification passed at PR #111 head
+`81dc6683ffeaeadef6be7b7d2737c09d64a95414` (run `36371864038`, host job
+`108769725811`): both abrupt supervisor crash and forced-stop cases verified
+detached descendant termination, original process identity removal and cgroup/
+container cleanup. Resource limits and existing child-guard compatibility also
+passed. All four workflows passed at that head, including PostgreSQL/TLS recovery.
+Final-head CI remains required after this evidence-only status update.
+
 This qualifies container-internal PID-1 failure and forced stop only. Docker daemon,
 host and external controller failures/restart reconciliation remain untested, as do
 deployment-specific egress, image/launcher trust, logging and real secret custody.
