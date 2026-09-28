@@ -38,6 +38,12 @@ def require_factory_open():
     connection.close()
 
 
+def apply_role_settings(port, ca, statements):
+    with _admin(port, ca) as admin:
+        for statement in statements:
+            admin.execute(statement)
+
+
 def prove_bind_redaction(server_name):
     connection = tls_factory(**LIMITS)
     try:
@@ -92,32 +98,53 @@ def main():
             os.environ["SYNTHETIC_TLS_CA_SHA256"] = sha256(ca.read_bytes()).hexdigest()
 
             # PostgreSQL 17 defaults satisfy the log-safe handoff policy. Prove each
-            # secret-bearing log path is fail-closed if an operator weakens it.
+            # core and extension parameter-log path is fail-closed if weakened.
             require_factory_open()
-            for enable, disable in (
-                ("ALTER ROLE secret_test_host_a SET log_statement='all'",
-                 "ALTER ROLE secret_test_host_a RESET log_statement"),
-                ("ALTER ROLE secret_test_host_a SET log_parameter_max_length_on_error=-1",
-                 "ALTER ROLE secret_test_host_a RESET log_parameter_max_length_on_error"),
-                ("ALTER ROLE secret_test_host_a SET log_duration=on",
-                 "ALTER ROLE secret_test_host_a RESET log_duration"),
-                ("ALTER ROLE secret_test_host_a SET log_min_duration_statement=0",
-                 "ALTER ROLE secret_test_host_a RESET log_min_duration_statement"),
-                ("ALTER ROLE secret_test_host_a SET log_min_duration_sample=0",
-                 "ALTER ROLE secret_test_host_a RESET log_min_duration_sample"),
-            ):
-                with _admin(port, ca) as admin:
-                    admin.execute(enable)
+            cases = (
+                (("ALTER ROLE secret_test_host_a SET log_statement='all'",),
+                 ("ALTER ROLE secret_test_host_a RESET log_statement",)),
+                (("ALTER ROLE secret_test_host_a SET log_parameter_max_length_on_error=-1",),
+                 ("ALTER ROLE secret_test_host_a RESET log_parameter_max_length_on_error",)),
+                (("ALTER ROLE secret_test_host_a SET log_duration=on",),
+                 ("ALTER ROLE secret_test_host_a RESET log_duration",)),
+                (("ALTER ROLE secret_test_host_a SET log_min_duration_statement=0",),
+                 ("ALTER ROLE secret_test_host_a RESET log_min_duration_statement",)),
+                (("ALTER ROLE secret_test_host_a SET log_min_duration_sample=0",),
+                 ("ALTER ROLE secret_test_host_a RESET log_min_duration_sample",)),
+                (("ALTER ROLE secret_test_host_a SET auto_explain.log_min_duration=10000",
+                  "ALTER ROLE secret_test_host_a SET auto_explain.log_parameter_max_length=-1"),
+                 ("ALTER ROLE secret_test_host_a RESET auto_explain.log_min_duration",
+                  "ALTER ROLE secret_test_host_a RESET auto_explain.log_parameter_max_length")),
+                (("ALTER ROLE secret_test_host_a SET pgaudit.log_parameter=on",),
+                 ("ALTER ROLE secret_test_host_a RESET pgaudit.log_parameter",)),
+            )
+            for enable, disable in cases:
+                apply_role_settings(port, ca, enable)
                 try:
                     expect_factory_blocked()
                 finally:
-                    with _admin(port, ca) as admin:
-                        admin.execute(disable)
+                    apply_role_settings(port, ca, disable)
                 require_factory_open()
+
+            # Active auto_explain is acceptable only when Bind values are explicitly
+            # suppressed. This also proves the real-server custom GUC readback path.
+            safe_extension = (
+                "ALTER ROLE secret_test_host_a SET auto_explain.log_min_duration=10000",
+                "ALTER ROLE secret_test_host_a SET auto_explain.log_parameter_max_length=0",
+                "ALTER ROLE secret_test_host_a SET pgaudit.log_parameter=off",
+            )
+            apply_role_settings(port, ca, safe_extension)
+            require_factory_open()
+            apply_role_settings(port, ca, (
+                "ALTER ROLE secret_test_host_a RESET auto_explain.log_min_duration",
+                "ALTER ROLE secret_test_host_a RESET auto_explain.log_parameter_max_length",
+                "ALTER ROLE secret_test_host_a RESET pgaudit.log_parameter",
+            ))
+            require_factory_open()
 
             prove_bind_redaction(server_name)
 
-    print("Synthetic PostgreSQL log custody: unsafe session policy rejected and error Bind marker absent from observed server logs PASS")
+    print("Synthetic PostgreSQL log custody: core/extension unsafe policy rejected and error Bind marker absent from observed server logs PASS")
 
 
 if __name__ == "__main__":
