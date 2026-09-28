@@ -121,16 +121,44 @@ control. Startup/imports before registration remain trusted and require external
 supervision. Child termination cannot determine whether a database write committed;
 recovery still requires authoritative read-back and must not automatically replay.
 
-Next qualify external supervision (whole-process-group cleanup/reaping and
-cgroup memory/process/CPU limits), controlled launcher/image integrity and platform/
-database log settings in disposable fixtures. Current child deadlines do not prove
-those deployment properties. No real host is declared ready by these tests.
+## Disposable resource-limit qualification
+
+`AGENT_EPHEMERAL_HOST_TEST=1 python tests/run_host_limits_contract.py` requires
+Docker with cgroup v2 and creates a separate disposable container per probe. It
+checks Docker configuration before startup and actual cgroup files before stress:
+128 MiB memory, no swap, 24 tasks and 50,000/100,000 microseconds of CPU bandwidth.
+These are fixture values, not sizing recommendations or a production host profile.
+CPU throttling counters must increase, a bounded synthetic allocation child must
+receive SIGKILL with an OOM-kill counter increment, and bounded fork attempts must
+hit EAGAIN with the pids-controller counter increment. Children are reaped and
+containers are removed even after timeout; cleanup failure fails the contract.
+
+Existing OS and parent-death guard tests also run inside these limits. Containers
+use a non-root identity, dropped capabilities, no-new-privileges, read-only code/root,
+an ephemeral bounded /tmp, no network and Docker log driver `none`. Network/logging
+settings are fixture precautions only; no egress or platform-log qualification is
+claimed by this resource test. The runner resolves the Python image tag once to a
+local immutable image ID and records that ID. Image provenance/approved digest and
+actual deployment qualification are still open; the test tag can change between runs.
+
+The local environment lacks Docker, so only fixture gate/cleanup tests and syntax
+checks can run there. The dedicated CI job must pass actual enforcement and existing
+guard compatibility before merge. Missing controllers or readback mismatches fail;
+there is no skip/fallback to unbounded execution or RLIMIT_NPROC (which is UID-wide
+and not a substitute for cgroup task limits).
+
+Next qualify whole-process-group supervisor recovery, controlled launcher/image
+integrity, permitted-destination egress, and platform/database log custody. No real
+host is declared ready by these tests. Full TLS/database composition under deployment
+limits is not covered by this network-disabled fixture.
 Keep real endpoints, credentials, staging migration, provider refresh and hosted execution
 out of this code/CI-only sequence.
 
 ## Official references checked
 
 OS references checked 2026-09-28:
+- [Linux cgroup v2 resource controllers](https://cdn.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)
+- [Docker resource constraints](https://docs.docker.com/engine/containers/resource_constraints/)
 - [Linux parent-death signal](https://www.man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html)
 - [Linux parent process ID](https://www.man7.org/linux/man-pages/man2/getppid.2.html)
 - [Python resource limits](https://docs.python.org/3.12/library/resource.html)

@@ -326,6 +326,30 @@ This guards the direct child only, not descendants, pre-target imports, secure m
 erasure or platform logging. External supervisor/cgroup resource limits, egress policy
 and log custody remain unqualified. All existing activation switches remain unchanged.
 
+## Synthetic resource limits (code/CI only, 2026-09-28)
+
+PR #109 is merged at `aaf1925c47f937be7c58d19e1808633ffd17a5b3`; its corrected-head
+four PR workflows, four main workflows and Pages passed. The legacy process-fixture
+signature fix also passed all 11 locally runnable process tests.
+
+The next slice adds an explicitly gated, disposable Docker/cgroup-v2 qualification
+runner. It verifies configured and kernel-effective 128 MiB memory, zero swap,
+24 tasks and 0.5 CPU bandwidth before bounded stress. Actual CPU throttle, memory
+OOM-kill and process-creation denial must have matching kernel event counters.
+Existing child OS/parent-death contracts run under the same limits. Each fixture is
+non-root, read-only, capability-dropped, no-new-privileges, network-disabled and uses
+no Docker log persistence; containers are removed on both success and failure.
+
+Local gate, unsafe-configuration and timeout-cleanup tests pass (3 tests), as do
+the existing parent-death tests (4 tests). Syntax checks pass. Docker is absent
+locally; real cgroup enforcement and compatibility are required in the new CI job
+before merge, not inferred from local unit tests.
+
+This is synthetic qualification, not a deployment, runtime activation or production
+sizing choice. Supervisor crash/group cleanup, reviewed image/launcher integrity,
+egress allowlisting, platform/database logs and real secret custody remain gates.
+No real credentials, migrations, provider execution or other activation switches change.
+
 ## Current agent state
 
 The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract, an offline full credential-stack composition path, a credential-gated provider-action boundary, persistence-safe action/verifier error handling, ephemeral diagnostic metadata and a static persistence-redaction audit.
