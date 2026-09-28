@@ -4,10 +4,23 @@ import ipaddress
 import os
 from pathlib import Path
 import socket
+import time
 
 REQUEST = b"synthetic-egress-check"
 RESPONSE = b"synthetic-egress-ok"
 PORT = 18443
+GATE = Path("/tmp/egress-go")
+
+
+def wait_for_gate(timeout=10):
+    if os.environ.get("SYNTHETIC_EGRESS_GATE") != "1":
+        raise RuntimeError("synthetic_egress_gate_required")
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if GATE.exists():
+            return
+        time.sleep(0.02)
+    raise RuntimeError("synthetic_egress_gate_timeout")
 
 
 def require_no_default_route():
@@ -48,12 +61,13 @@ def require_unreachable(address):
 
 
 def main():
+    # The host observer releases this only after exact live network membership is proven.
+    wait_for_gate()
     allowed = require_allowed_ip(os.environ.get("SYNTHETIC_ALLOWED_IP", ""))
     require_no_default_route()
     connect_allowed(allowed)
     # Documentation-only address. No DNS or real endpoint.
     require_unreachable("192.0.2.1")
-    print("synthetic_egress_ok", flush=True)
 
 
 if __name__ == "__main__":
