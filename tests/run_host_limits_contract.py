@@ -74,6 +74,9 @@ def main():
     print("synthetic_host_image:" + image_id, flush=True)
     for mode in ("cpu", "memory", "pids", "compatibility"):
         run_probe(image_id, mode)
+    from host_supervisor_contract import run_supervisor_probe
+    for mode in ("crash", "forced-stop"):
+        run_supervisor_probe(image_id, mode)
 
 
 if __name__ == "__main__":

@@ -84,6 +84,8 @@ jobs:
         run: env -u LD_LIBRARY_PATH python tests/test_secret_parent_death.py
       - name: Test synthetic host qualification gates and cleanup
         run: python tests/test_host_limits_fixture.py
+      - name: Test supervisor exit and reaping evidence guards
+        run: python tests/test_host_supervisor_contract.py
       - name: Verify reusable durable backend conformance harness
         run: python tests/test_durable_backend_conformance.py
       - name: Verify synthetic SQLite backend across processes

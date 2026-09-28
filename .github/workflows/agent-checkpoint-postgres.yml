@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Qualify synthetic cgroup limits and existing child guards
+      - name: Qualify synthetic cgroup limits, child guards and supervisor cleanup
         env:
           AGENT_EPHEMERAL_HOST_TEST: '1'
         run: python tests/run_host_limits_contract.py

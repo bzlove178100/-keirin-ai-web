@@ -147,7 +147,30 @@ guard compatibility before merge. Missing controllers or readback mismatches fai
 there is no skip/fallback to unbounded execution or RLIMIT_NPROC (which is UID-wide
 and not a substitute for cgroup task limits).
 
-Next qualify whole-process-group supervisor recovery, controlled launcher/image
+## PID-namespace supervisor fault qualification
+
+The same gated Docker runner also starts a synthetic PID-1 supervisor, a child and
+a grandchild in a separate session/process group. All three ignore TERM. After
+readiness and host-side topology/cgroup checks, separate cases inject immediate
+`os._exit(23)` in the supervisor and Docker stop with a one-second TERM grace period
+(expected forced-kill exit 137). No application cleanup runs on the crash path.
+
+Before injecting the fault, the observer opens stable pidfds for all three host PIDs
+and records their /proc start times. Success requires every pidfd to report exit,
+every original /proc identity to disappear (readability alone can mean a zombie),
+and the cgroup to be absent or explicitly unpopulated with no listed processes.
+Container removal and absence verification run on failure as well as success; all
+observer FDs are closed. Missing or incomplete evidence fails the contract. This
+verifies namespace-wide teardown, including a descendant outside the original
+process group; it does not authorize production factories to spawn descendants.
+
+The outer Docker daemon/CI controller remains alive in these tests. Daemon/host
+failure, external-controller crash and orphan reconciliation after controller restart
+are NOT qualified. Resource/cgroup and Linux PID namespace behavior in this fixture
+does not prove a deployment's supervisor configuration or durable DB outcomes.
+Ambiguous writes still require read-back and must not be blindly replayed.
+
+Next qualify external-controller recovery, controlled launcher/image
 integrity, permitted-destination egress, and platform/database log custody. No real
 host is declared ready by these tests. Full TLS/database composition under deployment
 limits is not covered by this network-disabled fixture.
@@ -157,6 +180,8 @@ out of this code/CI-only sequence.
 ## Official references checked
 
 OS references checked 2026-09-28:
+- [Linux PID namespace init termination](https://www.man7.org/linux/man-pages/man7/pid_namespaces.7.html)
+- [Linux pidfd exit observation](https://man7.org/linux/man-pages/man2/pidfd_open.2.html)
 - [Linux cgroup v2 resource controllers](https://cdn.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)
 - [Docker resource constraints](https://docs.docker.com/engine/containers/resource_constraints/)
 - [Linux parent-death signal](https://www.man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html)
