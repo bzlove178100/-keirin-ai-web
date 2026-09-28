@@ -1,10 +1,15 @@
+import { applyAutomaticBankFit } from '../predict-engine-dev/bank_fit_auto.ts';
+
 export const TRAINING_SCHEMA='keirin-training-input-v1';
 
 export function buildTrainingInput(s:any,er:any,evaluationScope:string){
-  const race=structuredClone(s?.race_data?.race??{});
-  const players=structuredClone(s?.race_data?.players??[]);
-  const context=structuredClone(s?.race_data?.prediction_context??null);
-  const raw=structuredClone(s?.race_data?.odds?.trifecta??{});
+  const bankFit=applyAutomaticBankFit(s?.race_data??{});
+  const normalized:any=bankFit.raceData??s?.race_data??{};
+  const race=structuredClone(normalized?.race??{});
+  const players=structuredClone(normalized?.players??[]);
+  const bankContext=structuredClone(normalized?.bank_context??null);
+  const context=structuredClone(normalized?.prediction_context??null);
+  const raw=structuredClone(normalized?.odds?.trifecta??{});
   const ignored=new Set<string>(Array.isArray(er?.odds_sanitization?.ignored_combos)?er.odds_sanitization.ignored_combos:[]);
   const source=String(context?.source??'');
   const kdreams=/K[-\s]?Dreams|Kドリームス|ケイドリームス/i.test(source);
@@ -20,6 +25,8 @@ export function buildTrainingInput(s:any,er:any,evaluationScope:string){
     captured_at:s.captured_at,
     race,
     players,
+    bank_context:bankContext,
+    bank_fit_automation:structuredClone(bankFit.report),
     odds:{trifecta:raw},
     prediction_context:context,
     odds_sanitization:{
