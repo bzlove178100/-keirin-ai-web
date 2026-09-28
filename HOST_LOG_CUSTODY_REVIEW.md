@@ -6,11 +6,11 @@ Updated: 2026-09-29 (Asia/Tokyo)
 
 ## Verified base
 
-Current verified main is PR #121 merge `b8321d556476eeb04bc8d557f52a17a8d2f7ed5a`.
-Its post-merge regression, read-only smoke, collection UI, PostgreSQL/host contract and
-Pages workflows passed. Production prediction, prediction DB writes, automatic external
-race-data fetching, hosted task/provider execution, scheduler/recurrence, provider
-write/generation and live report delivery remain disabled.
+Current verified main is PR #123 merge `e0e16b90a839782d6120f69660e75165fa853ff2`.
+All four post-merge main workflows for that SHA passed: regression, collection UI,
+PostgreSQL/host contract and Pages. Production prediction, prediction DB writes,
+automatic external race-data fetching, hosted task/provider execution,
+scheduler/recurrence, provider write/generation and live report delivery remain disabled.
 
 ## Application and container boundary
 
@@ -56,16 +56,28 @@ rejected, disables plan logging, performs a protected query and requires its dif
 synthetic marker to be absent from logs. Missing module, missing positive-control evidence
 or a protected marker leak fails the contract.
 
-## pgAudit status
+## pgAudit behavioral qualification
 
-The preflight checks `pgaudit.log_parameter=off` when the setting is present. This is a
-configuration gate only. The repository still has **no behavioral qualification of the
-actual pgAudit module** comparable to the loaded `auto_explain` test.
+PR #123 closes the repository's previous actual-module behavior gap for the tested CI
+profile. The fixture uses PostgreSQL 17.11/bookworm and installs the exact signed-PGDG
+package `postgresql-17-pgaudit=17.1-2.pgdg12+1`. It preloads the real module, creates the
+extension and requires extension version `17.1`.
 
-Do not install an unpinned or moving pgAudit package merely to turn this item green. A
-future behavioral test should use a pinned/reproducible module source or image, prove the
-log channel with a non-secret positive control and prove a protected synthetic parameter
-is absent under the exact policy expected for deployment.
+The positive control enables `pgaudit.log='read'` and `pgaudit.log_parameter=on`, executes
+a tagged parameterized query and requires the observed PostgreSQL log channel to contain an
+`AUDIT:` record, the SQL tag and a fixed synthetic parameter marker. This proves the module
+and observed channel can expose parameters when configured unsafely.
+
+The dedicated secret role is then configured with parameter logging on and strict handoff
+must fail. After changing only `pgaudit.log_parameter` to `off`, the strict factory is
+allowed to hand off the connection; another tagged audited query must still appear while
+its distinct protected synthetic parameter marker must be absent. Exact-head PR CI and the
+post-merge PostgreSQL/host workflow passed.
+
+This is behavioral qualification only for the disposable CI module/version and observed
+server log path. It does **not** establish that a hosted or future production deployment
+uses the same pgAudit package, configuration or logging destination, and it does not
+qualify administrator access or external platform retention/export behavior.
 
 ## Network/TLS/daemon evidence that narrows logging risk
 
@@ -91,7 +103,7 @@ A prior bounded read-only hosted metadata review, performed without reading log 
 secret rows, established that the hosted PostgreSQL log stream is active and that extension
 logging settings are material to the intended deployment. The observed hosted profile did
 not satisfy every strict secret-handoff condition, so the real secret backend remained
-unbound. This review does not change hosted configuration.
+unbound. PR #123 does not change hosted configuration.
 
 ## Remaining custody gates
 
@@ -105,7 +117,8 @@ review still must cover:
 - WAL/archive/backup contents and database administrator access;
 - production tracing/frame-local/crash-dump policy;
 - privileged host/root/kernel/ptrace/operator custody;
-- actual pgAudit behavior if pgAudit is part of the selected deployment;
+- confirmation that the selected deployment uses the reviewed pgAudit version/policy if
+  pgAudit is enabled there;
 - policy-change behavior after handoff and the administrative boundary that can mutate it.
 
 Synthetic absence of a marker in one observed channel is not evidence that every external
