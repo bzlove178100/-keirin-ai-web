@@ -72,6 +72,11 @@ def ipv4_for(data, network):
     return value
 
 
+def require_running(identity, label):
+    if json.loads(command(["docker", "inspect", identity]))[0]["State"]["Running"] is not True:
+        raise RuntimeError("synthetic_egress_" + label + "_not_running")
+
+
 def run_egress_probe(image_id):
     network = "synthetic-egress-" + uuid4().hex[:12]
     server_name = "synthetic-approved-" + uuid4().hex[:12]
@@ -87,22 +92,33 @@ def run_egress_probe(image_id):
         created.append(server_id)
         if not re.fullmatch(r"[0-9a-f]{64}", server_id):
             raise RuntimeError("synthetic_egress_container_identity_invalid")
+        inspect_container(server_id, image_id, network, SERVER)
+        command(["docker", "start", server_id])
+        time.sleep(0.1)
+        require_running(server_id, "server")
         server_data = inspect_container(server_id, image_id, network, SERVER)
         server_ip = ipv4_for(server_data, network)
 
         client_id = command(hardened_args(
-            client_name, network, image_id, CLIENT, ("SYNTHETIC_ALLOWED_IP=" + server_ip,)))
+            client_name, network, image_id, CLIENT,
+            ("SYNTHETIC_ALLOWED_IP=" + server_ip, "SYNTHETIC_EGRESS_GATE=1")))
         created.append(client_id)
         if not re.fullmatch(r"[0-9a-f]{64}", client_id):
             raise RuntimeError("synthetic_egress_container_identity_invalid")
         inspect_container(client_id, image_id, network, CLIENT)
+        command(["docker", "start", client_id])
+        time.sleep(0.1)
+        require_running(client_id, "client")
         exact = {server_id: server_name, client_id: client_name}
         verify_members(network_data(network), exact)
 
-        # Prove preflight fails closed if any unapproved peer is attached.
+        # Prove live preflight fails closed if any unapproved peer is attached.
         sentinel_id = command(hardened_args(sentinel_name, network, image_id, SERVER))
         created.append(sentinel_id)
         inspect_container(sentinel_id, image_id, network, SERVER)
+        command(["docker", "start", sentinel_id])
+        time.sleep(0.1)
+        require_running(sentinel_id, "sentinel")
         try:
             verify_members(network_data(network), exact)
         except RuntimeError as error:
@@ -114,17 +130,14 @@ def run_egress_probe(image_id):
         created.remove(sentinel_id)
         verify_members(network_data(network), exact)
 
-        command(["docker", "start", server_id])
-        time.sleep(0.1)
-        if json.loads(command(["docker", "inspect", server_id]))[0]["State"]["Running"] is not True:
-            raise RuntimeError("synthetic_egress_server_not_running")
-        output = command(["docker", "start", "--attach", client_id], timeout=15)
-        if output != "synthetic_egress_ok":
-            raise RuntimeError("synthetic_egress_probe_failed")
+        # Release the client only after exact live membership is proven.
+        command(["docker", "exec", client_id, LAUNCHER, "-c",
+                 "from pathlib import Path; Path('/tmp/egress-go').write_text('go')"])
+        if command(["docker", "wait", client_id], timeout=15) != "0":
+            raise RuntimeError("synthetic_egress_client_exit_invalid")
         client_state = json.loads(command(["docker", "inspect", client_id]))[0]["State"]
         if client_state["Running"] or client_state["ExitCode"] != 0:
             raise RuntimeError("synthetic_egress_client_exit_invalid")
-        verify_members(network_data(network), exact)
     finally:
         for identity in reversed(created):
             try:
