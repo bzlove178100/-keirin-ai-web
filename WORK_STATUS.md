@@ -345,6 +345,13 @@ the existing parent-death tests (4 tests). Syntax checks pass. Docker is absent
 locally; real cgroup enforcement and compatibility are required in the new CI job
 before merge, not inferred from local unit tests.
 
+Actual cgroup qualification passed at PR #110 head
+`f8034fb5a34d923537f4a5557c1fe2b8ccd28d8a` (run `36363270091`, job
+`108744547145`): CPU throttling, physical-page memory OOM, pids denial and existing
+OS/parent-death guard compatibility all succeeded. The memory probe touches every
+4 KiB page so virtual allocation alone cannot satisfy the test. The complete final
+PR-head workflow set, including PostgreSQL/TLS recovery, remains the merge gate.
+
 This is synthetic qualification, not a deployment, runtime activation or production
 sizing choice. Supervisor crash/group cleanup, reviewed image/launcher integrity,
 egress allowlisting, platform/database logs and real secret custody remain gates.
