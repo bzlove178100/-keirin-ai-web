@@ -317,6 +317,11 @@ and early guard failure with no factory call or reply. Four existing OS-safety t
 also pass. PostgreSQL/TLS compatibility remains an exact-PR-head CI merge gate;
 the local environment does not have psycopg or Docker.
 
+Initial PR CI exposed three legacy fake-process tests unpacking IPC arguments from
+the old tuple tail. The fixture now unpacks the explicit child signature and checks
+the captured parent PID. The existing ambiguous-write/interruption/quarantine
+expectations are unchanged; corrected-head CI is required before merge.
+
 This guards the direct child only, not descendants, pre-target imports, secure memory
 erasure or platform logging. External supervisor/cgroup resource limits, egress policy
 and log custody remain unqualified. All existing activation switches remain unchanged.
