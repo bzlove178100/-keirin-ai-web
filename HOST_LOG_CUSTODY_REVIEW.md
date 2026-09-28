@@ -2,101 +2,118 @@
 
 Updated: 2026-09-29 (Asia/Tokyo)
 
+**Synthetic/CI evidence only. No real secret backend, hosted execution or production log policy is activated by this review.**
+
 ## Verified base
 
-PR #117 is merged on main at `8551bd11df542b7cd8a1e5252c8bef07324b43af`.
-Its post-merge regression, read-only smoke, collection UI, Pages, synthetic host/egress,
-PostgreSQL/TLS recovery and PostgreSQL Bind-redaction jobs all passed. Production
-prediction, prediction DB writes, automatic external race-data fetching, hosted
-task/provider execution, scheduler/recurrence, provider write/generation and live report
-delivery remain disabled.
+Current verified main is PR #121 merge `b8321d556476eeb04bc8d557f52a17a8d2f7ed5a`.
+Its post-merge regression, read-only smoke, collection UI, PostgreSQL/host contract and
+Pages workflows passed. Production prediction, prediction DB writes, automatic external
+race-data fetching, hosted task/provider execution, scheduler/recurrence, provider
+write/generation and live report delivery remain disabled.
 
-The host child used for secret-bearing PostgreSQL operations redirects stdout and stderr
-to `/dev/null` before credential/database work. The disposable Docker host fixture uses
-log driver `none`. Those controls do not by themselves prove that the database server or
-an external platform cannot log query parameters.
+## Application and container boundary
+
+The secret-bearing child redirects stdout/stderr to `/dev/null` before credential/database
+work. Synthetic hardened-host fixtures use Docker log driver `none`; a separate `json-file`
+positive control proves the observer can retrieve known non-secret markers while the
+`none` profile must not expose them through Docker logs.
+
+This does not prove absence from daemon/systemd journals, kernel audit facilities,
+tracing/APM, platform telemetry or other privileged host channels.
 
 ## PostgreSQL core session log gate
 
-`StrictPostgresConnectionFactory` reads back the effective PostgreSQL session settings
-before handing a connection to the secret backend. Core handoff requires:
+`StrictPostgresConnectionFactory` reads effective PostgreSQL session settings before
+handing a connection to the secret backend. Core handoff requires:
 
-- `log_statement = none`
-- `log_parameter_max_length_on_error = 0`
-- `log_duration = off`
-- `log_min_duration_statement = -1`
-- `log_min_duration_sample = -1`
+- `log_statement = none`;
+- `log_parameter_max_length_on_error = 0`;
+- `log_duration = off`;
+- `log_min_duration_statement = -1`;
+- `log_min_duration_sample = -1`.
 
-The secret backend uses parameterized SQL. The gate rejects effective core paths that
-would log normal statements/durations or include Bind values on an error. A mismatch uses
-the existing fixed outward `postgres_host_factory_unavailable` classification; raw
-server/driver error text is not exposed or retried.
+The backend uses parameterized SQL. Unsafe or malformed effective policy fails closed with
+the fixed outward `postgres_host_factory_unavailable` classification and no automatic
+retry.
 
-## Extension parameter-log gate
+The synthetic PostgreSQL 17 log-custody contract observes the real disposable server log
+channel in memory. A deliberate division-by-zero error is required as a positive control,
+while a fixed synthetic Bind marker supplied through the strict factory must be absent.
+No real token, account credential, provider secret, prediction row or private race data is
+used.
 
-The same preflight now checks custom settings with missing-setting semantics so a server
-without those extensions remains compatible:
+## `auto_explain` gate
 
-- If `auto_explain` settings are absent, the extension path is treated as inactive.
-- If `auto_explain` is loaded, `auto_explain.log_min_duration = -1` must disable
-  plan logging. Suppressing only the Bind parameter list is insufficient: a custom
-  verbose plan can contain the bound value as a constant.
-- If pgAudit is active, `pgaudit.log_parameter` must be `off`.
-- A partially visible or malformed `auto_explain` setting pair fails closed.
+PR #118 corrected the earlier custom-GUC-only evidence. Parameter-list suppression alone
+is insufficient because a verbose custom plan can contain a bound value as a constant.
+The strict handoff therefore requires `auto_explain` plan logging itself to be disabled.
 
-PR #117 checked custom GUC readback but did not load the actual extension in CI.
-The current correction rejects every enabled auto_explain plan logger, including
-`log_parameter_max_length=0`, and validates the parameter-length range. It preserves
-absent-extension compatibility and pgAudit's parameter-off gate.
+The synthetic CI case LOADs the actual `auto_explain` module, forces a verbose custom plan
+with parameter-list logging suppressed and requires a fixed positive marker to appear in
+the observed plan log. It then proves that a dedicated login with enabled plan logging is
+rejected, disables plan logging, performs a protected query and requires its different
+synthetic marker to be absent from logs. Missing module, missing positive-control evidence
+or a protected marker leak fails the contract.
 
-The new synthetic CI case explicitly LOADs auto_explain in an isolated admin session,
-forces custom plans with verbose logging and a suppressed parameter list, and requires
-a fixed synthetic marker to appear in the observed plan log. That positive control
-cannot use real credentials. It then preloads the actual module in the dedicated login,
-requires enabled plan logging to block strict handoff, disables plan logging and checks
-that a different bound marker is returned by a successful query but absent from logs.
-Missing module, missing positive-control evidence or leaked protected marker fails CI.
-This does not constitute behavioral qualification of the pgAudit module.
+## pgAudit status
 
-Local factory tests (16) and persistence-redaction tests (3) pass. Docker is absent
-locally; actual loaded-extension evidence requires successful final-head PostgreSQL CI.
+The preflight checks `pgaudit.log_parameter=off` when the setting is present. This is a
+configuration gate only. The repository still has **no behavioral qualification of the
+actual pgAudit module** comparable to the loaded `auto_explain` test.
 
-A read-only hosted metadata review was performed without reading log messages or secret
-rows. It confirmed that the hosted PostgreSQL log stream is active and that extension
-logging settings are material to this deployment. The current hosted profile does not yet
-meet every strict handoff condition, so the real secret backend remains intentionally
-unbound; no hosted configuration was changed by the review.
+Do not install an unpinned or moving pgAudit package merely to turn this item green. A
+future behavioral test should use a pinned/reproducible module source or image, prove the
+log channel with a non-secret positive control and prove a protected synthetic parameter
+is absent under the exact policy expected for deployment.
 
-## Observed server-log Bind redaction
+## Network/TLS/daemon evidence that narrows logging risk
 
-The synthetic test starts a disposable PostgreSQL 17 TLS server and creates only synthetic
-roles/passwords. Through the strict factory it submits an extended-protocol parameterized
-query whose Bind value is a fixed synthetic secret marker and deliberately causes a
-division-by-zero error. The observer reads `docker logs` into memory without printing the
-payload. The fixed `division by zero` text must be present as a positive control proving the
-server error-log channel was observed, while the Bind marker must be absent.
+Later host work changes the scope of this review:
 
-No real provider, database row, account credential, token, refresh secret or prediction
-data is used by this evidence.
+- PR #114 pins the approved synthetic host image digest and fixed launcher;
+- PR #115 qualifies the dedicated internal network, exact membership and synthetic
+  permitted-destination/blocked-egress controls;
+- PR #119 composes PostgreSQL TLS inside the hardened client/container and exact internal
+  network, with wrong-hostname and wrong-CA negative controls. The client receives no DB
+  credential in that composition test;
+- PR #120 performs an actual Docker daemon restart on the GitHub-hosted Linux/systemd
+  profile with `live-restore=false` and `restart=no`, requiring the synthetic process tree
+  not to resurrect and exact fresh-interpreter reconciliation to leave an unrelated
+  sentinel untouched.
 
-## Scope and remaining gates
+These controls reduce unreviewed transport/runtime paths in synthetic CI. They do not
+qualify privileged platform log custody or production administrator behavior.
 
-This qualifies the effective PostgreSQL session policy, auto_explain/pgAudit parameter-log
-settings and the disposable PostgreSQL stderr/Docker capture path used by CI. It does
-**not** qualify cloud-provider control-plane logs, Docker daemon/systemd journals,
-kernel/audit logs, APM/tracing, WAL/archive/backup contents, host storage erasure,
-retention, log-access authorization or end-to-end hosted log-drain custody. It also does
-not make the preflight immutable against a privileged database/host administrator changing
-policy after handoff; that remains part of the deployment administration boundary.
+## Hosted metadata observation
 
-Before any real secret-backend migration or provider refresh integration, the remaining
-operational review must cover platform/provider log custody, privileged host/Docker/database
-administration, retention/access/restore behavior and deployment-specific daemon/host faults.
-No activation switch changes in this code/CI-only slice.
+A prior bounded read-only hosted metadata review, performed without reading log messages or
+secret rows, established that the hosted PostgreSQL log stream is active and that extension
+logging settings are material to the intended deployment. The observed hosted profile did
+not satisfy every strict secret-handoff condition, so the real secret backend remained
+unbound. This review does not change hosted configuration.
 
-## Reference checked for the correction (2026-09-29)
+## Remaining custody gates
 
-[PostgreSQL 17 auto_explain](https://www.postgresql.org/docs/17/auto-explain.html)
-documents the distinct plan-duration, parameter-list and verbose-plan controls.
-The synthetic loaded-module test, rather than setting readback alone, is the required
-evidence for the custom-plan constant exposure and protected-session behavior.
+Before any real secret-backend migration or provider refresh integration, the deployment
+review still must cover:
+
+- cloud/platform control-plane and database log destinations;
+- Docker daemon/systemd journal, kernel/audit and host telemetry/APM channels;
+- who can read, export, restore or alter those logs and settings;
+- retention, deletion, backup/archive and restore behavior;
+- WAL/archive/backup contents and database administrator access;
+- production tracing/frame-local/crash-dump policy;
+- privileged host/root/kernel/ptrace/operator custody;
+- actual pgAudit behavior if pgAudit is part of the selected deployment;
+- policy-change behavior after handoff and the administrative boundary that can mutate it.
+
+Synthetic absence of a marker in one observed channel is not evidence that every external
+platform channel is safe. Platform/provider evidence must come from the selected deployment
+and its documented/configured controls, not from a simulated CI substitute.
+
+## Activation boundary
+
+No activation switch changes in this review. Real secret migration, provider refresh,
+hosted execution, long-lived host, scheduler/recurrence, production prediction, prediction
+DB writes, external race-data fetching and live report delivery remain separately gated.
