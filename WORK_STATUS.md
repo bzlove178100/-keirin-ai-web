@@ -406,6 +406,13 @@ Local verification: five recovery tests, four supervisor observer tests and thre
 resource-fixture tests pass; syntax and diff checks pass. Actual Docker controller
 crash/restart cases require final-head CI, since Docker is not available locally.
 
+Actual Docker recovery passed at PR #112 head
+`27806dca8f96bc33754e79b0f022fc1ec4dbe8d2` (run `36409303587`, job
+`108885452374`): pre-receipt and running-tree controller SIGKILL, fresh-interpreter
+removal, second-recovery no-op, unrelated sentinel preservation and descendant
+reaping all passed. Existing resource and supervisor fault cases also passed.
+The complete final-head workflow set remains the merge gate after this status update.
+
 This is a synthetic test harness, not an activated recovery service. The Docker daemon
 and outer CI observer stay alive. Host/daemon failure, adversarial custody, concurrent
 controllers, launcher/image trust, egress and logs remain separate deployment gates.
