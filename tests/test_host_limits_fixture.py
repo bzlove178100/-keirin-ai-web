@@ -15,7 +15,11 @@ IMAGE_ID = "sha256:" + "a" * 64
 
 
 def configuration():
-    return {"Image": IMAGE_ID, "Config": {"User": "65534:65534"}, "HostConfig": {
+    return {"Image": IMAGE_ID, "Config": {
+        "User": "65534:65534",
+        "Entrypoint": [fixture.LAUNCHER],
+        "Cmd": [fixture.PROBE, "cpu"],
+    }, "HostConfig": {
         "Memory": 134217728, "MemorySwap": 134217728, "PidsLimit": 24,
         "CpuPeriod": 100000, "CpuQuota": 50000, "ReadonlyRootfs": True,
         "NetworkMode": "none", "CgroupnsMode": "private", "Privileged": False,
