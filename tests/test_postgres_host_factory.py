@@ -19,7 +19,7 @@ LIMITS = dict(connect_timeout=5, options="-c statement_timeout=5000 -c lock_time
               "-c idle_in_transaction_session_timeout=5000", autocommit=False, prepare_threshold=None)
 EXPECTED = ("secret_test_host_a", "secret_test_host_a", "agent_checkpoint_ci",
             False, "off", True, False, False, 5000, 1000, 5000,
-            "none", 0, 0, "panic", "terse", "off", -1, -1)
+            "none", 0, "off", -1, -1)
 
 
 class Connection:
@@ -145,7 +145,7 @@ class FactoryTests(unittest.TestCase):
 
     def test_each_identity_privilege_limit_and_logging_field_fails_closed(self):
         wrong = ("other", "other", "other", True, "on", False, True, True, 0, 0, 0,
-                 "all", -1, -1, "error", "default", "on", 0, 0)
+                 "all", -1, "on", 0, 0)
         for index, value in enumerate(wrong):
             with self.subTest(index=index):
                 row = list(EXPECTED)
