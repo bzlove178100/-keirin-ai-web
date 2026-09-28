@@ -26,11 +26,11 @@ Agent-only checkpoint/activity persistence and queue coordination in staging wer
 
 ## Verified repository state
 
-Current verified main through PR #120:
+Current verified main through PR #123:
 
-`408d22f494111620607904a5860709239ca2eb14`
+`e0e16b90a839782d6120f69660e75165fa853ff2`
 
-PR #120 (`Qualify Docker daemon restart recovery`) merged after all exact-head PR workflows passed. The four post-merge main runs for that SHA also passed:
+PR #123 (`Qualify actual pgAudit parameter redaction behavior`) merged after all exact-head PR workflows passed. All four post-merge main workflows for that SHA also passed:
 
 - `keirin-ai regression`;
 - `collection progress UI regression`;
@@ -43,7 +43,7 @@ Do not treat a later main SHA as verified until its required workflows are check
 
 Authorized staging project: `keirin-ai-staging` (`omamgmyyqnawlagbemcm`).
 
-Last bounded read-only staging verification remains from the authentication-boundary work; no new live run was started in PR #101-#120 work:
+Last bounded read-only staging verification remains from the authentication-boundary work; no new live run was started in PR #101-#123 work:
 
 - single-active trusted-run guard: present;
 - fresh trusted tasks observed then `queued` / `running`: 0;
@@ -105,25 +105,30 @@ Merged synthetic/code-only qualification now covers:
 - PR #117: auto_explain/pgAudit configuration preflight;
 - PR #118: correction requiring auto_explain plan logging itself to be disabled before secret handoff; real loaded-module synthetic positive control proves parameter-list suppression alone is insufficient because custom plans can contain bound constants;
 - PR #119: PostgreSQL TLS handshake composed inside the hardened client/container and exact internal network. Valid reviewed synthetic CA/hostname succeeds; wrong hostname and wrong CA fail. The probe is held behind a release marker until exact network membership is verified;
-- PR #120: actual Docker daemon restart on the GitHub-hosted Linux/systemd profile with `live-restore=false` and `restart=no`. The synthetic secret-host process tree must not resurrect; a fresh interpreter removes the exact immutable target, a second reconciliation is absent/no-op, prior PIDs/cgroup are gone, and an unrelated sentinel survives.
+- PR #120: actual Docker daemon restart on the GitHub-hosted Linux/systemd profile with `live-restore=false` and `restart=no`. The synthetic secret-host process tree must not resurrect; a fresh interpreter removes the exact immutable target, a second reconciliation is absent/no-op, prior PIDs/cgroup are gone, and an unrelated sentinel survives;
+- PR #123: behavioral pgAudit qualification using PostgreSQL 17.11/bookworm and exact package `postgresql-17-pgaudit=17.1-2.pgdg12+1`. With `pgaudit.log_parameter=on`, a synthetic positive-control parameter must be observed and strict secret handoff is rejected. With parameter logging off, a tagged audited query must still be observed while its protected synthetic parameter is absent.
 
 PR #119 intentionally performs only the TLS handshake in the hardened client and supplies no database credential. It does not by itself qualify database authentication/secret operations inside that exact container composition.
 
 PR #120 intentionally qualifies only the exercised GitHub-hosted Linux/systemd Docker-daemon profile. It does not prove host reboot/power-loss recovery, hostile daemon/root custody or a production supervisor.
 
+PR #123 qualifies actual pgAudit module behavior only in its disposable CI profile. It does not prove the hosted deployment uses the same module version/configuration, and it does not qualify external platform log custody.
+
 ## Logging / credential-custody status
 
-Current evidence includes fixed outward errors, no exception payload persistence, child stdout/stderr suppression, Docker `none` log-driver tests, PostgreSQL core Bind-redaction checks and loaded `auto_explain` protection.
+Current synthetic evidence includes fixed outward errors, no exception payload persistence, child stdout/stderr suppression, Docker `none` log-driver tests, PostgreSQL core Bind-redaction checks, loaded `auto_explain` protection and actual pgAudit parameter-redaction behavior.
 
 Still unqualified or deployment-specific:
 
-- platform/host log custody, access and retention;
-- actual pgAudit module behavior (configuration preflight exists, behavioral qualification does not);
+- platform/host log custody, access, export, backup and retention;
+- selected deployment pgAudit version/configuration and the administrative boundary that can mutate it;
 - tracing/frame-local/host telemetry policy in a real deployment;
 - real bootstrap credential facility, ownership, rotation and revocation;
 - real Vault encryption/key lifecycle and current staging Vault grant remediation;
 - production/root/kernel/ptrace/swap and operator custody;
-- host reboot/power-loss recovery and production deployment supervisor behavior.
+- host reboot/power-loss recovery and production deployment supervisor behavior;
+- authenticated database secret operations inside the final production-equivalent hardened network/container composition;
+- deployment DNS/address lifecycle and trust/pin distribution.
 
 Synthetic evidence must not be described as end-to-end platform or production qualification.
 
@@ -140,9 +145,9 @@ Code-only work may continue without another live-run authorization.
 Next safe work should stay inside synthetic/CI boundaries and close remaining operational evidence without activating real secrets or execution. Preferred order:
 
 1. keep exact-head CI and post-merge main verification as merge gates;
-2. qualify another narrowly testable deployment boundary only when the environment can produce real evidence; do not simulate platform custody claims that CI cannot prove;
-3. update `HOST_SECRET_CONNECTION_REVIEW.md` as old open items are superseded by PR #114-#120 evidence;
-4. review actual pgAudit behavioral qualification only with a pinned/reproducible module source or image; do not install an unpinned package merely to make the test pass;
+2. qualify authenticated synthetic secret-store operations inside the exact hardened internal-network/container composition, without real credentials or a live endpoint;
+3. keep platform/host log custody and production administrator/root/kernel claims open until the selected deployment can provide real evidence; do not simulate them in CI;
+4. keep host reboot/power-loss and production supervisor behavior open until an environment can produce representative evidence;
 5. after documented operational gates are closed, prepare a **separate** staging migration/review for a real backend. Do not combine migration, credentials and task execution in one change;
 6. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 
