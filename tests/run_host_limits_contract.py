@@ -7,7 +7,11 @@ import subprocess
 from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
-IMAGE = "python:3.12-slim-bookworm"
+APPROVED_IMAGE_DIGEST = "sha256:d5ae74acb8026b32a2f6deea45003c5bd4e2880700c19c44bda54670ad3eff90"
+IMAGE = "python:3.12.14-slim-bookworm@" + APPROVED_IMAGE_DIGEST
+APPROVED_REPO_DIGEST = "python@" + APPROVED_IMAGE_DIGEST
+LAUNCHER = "/usr/local/bin/python3"
+PROBE = "/src/tests/support/host_limits_probe.py"
 
 
 def command(args, timeout=45):
@@ -27,7 +31,23 @@ def create_args(name, image_id, mode):
             "--mount", f"type=bind,src={ROOT / 'tests'},dst=/src/tests,readonly",
             "--mount", f"type=bind,src={ROOT / 'agent_core'},dst=/src/agent_core,readonly",
             "--env", "AGENT_EPHEMERAL_HOST_TEST=1", "--env", "PYTHONDONTWRITEBYTECODE=1",
-            image_id, "python", "/src/tests/support/host_limits_probe.py", mode]
+            "--entrypoint", LAUNCHER,
+            image_id, PROBE, mode]
+
+
+def verify_image_provenance(data):
+    if (type(data) is not dict or data.get("Os") != "linux" or data.get("Architecture") != "amd64"
+            or data.get("Id") is None or not re.fullmatch(r"sha256:[0-9a-f]{64}", data["Id"])
+            or APPROVED_REPO_DIGEST not in data.get("RepoDigests", [])):
+        raise RuntimeError("synthetic_host_image_provenance_invalid")
+    return data["Id"]
+
+
+def verify_launcher(data, expected_command):
+    config = data.get("Config", {})
+    if (config.get("Entrypoint") != [LAUNCHER]
+            or config.get("Cmd") != expected_command):
+        raise RuntimeError("synthetic_host_launcher_mismatch")
 
 
 def verify_config(data, image_id, *, expected_log_driver="none"):
@@ -50,7 +70,9 @@ def run_probe(image_id, mode):
     name = "synthetic-host-limits-" + uuid4().hex[:12]
     try:
         command(create_args(name, image_id, mode))
-        verify_config(json.loads(command(["docker", "inspect", name]))[0], image_id)
+        data = json.loads(command(["docker", "inspect", name]))[0]
+        verify_config(data, image_id)
+        verify_launcher(data, [PROBE, mode])
         output = command(["docker", "start", "--attach", name], timeout=60)
         state = json.loads(command(["docker", "inspect", name]))[0]["State"]
         if state["Running"] or state["ExitCode"] != 0 or output != "synthetic_host_limits_ok:" + mode:
@@ -68,12 +90,12 @@ def main():
         raise RuntimeError("synthetic_host_gate_required")
     if command(["docker", "info", "--format", "{{.CgroupVersion}}"]) != "2":
         raise RuntimeError("synthetic_host_cgroup_v2_required")
+    # Pull an explicitly approved immutable manifest, never a moving tag.
     command(["docker", "pull", IMAGE], timeout=120)
-    image_id = command(["docker", "image", "inspect", "--format", "{{.Id}}", IMAGE])
-    if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
-        raise RuntimeError("synthetic_host_image_identity_invalid")
-    # Resolve once, then run this immutable local image ID, never the moving tag.
+    image_data = json.loads(command(["docker", "image", "inspect", IMAGE]))[0]
+    image_id = verify_image_provenance(image_data)
     print("synthetic_host_image:" + image_id, flush=True)
+    print("synthetic_host_manifest:" + APPROVED_IMAGE_DIGEST, flush=True)
     for mode in ("cpu", "memory", "pids", "compatibility", "network"):
         run_probe(image_id, mode)
     from host_supervisor_contract import run_supervisor_probe
