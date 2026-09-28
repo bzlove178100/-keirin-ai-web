@@ -77,6 +77,9 @@ def main():
     from host_supervisor_contract import run_supervisor_probe
     for mode in ("crash", "forced-stop"):
         run_supervisor_probe(image_id, mode)
+    from host_controller_recovery import run_controller_probe
+    for phase in ("before-receipt", "running"):
+        run_controller_probe(image_id, phase)
 
 
 if __name__ == "__main__":

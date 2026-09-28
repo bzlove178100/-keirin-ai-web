@@ -164,13 +164,36 @@ observer FDs are closed. Missing or incomplete evidence fails the contract. This
 verifies namespace-wide teardown, including a descendant outside the original
 process group; it does not authorize production factories to spawn descendants.
 
-The outer Docker daemon/CI controller remains alive in these tests. Daemon/host
-failure, external-controller crash and orphan reconciliation after controller restart
-are NOT qualified. Resource/cgroup and Linux PID namespace behavior in this fixture
+The outer Docker daemon/CI observer remains alive in those tests. Daemon/host
+failure is NOT qualified. Resource/cgroup and Linux PID namespace behavior in this fixture
 does not prove a deployment's supervisor configuration or durable DB outcomes.
 Ambiguous writes still require read-back and must not be blindly replayed.
 
-Next qualify external-controller recovery, controlled launcher/image
+## Synthetic external-controller restart reconciliation
+
+The next fixture uses a separate external controller process, not the container's
+PID 1. A private temporary run-intent file is written before creation. Each resource
+has a unique synthetic label/name and a fixed image ID. Cases kill the controller
+with SIGKILL immediately after creation but before its ID receipt is saved, and
+after the supervisor/child/detached-grandchild tree is running. The observer must
+confirm that controller death actually leaves the created/running resource behind.
+
+A fresh Python interpreter reads the intent, discovers only its exact run label,
+rejects multiple candidates, and checks full ID (when receipted), name, image and
+container restrictions. Removal targets the full immutable ID; absence is read back.
+A second fresh interpreter must report absent without another removal. The running
+case additionally requires the prior stable pidfd/proc/cgroup cleanup evidence.
+An unrelated synthetic sentinel must survive target reconciliation. Unit tests reject
+wrong receipts, labels, names, images, privileges, duplicate candidates and invalid
+intent schemas; failed/uncertain removal is not blindly retried inside reconciliation.
+
+This is test-only code. The Docker daemon and outer CI observer stay alive; host
+power loss, daemon failure, hostile label/intent manipulation, concurrent controllers
+and a deployed always-on reconciler remain unqualified. Temporary JSON receipts
+contain synthetic resource identities only, no credentials or database state. No
+real action is automatically resumed or replayed, and no activation switch changes.
+
+Next qualify controlled launcher/image
 integrity, permitted-destination egress, and platform/database log custody. No real
 host is declared ready by these tests. Full TLS/database composition under deployment
 limits is not covered by this network-disabled fixture.

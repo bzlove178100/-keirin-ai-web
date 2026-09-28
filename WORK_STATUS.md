@@ -388,6 +388,36 @@ host and external controller failures/restart reconciliation remain untested, as
 deployment-specific egress, image/launcher trust, logging and real secret custody.
 No runtime code, real secrets, migrations or activation switches are changed.
 
+## Synthetic external-controller recovery (code/CI only, 2026-09-28)
+
+Main was rechecked at merged PR #111,
+`e5fd63600aa3c3c96f9be7ad5e2137558e9d0ac2`; its final-head four PR workflows,
+four main workflows and Pages passed.
+
+The next fixture kills an external controller with SIGKILL before creation-receipt
+persistence and after the synthetic process tree starts. It confirms an orphan remains,
+then invokes a fresh interpreter using a private temporary run intent. Exact run label,
+name, image, restrictions and full receipted ID are checked before immutable-ID removal.
+Duplicate/mismatched candidates fail closed. A second fresh recovery is an absent/no-op;
+an unrelated sentinel must survive, and running descendants must pass pidfd/proc/cgroup
+cleanup checks. No real operation is resumed or replayed.
+
+Local verification: five recovery tests, four supervisor observer tests and three
+resource-fixture tests pass; syntax and diff checks pass. Actual Docker controller
+crash/restart cases require final-head CI, since Docker is not available locally.
+
+Actual Docker recovery passed at PR #112 head
+`27806dca8f96bc33754e79b0f022fc1ec4dbe8d2` (run `36409303587`, job
+`108885452374`): pre-receipt and running-tree controller SIGKILL, fresh-interpreter
+removal, second-recovery no-op, unrelated sentinel preservation and descendant
+reaping all passed. Existing resource and supervisor fault cases also passed.
+The complete final-head workflow set remains the merge gate after this status update.
+
+This is a synthetic test harness, not an activated recovery service. The Docker daemon
+and outer CI observer stay alive. Host/daemon failure, adversarial custody, concurrent
+controllers, launcher/image trust, egress and logs remain separate deployment gates.
+Real credentials, migrations, hosted execution and all production switches stay OFF.
+
 ## Current agent state
 
 The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract, an offline full credential-stack composition path, a credential-gated provider-action boundary, persistence-safe action/verifier error handling, ephemeral diagnostic metadata and a static persistence-redaction audit.
