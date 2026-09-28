@@ -107,6 +107,8 @@ def main():
     from host_logging_contract import run_logging_probe
     for driver in ("json-file", "none"):
         run_logging_probe(image_id, driver)
+    from host_egress_contract import run_egress_probe
+    run_egress_probe(image_id)
 
 
 if __name__ == "__main__":
