@@ -93,7 +93,13 @@ def main(mode):
     if mode == "memory-hog":
         # Bias OOM selection toward this synthetic hog, away from the observer.
         Path("/proc/self/oom_score_adj").write_text("500")
-        blocks = [bytearray(1024 * 1024) for _ in range(256)]
+        blocks = []
+        for _ in range(256):
+            block = bytearray(1024 * 1024)
+            # Commit physical pages rather than merely reserving virtual memory.
+            for offset in range(0, len(block), 4096):
+                block[offset] = 1
+            blocks.append(block)
         require(len(blocks) == 0, "memory_limit_not_enforced")
     probes = {"cpu": cpu_probe, "memory": memory_probe,
               "pids": pids_probe, "compatibility": compatibility_probe}
