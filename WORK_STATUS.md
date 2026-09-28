@@ -467,6 +467,10 @@ requires an unsafe custom-plan marker as a positive control, rejects strict hand
 with a loaded/enabled module, and checks successful protected queries leave no marker
 once plan logging is disabled. Factory and static-redaction tests pass locally (16+3);
 Docker is unavailable locally, so exact final-head CI is mandatory before merge.
+Initial CI proved the unsafe custom-plan positive control, then rejected the fixture's
+attempt to read privileged session_preload_libraries as the dedicated login. The fixture
+now checks the module's registered sample_rate default instead; no role grant or
+production policy is relaxed. Corrected-head CI remains required.
 No real secret source, hosted setting, migration or activation switch is changed.
 
 Next: after this correction's exact-head CI, qualify the remaining deployment-specific

@@ -87,8 +87,10 @@ def prove_loaded_plan_guard(port, ca, server_name):
         try:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT current_setting('auto_explain.log_min_duration'), "
-                               "current_setting('session_preload_libraries')")
-                if cursor.fetchone() != ('-1', 'auto_explain'):
+                               "current_setting('auto_explain.sample_rate')")
+                # sample_rate was not set as a dotted placeholder for this role;
+                # its registered default proves LOAD without privileged GUC access.
+                if cursor.fetchone() != ('-1', '1'):
                     raise AssertionError("synthetic_loaded_extension_control_missing")
                 cursor.execute("SELECT %s::text", (PLAN_PROTECTED,))
                 if cursor.fetchone() != (PLAN_PROTECTED,):
