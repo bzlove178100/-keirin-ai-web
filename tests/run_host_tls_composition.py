@@ -93,6 +93,18 @@ def _verify_client(identity, image_id, network, directory, server_ip, hostname, 
         raise RuntimeError("synthetic_tls_client_ca_mount_invalid")
 
 
+def _require_running(identity):
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        state = json.loads(command(["docker", "inspect", identity]))[0]["State"]
+        if state.get("Running") is True:
+            return
+        if state.get("Status") in {"exited", "dead"}:
+            raise RuntimeError("synthetic_tls_client_exited_before_release")
+        time.sleep(0.02)
+    raise RuntimeError("synthetic_tls_client_not_running")
+
+
 def _run_client_case(network, image_id, directory, server_id, server_name,
                      server_ip, hostname, ca_name, expected_exit):
     client_name = "synthetic-tls-client-" + uuid4().hex[:12]
@@ -103,8 +115,15 @@ def _run_client_case(network, image_id, directory, server_id, server_name,
         if not re.fullmatch(r"[0-9a-f]{64}", client_id):
             raise RuntimeError("synthetic_tls_client_identity_invalid")
         _verify_client(client_id, image_id, network, directory, server_ip, hostname, ca_name)
-        verify_members(network_data(network), {server_id: server_name, client_id: client_name})
+
+        # Starting attaches the client to the network, but its probe waits on a tmpfs
+        # release marker. Verify exact membership before allowing the first socket.
         command(["docker", "start", client_id])
+        _require_running(client_id)
+        verify_members(network_data(network), {server_id: server_name, client_id: client_name})
+        command(["docker", "exec", client_id, LAUNCHER, "-c",
+                 "from pathlib import Path; Path('/tmp/tls-go').write_text('go')"])
+
         exit_code = command(["docker", "wait", client_id], timeout=15)
         state = json.loads(command(["docker", "inspect", client_id]))[0]["State"]
         if exit_code != str(expected_exit) or state.get("Running") or state.get("ExitCode") != expected_exit:
