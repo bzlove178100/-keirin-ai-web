@@ -17,9 +17,10 @@ from agent_core.bootstrap_lease import BootstrapPasswordLease
 MARKER = "SYNTHETIC:postgres://private-password"
 LIMITS = dict(connect_timeout=5, options="-c statement_timeout=5000 -c lock_timeout=1000 "
               "-c idle_in_transaction_session_timeout=5000", autocommit=False, prepare_threshold=None)
-EXPECTED = ("secret_test_host_a", "secret_test_host_a", "agent_checkpoint_ci",
-            False, "off", True, False, False, 5000, 1000, 5000,
-            "none", 0, "off", -1, -1)
+BASE_EXPECTED = ("secret_test_host_a", "secret_test_host_a", "agent_checkpoint_ci",
+                 False, "off", True, False, False, 5000, 1000, 5000,
+                 "none", 0, "off", -1, -1)
+EXPECTED = BASE_EXPECTED + (None, None, None)
 
 
 class Connection:
@@ -143,7 +144,7 @@ class FactoryTests(unittest.TestCase):
             self.assert_safe(lambda: self.factory()(**limits))
             self.assertEqual(self.events, [])
 
-    def test_each_identity_privilege_limit_and_logging_field_fails_closed(self):
+    def test_each_identity_privilege_limit_and_core_logging_field_fails_closed(self):
         wrong = ("other", "other", "other", True, "on", False, True, True, 0, 0, 0,
                  "all", -1, "on", 0, 0)
         for index, value in enumerate(wrong):
@@ -154,6 +155,34 @@ class FactoryTests(unittest.TestCase):
                 self.assert_safe(lambda: self.factory()(**LIMITS))
                 self.assertIn("rollback", self.connection.calls)
                 self.assertIn("close", self.connection.calls)
+                self.assertNotIn("commit", self.connection.calls)
+
+    def test_extension_logging_policy_accepts_only_parameter_safe_states(self):
+        safe = [
+            (None, None, None),
+            ("-1", "-1", None),
+            ("-1", "-1", "off"),
+            ("0", "0", "off"),
+            ("10000", "0", "off"),
+        ]
+        for extension_fields in safe:
+            with self.subTest(extension_fields=extension_fields):
+                self.connection = Connection(BASE_EXPECTED + extension_fields)
+                self.assertIs(self.factory()(**LIMITS), self.connection)
+        unsafe = [
+            ("10000", "-1", "off"),
+            ("0", "256", "off"),
+            ("bad", "0", "off"),
+            (None, "0", "off"),
+            ("-1", None, "off"),
+            (None, None, "on"),
+            ("-1", "-1", "on"),
+        ]
+        for extension_fields in unsafe:
+            with self.subTest(extension_fields=extension_fields):
+                self.connection = Connection(BASE_EXPECTED + extension_fields)
+                self.assert_safe(lambda: self.factory()(**LIMITS))
+                self.assertIn("rollback", self.connection.calls)
                 self.assertNotIn("commit", self.connection.calls)
 
     def test_malformed_rows_and_boolean_lookalikes(self):
