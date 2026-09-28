@@ -4,8 +4,10 @@ from pathlib import Path
 import socket
 import ssl
 import struct
+import time
 
 SSL_REQUEST_CODE = 80877103
+GATE = Path("/tmp/tls-go")
 
 
 def _required(name):
@@ -13,6 +15,17 @@ def _required(name):
     if not value:
         raise RuntimeError("synthetic_tls_probe_config_missing")
     return value
+
+
+def _wait_for_release():
+    # The container must be running and its exact network membership verified before
+    # any outbound socket is allowed. The controller creates this tmpfs marker only
+    # after that preflight succeeds.
+    deadline = time.monotonic() + 10
+    while not GATE.exists():
+        if time.monotonic() >= deadline:
+            raise RuntimeError("synthetic_tls_probe_gate_timeout")
+        time.sleep(0.02)
 
 
 def main():
@@ -26,6 +39,7 @@ def main():
     if not ca.is_file():
         raise RuntimeError("synthetic_tls_probe_ca_missing")
 
+    _wait_for_release()
     raw = socket.create_connection((address, port), timeout=3)
     try:
         raw.settimeout(3)
