@@ -1,0 +1,33 @@
+name: keirin bank-fit auto
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/functions/predict-engine-dev/**'
+      - 'supabase/functions/history-pipeline-dev/training_input.ts'
+      - 'tests/bank_fit_auto_test.ts'
+      - '.github/workflows/bank-fit-auto.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/predict-engine-dev/**'
+      - 'supabase/functions/history-pipeline-dev/training_input.ts'
+      - 'tests/bank_fit_auto_test.ts'
+      - '.github/workflows/bank-fit-auto.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check prediction and training entrypoints
+        run: deno check supabase/functions/predict-engine-dev/index.ts supabase/functions/history-pipeline-dev/training_input.ts
+      - name: Test bank-fit and existing prediction contracts
+        run: deno test tests/bank_fit_auto_test.ts tests/phase32_contract_test.ts tests/training_input_test.ts
