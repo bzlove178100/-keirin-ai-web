@@ -1,248 +1,109 @@
 # Host secret connection review
 
-Reviewed 2026-09-27. **Design/CI evidence only; no production factory or credential is bound.**
+Updated: 2026-09-29 (Asia/Tokyo)
 
-## Current evidence
+**Design and synthetic/CI evidence only. No production secret factory, real endpoint or bootstrap credential is bound.**
 
-`PostgresSecretBackend` supplies connection, statement and lock limits. The opt-in
-`ProcessDeadlinePostgresSecretBackend` adds child-process deadline/termination and
-fixed result handling. Neither selects a live endpoint or owns a bootstrap credential.
+## Verified base
 
-The disposable PostgreSQL 17 contract now exercises that process wrapper with direct
-`secret_test_host_a` / `secret_test_host_b` logins. The test creates synthetic passwords
-only on temporary roles and checks session/current identity, database and read/write
-state in each fresh child connection. No SET ROLE or session-identity switching is used
-by this new factory. Existing earlier identity-switching tests remain separate.
+Current verified main is PR #121 merge `b8321d556476eeb04bc8d557f52a17a8d2f7ed5a`.
+Its post-merge regression, read-only smoke, collection UI, PostgreSQL/host contract and
+Pages workflows passed. Production prediction, prediction DB writes, automatic external
+race-data fetching, hosted task/provider execution, scheduler/recurrence, provider
+write/generation and live report delivery remain disabled.
 
-The factory fixes loopback host/address, port 5432, the disposable database, login,
-application name, and read/write requirement. Its `sslmode=disable` is intentionally
-limited to this isolated plaintext fixture and is **not an approved live profile**.
-Passing this test does not demonstrate TLS, Vault encryption or deployment readiness.
+## Connection and secret-backend boundary
 
-The next slice adds a separate Docker TLS fixture in `tests/run_secret_tls_contract.py`.
-It generates a temporary CA, valid/expired server certificates and a distinct wrong CA;
-performs process-wrapped TLS read/CAS; and rejects wrong hostname/CA, expired certificates
-and a reachable plaintext server. Private keys stay in disposable files and are removed
-with the fixture. PR #104 passed the TLS suite and all required PR/main workflows.
+The synthetic PostgreSQL 17 path now qualifies the following code-only controls:
 
-`PostgresHostProfile` fixes transport settings and rejects malformed/multiple targets,
-DSN-like input and known privileged login names without I/O. It is a parameter policy,
-not an endpoint allowlist, privilege audit or live factory. It accepts operator-approved
-configuration only; callers must not derive it from task inputs or override its output.
+- bounded connection/statement/lock timeouts and process deadline enforcement;
+- fixed outward error classification, no automatic write replay and authoritative read-back
+  for ambiguous writes;
+- direct dedicated logins with identity/database/read-write/primary-state checks;
+- `sslmode=verify-full`, reviewed CA material and rejection of wrong hostname, wrong CA,
+  expired certificate and plaintext transport;
+- strict ambient configuration rejection for libpq/OpenSSL overrides, pass/service files
+  and unsupported client-certificate fallback;
+- reviewed CA SHA-256 plus sealed Linux memory snapshot and no-follow file acquisition;
+- immutable bootstrap lease metadata with login/database/version/expiry/revocation fencing;
+- child loader/Python environment guards, core-dump suppression, `dumpable=0`,
+  `no_new_privs=1`, private umask and Linux parent-death SIGKILL;
+- cgroup-v2 memory/swap/PID/CPU limits, non-root execution, dropped capabilities,
+  read-only root/code and bounded ephemeral `/tmp`;
+- PID-namespace descendant cleanup and external-controller exact reconciliation;
+- approved immutable Python image digest and fixed launcher;
+- dedicated internal network with exact membership and synthetic allowed-destination /
+  blocked-egress controls;
+- PostgreSQL TLS handshake from the hardened client composition, with hostname and CA
+  negative controls;
+- Docker daemon restart recovery on the exercised GitHub-hosted Linux/systemd profile
+  with `live-restore=false` and `restart=no`.
 
-The current slice adds `StrictPostgresConnectionFactory` for use inside a trusted
-top-level deadline-child factory. It accepts an injected driver and password source;
-construction performs no I/O. Calls reject noncanonical timeouts and ambient libpq/TLS
-configuration before accessing the source, require a nonempty bounded password and
-disable client-certificate/passfile fallback and require SCRAM-SHA-256 authentication.
-Session preflight checks actual identity,
-database, TLS, primary/read-write status, privilege flags, absence of role memberships
-and server timeout values, then commits the preflight SELECT transaction before
-returning the connection. Every failure closes/rejects with fixed outward errors.
+These controls are cumulative synthetic evidence. They do not select or authorize a live
+endpoint, credential source, secret migration or hosted execution path.
 
-Ambient rejection is intentionally strict: any `PG*` variable, `OPENSSL_CONF`,
-`OPENSSL_MODULES`, `SSL_CERT_FILE` or `SSL_CERT_DIR`, or default `.pgpass`,
-`.pg_service.conf` / `.postgresql` in either home location blocks the factory. It does
-not mutate the environment or inspect file contents. This is not proof against an
-already-compromised interpreter/driver, OS loader configuration or TOCTOU changes.
-Deployment must provide a controlled host environment and protected trust/config files.
+## Hardened-host TLS composition
 
-The current slice adds a reviewed CA hash and a sealed Linux memory snapshot. Protected
-directory FDs and no-follow opens reject symlinks, mutable permissions, unexpected owner,
-multiple links and nonregular/oversized files. The content hash, metadata stability and
-kernel write/grow/shrink seals are required; unsupported kernels fail closed. Only the
-sealed descriptor path reaches libpq. The configured hash must come from approved
-provisioning, never from the candidate file during each connection. The trusted host/root
-account, kernel and profile/pin distribution remain security assumptions.
+PR #119 composes a disposable PostgreSQL TLS server with the hardened client/container
+and exact internal network. The client is held behind a release marker until exact network
+membership has been verified. A valid reviewed synthetic CA and expected DNS identity
+must complete the TLS handshake; a wrong hostname or wrong CA must fail.
 
-Bootstrap sources now provide an immutable redacted lease plus a version-current check.
-The factory checks exact login/database, version, expiration and current/revoked state
-before connecting and after preflight; it rejects stale/expired leases without replay.
-The callback owns authoritative source state. It must return exactly True only for the
-currently authorized version, perform no hidden retries and expose no secret in errors.
-It is checked at handoff, not continuously: closing or revoking existing DB sessions and
-distributed rotation orchestration remain outside this contract. No real source is bound.
+The hardened client receives no database credential in this test. Therefore this evidence
+qualifies transport composition under the tested host/network restrictions, but does **not**
+by itself qualify authenticated secret reads/CAS inside that exact container composition.
+The separate strict-factory PostgreSQL tests cover authentication and secret operations.
+Do not collapse those two evidence sets into a claim of production end-to-end readiness.
 
-## Proposed live profile and evidence still required
+## Daemon restart and reconciliation
 
-These are engineering requirements for a later, separately reviewed host factory.
-They do not select a real endpoint or change any deployed configuration.
+PR #120 adds an actual Docker daemon restart to the synthetic host contract on the
+GitHub-hosted Linux/systemd runner profile. The test requires `live-restore=false`,
+`restart=no`, an exact immutable target identity and an unrelated sentinel. It records
+pidfd, `/proc` and cgroup evidence, restarts Docker through systemd, requires the target
+process tree not to resurrect, then uses a fresh interpreter to remove only the exact
+target. A second reconciliation must be absent/no-op, prior process/cgroup evidence must
+be gone and the sentinel must survive.
 
-| Boundary | Required behavior | Evidence/status |
+This is narrower than host-failure qualification. It does not prove recovery after machine
+reboot, power loss, kernel panic, hostile root/daemon control or a production supervisor.
+
+## Proposed live profile and remaining evidence
+
+A later live factory must remain separately reviewed and operator-configured.
+
+| Boundary | Required behavior | Current status |
 | --- | --- | --- |
-| Destination | One operator-approved primary endpoint/database/port; no task-provided DSN, host lists or automatic failover | Real destination unconfigured; deny unknown/multiple targets in the eventual factory |
-| Transport | Explicit `sslmode=verify-full`, reviewed `sslrootcert` trust file and `gssencmode=disable` when TLS is mandatory | Trusted certificate must succeed; wrong CA/name, expired certificate and plaintext server must fail in synthetic TLS tests |
-| Endpoint identity | Use the approved hostname for certificate checks; if a numeric `hostaddr` is fixed, retain that hostname and review DNS/address lifecycle | `hostaddr` alone is not server identity proof; no real address pinned |
-| Primary state | `target_session_attrs=read-write`, then verify database, `session_user`, `current_user`, non-recovery and read/write state before secret operations | Direct-login CI checks these; read/write status alone does not prove the operator-approved server identity |
-| Database privileges | Dedicated non-admin login, narrow read/CAS functions, exact allowed bindings, no role switching or direct secret-table access | Synthetic SQL/ACL and direct-login process tests; actual Vault grants remain a blocker |
-| Bootstrap credential | Resolve only inside child from an approved host facility; no administrator or service-role secret, task input, repository file or command-line credential | Host facility and rotation remain unconfigured |
-| Ambient configuration | Review/neutralize `PG*`, service/pass files, home-directory certificates, proxy settings and driver defaults; explicit security fields must not be overridden | A raw `psycopg.connect(**kwargs)` wrapper is not a qualified live factory |
-| Time/retries | Pass adapter timeout kwargs unchanged, one fresh connection, no pool/background reconnect/write retry; keep process deadline and supervisor limits | Unit/process/loopback blackhole evidence; deployment-specific network and supervisor qualification still open |
-| Error/logging | Fixed outward codes; no connection string, SQL parameters, rows, exception text or frame locals in logs/traces/core dumps | Synthetic error/stdout/stderr tests; database, platform and host logging review still open |
-| Recovery | Child termination never proves server rollback; perform bounded authoritative read-back and preserve ambiguous state until evidence resolves it | Actual commit-with-lost-ack and lock-kill CI scenarios; real provider/Vault recovery remains untested |
+| Destination | One operator-approved primary endpoint/database/port; no task-provided DSN, host lists or automatic failover | Real destination remains unconfigured |
+| Transport | `sslmode=verify-full`, reviewed immutable trust material, approved hostname, bounded connection settings | Synthetic transport and hardened-host composition qualified; real endpoint/pin lifecycle unconfigured |
+| Database identity | Dedicated non-admin login; exact database/session identity; primary/read-write checks; no role switching | Synthetic direct-login/session checks qualified; actual hosted grants remain a deployment gate |
+| Database privileges | Narrow read/CAS functions only; no direct secret-table access | Synthetic SQL/ACL contract exists; real Vault/database grants unqualified |
+| Bootstrap credential | Resolve only inside the child from an approved host facility; no admin/service-role secret, task input, repo file or command line | Real host facility, ownership, rotation and revocation unconfigured |
+| Trust/config custody | Controlled launcher, immutable image/trust files, clean environment, protected operator provisioning | Synthetic image/launcher/CA controls qualified; real host/root/kernel/operator custody unqualified |
+| Time/retries | One fresh bounded connection; no pool/background retry; no automatic replay after ambiguous writes | Synthetic deadline/lost-ack/recovery evidence qualified |
+| Error/logging | Fixed outward codes; no secret-bearing connection string, SQL parameter, row or raw exception in persisted logs | Synthetic application/Docker/PostgreSQL evidence exists; platform/host custody still open |
+| Recovery | Authoritative read-back after ambiguous writes; exact cleanup/reconciliation; no blind replay | Synthetic DB/process/controller/daemon evidence exists; real provider/Vault and host reboot/power-loss recovery unqualified |
 
-The future factory must connect with bounded settings, verify identity before exposing
-the connection, close on rejection, and return an idle transaction-capable connection.
-Factories and their imports are trusted host code, must not create descendant processes,
-and must not read bootstrap secrets at import time. Parent/child memory policies and
-an external supervisor remain required even with process isolation.
+## Remaining operational gates
 
-## Next executable validation
+Before any real secret-backend migration or provider refresh integration, evidence is still
+required for:
 
-PR #107 verified synthetic TLS process/server restart, crash-after-commit, lease/TLS
-rejection, DB pause and terminal record revocation.
+- real bootstrap credential facility, ownership, rotation and revocation;
+- actual Vault encryption/key lifecycle and intended hosted grants;
+- platform/host log access, retention, restore and telemetry custody;
+- production root/kernel/ptrace/swap and administrator boundaries;
+- host reboot/power-loss and production supervisor/reconciler behavior;
+- authenticated database secret operations inside the final production-equivalent hardened
+  network/container composition;
+- deployment-specific DNS/address lifecycle and trust/pin distribution.
 
-The next code-only slice rejects LD_/DYLD_ variables and selected Python import/debug
-overrides before spawn, without reading/logging values or silently sanitizing them.
-After redirecting stdout/stderr, each deadline child sets and verifies RLIMIT_CORE=(0,0),
-Linux dumpable=0 and no_new_privs=1, and sets umask 077 before decoding secret IPC or
-calling the factory. Failure exits the child: reads stay unavailable, writes ambiguous,
-without retry. Parent resource limits/privileges are unchanged; unsupported OS/syscall
-behavior fails closed.
+A real-backend migration must be a separate reviewed change. Do not combine migration,
+credential activation and hosted task execution in one step.
 
-This does not secure an already modified interpreter/loader, eliminate environment
-check/spawn races or protect imports executed before the spawned child target. Imports
-must remain trusted and side-effect-free. A trusted launcher must supply a fixed clean
-environment before interpreter startup. no_new_privs does not remove existing privileges;
-trusted code can change dumpable again. Root/kernel/ptrace capabilities, swap, telemetry,
-database/platform logs and parent memory remain outside these safeguards.
+## References
 
-The next slice arms Linux PR_SET_PDEATHSIG=SIGKILL in the child before request
-decode and factory work, verifies PR_GET_PDEATHSIG, and checks getppid against the
-PID captured by the spawning parent before and after registration. A missing parent
-or failed syscall/readback exits without a reply. Synthetic subprocess tests kill
-the parent with TERM and KILL while the factory ignores TERM; a disposable subreaper
-waits for the child and verifies its SIGKILL exit. This covers termination of the
-direct child after registration, not arbitrary descendants or secure memory erasure.
-
-Linux ties the signal to the creating thread, not the lifetime of every parent
-thread. Factories must not fork, change effective/filesystem IDs, or reset this
-control. Startup/imports before registration remain trusted and require external
-supervision. Child termination cannot determine whether a database write committed;
-recovery still requires authoritative read-back and must not automatically replay.
-
-## Disposable resource-limit qualification
-
-`AGENT_EPHEMERAL_HOST_TEST=1 python tests/run_host_limits_contract.py` requires
-Docker with cgroup v2 and creates a separate disposable container per probe. It
-checks Docker configuration before startup and actual cgroup files before stress:
-128 MiB memory, no swap, 24 tasks and 50,000/100,000 microseconds of CPU bandwidth.
-These are fixture values, not sizing recommendations or a production host profile.
-CPU throttling counters must increase, a bounded synthetic allocation child must
-receive SIGKILL with an OOM-kill counter increment, and bounded fork attempts must
-hit EAGAIN with the pids-controller counter increment. Children are reaped and
-containers are removed even after timeout; cleanup failure fails the contract.
-
-Existing OS and parent-death guard tests also run inside these limits. Containers
-use a non-root identity, dropped capabilities, no-new-privileges, read-only code/root,
-an ephemeral bounded /tmp, no network and Docker log driver `none`. The separate
-network/log-driver probes below cover those narrow settings; they do not qualify
-permitted-destination egress or platform logs. The runner resolves the Python image tag once to a
-local immutable image ID and records that ID. Image provenance/approved digest and
-actual deployment qualification are still open; the test tag can change between runs.
-
-The local environment lacks Docker, so only fixture gate/cleanup tests and syntax
-checks can run there. The dedicated CI job must pass actual enforcement and existing
-guard compatibility before merge. Missing controllers or readback mismatches fail;
-there is no skip/fallback to unbounded execution or RLIMIT_NPROC (which is UID-wide
-and not a substitute for cgroup task limits).
-
-## PID-namespace supervisor fault qualification
-
-The same gated Docker runner also starts a synthetic PID-1 supervisor, a child and
-a grandchild in a separate session/process group. All three ignore TERM. After
-readiness and host-side topology/cgroup checks, separate cases inject immediate
-`os._exit(23)` in the supervisor and Docker stop with a one-second TERM grace period
-(expected forced-kill exit 137). No application cleanup runs on the crash path.
-
-Before injecting the fault, the observer opens stable pidfds for all three host PIDs
-and records their /proc start times. Success requires every pidfd to report exit,
-every original /proc identity to disappear (readability alone can mean a zombie),
-and the cgroup to be absent or explicitly unpopulated with no listed processes.
-Container removal and absence verification run on failure as well as success; all
-observer FDs are closed. Missing or incomplete evidence fails the contract. This
-verifies namespace-wide teardown, including a descendant outside the original
-process group; it does not authorize production factories to spawn descendants.
-
-The outer Docker daemon/CI observer remains alive in those tests. Daemon/host
-failure is NOT qualified. Resource/cgroup and Linux PID namespace behavior in this fixture
-does not prove a deployment's supervisor configuration or durable DB outcomes.
-Ambiguous writes still require read-back and must not be blindly replayed.
-
-## Synthetic external-controller restart reconciliation
-
-The next fixture uses a separate external controller process, not the container's
-PID 1. A private temporary run-intent file is written before creation. Each resource
-has a unique synthetic label/name and a fixed image ID. Cases kill the controller
-with SIGKILL immediately after creation but before its ID receipt is saved, and
-after the supervisor/child/detached-grandchild tree is running. The observer must
-confirm that controller death actually leaves the created/running resource behind.
-
-A fresh Python interpreter reads the intent, discovers only its exact run label,
-rejects multiple candidates, and checks full ID (when receipted), name, image and
-container restrictions. Removal targets the full immutable ID; absence is read back.
-A second fresh interpreter must report absent without another removal. The running
-case additionally requires the prior stable pidfd/proc/cgroup cleanup evidence.
-An unrelated synthetic sentinel must survive target reconciliation. Unit tests reject
-wrong receipts, labels, names, images, privileges, duplicate candidates and invalid
-intent schemas; failed/uncertain removal is not blindly retried inside reconciliation.
-
-This is test-only code. The Docker daemon and outer CI observer stay alive; host
-power loss, daemon failure, hostile label/intent manipulation, concurrent controllers
-and a deployed always-on reconciler remain unqualified. Temporary JSON receipts
-contain synthetic resource identities only, no credentials or database state. No
-real action is automatically resumed or replayed, and no activation switch changes.
-
-## Synthetic no-network and Docker log-driver evidence
-
-The fixture verifies loopback-only interfaces and route tables before socket tests.
-A successful local TCP exchange is the positive control. TCP connect and UDP send
-to documentation-only numeric IPv4/IPv6 destinations must fail with a routing-unreachable
-error; timeouts, connection refusal and generic permission errors are not accepted.
-IPv6 disabled at the socket-family level is an explicit no-egress case. No DNS lookup
-or real endpoint is used. This tests `--network none`, not an endpoint allowlist or
-DNS/IPv6 policy for a network-enabled deployment.
-
-Separate disposable logging fixtures emit two fixed non-secret markers directly to
-stdout/stderr. An explicit `json-file` positive control must return both markers and
-have a log path. The default `none` profile must have no log path and no retrievable
-marker output; only empty success or the known unsupported-driver response counts.
-Arbitrary command/daemon/permission errors fail. The observer captures responses in
-memory without printing them, and removes both fixtures. No real credentials enter
-the positive-control log. This does not audit daemon/system journals, tracing, database
-logs, application-written files, host storage erasure or the CI platform itself.
-
-Next qualify controlled launcher/image
-integrity, permitted-destination egress, and platform/database log custody. No real
-host is declared ready by these tests. Full TLS/database composition under deployment
-limits is not covered by this network-disabled fixture.
-Keep real endpoints, credentials, staging migration, provider refresh and hosted execution
-out of this code/CI-only sequence.
-
-## Official references checked
-
-OS references checked 2026-09-28:
-- [Docker none network driver](https://docs.docker.com/engine/network/drivers/none/)
-- [Docker logging driver configuration](https://docs.docker.com/engine/logging/configure/)
-- [Linux PID namespace init termination](https://www.man7.org/linux/man-pages/man7/pid_namespaces.7.html)
-- [Linux pidfd exit observation](https://man7.org/linux/man-pages/man2/pidfd_open.2.html)
-- [Linux cgroup v2 resource controllers](https://cdn.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)
-- [Docker resource constraints](https://docs.docker.com/engine/containers/resource_constraints/)
-- [Linux parent-death signal](https://www.man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html)
-- [Linux parent process ID](https://www.man7.org/linux/man-pages/man2/getppid.2.html)
-- [Python resource limits](https://docs.python.org/3.12/library/resource.html)
-- [Linux dumpable control](https://www.man7.org/linux/man-pages/man2/PR_SET_DUMPABLE.2const.html)
-- [Linux no_new_privs](https://www.man7.org/linux/man-pages/man2/PR_SET_NO_NEW_PRIVS.2const.html)
-
-- [PostgreSQL 17 connection parameters](https://www.postgresql.org/docs/17/libpq-connect.html):
-  `host` / `hostaddr`, per-host connection timeout, `sslmode`, `gssencmode` and
-  `target_session_attrs` semantics. `verify-full` checks CA trust and hostname;
-  GSS encryption can otherwise take precedence over TLS. Unix sockets ignore `sslmode`.
-- [PostgreSQL 17 SSL support](https://www.postgresql.org/docs/17/libpq-ssl.html):
-  certificate chain/hostname verification and root certificate handling.
-
-These references establish client behavior, not the security of an untested deployment.
-
-The factory also follows the documented [libpq environment defaults](https://www.postgresql.org/docs/17/libpq-envars.html)
-and `sslcertmode=disable` behavior in the connection-parameter reference. The client
-certificate option requires compatible libpq; CI uses the pinned psycopg binary driver.
+Implementation/tests are based on the documented behavior of PostgreSQL 17 libpq TLS and
+connection parameters, Docker resource/network/logging controls and Linux process/cgroup
+primitives already cited in repository history. Those references establish component
+semantics; they do not establish the security of an untested deployment.
