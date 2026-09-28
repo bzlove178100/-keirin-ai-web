@@ -30,14 +30,16 @@ def create_args(name, image_id, mode):
             image_id, "python", "/src/tests/support/host_limits_probe.py", mode]
 
 
-def verify_config(data, image_id):
+def verify_config(data, image_id, *, expected_log_driver="none"):
+    if expected_log_driver not in {"none", "json-file"}:
+        raise RuntimeError("synthetic_host_log_driver_invalid")
     host, config = data["HostConfig"], data["Config"]
     expected = {"Memory": 134217728, "MemorySwap": 134217728, "PidsLimit": 24,
                 "CpuPeriod": 100000, "CpuQuota": 50000, "ReadonlyRootfs": True,
                 "NetworkMode": "none", "CgroupnsMode": "private", "Privileged": False}
     if (any(host[key] != value for key, value in expected.items())
             or config["User"] != "65534:65534" or data["Image"] != image_id
-            or host["LogConfig"]["Type"] != "none"
+            or host["LogConfig"]["Type"] != expected_log_driver
             or host["RestartPolicy"]["Name"] != "no"
             or host["CapDrop"] != ["ALL"]
             or "no-new-privileges=true" not in host["SecurityOpt"]):
@@ -72,7 +74,7 @@ def main():
         raise RuntimeError("synthetic_host_image_identity_invalid")
     # Resolve once, then run this immutable local image ID, never the moving tag.
     print("synthetic_host_image:" + image_id, flush=True)
-    for mode in ("cpu", "memory", "pids", "compatibility"):
+    for mode in ("cpu", "memory", "pids", "compatibility", "network"):
         run_probe(image_id, mode)
     from host_supervisor_contract import run_supervisor_probe
     for mode in ("crash", "forced-stop"):
@@ -80,6 +82,9 @@ def main():
     from host_controller_recovery import run_controller_probe
     for phase in ("before-receipt", "running"):
         run_controller_probe(image_id, phase)
+    from host_logging_contract import run_logging_probe
+    for driver in ("json-file", "none"):
+        run_logging_probe(image_id, driver)
 
 
 if __name__ == "__main__":

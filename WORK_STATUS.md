@@ -418,6 +418,34 @@ and outer CI observer stay alive. Host/daemon failure, adversarial custody, conc
 controllers, launcher/image trust, egress and logs remain separate deployment gates.
 Real credentials, migrations, hosted execution and all production switches stay OFF.
 
+## Synthetic network and Docker logging (code/CI only, 2026-09-28)
+
+Main was rechecked at merged PR #112,
+`a149d3b33f73a5ad08e12ce057bc15802b3d4fe7`; its final-head four PR workflows,
+four main workflows and Pages passed.
+
+The next slice checks loopback-only interfaces/routes, a local TCP positive control,
+and routing-unreachable failures for external numeric TCP/UDP IPv4/IPv6 probes (or
+explicitly disabled IPv6). No DNS lookup or real endpoint is used. A disposable
+`json-file` logging positive control must record two synthetic stdout/stderr markers;
+the default `none` profile must expose neither marker nor log path. Generic connection
+or log-command errors cannot satisfy the evidence check. Both containers are removed.
+
+Local verification: six network/log evidence tests, three fixture tests and five
+controller recovery tests pass, plus syntax/diff checks. Actual Docker socket/log-driver
+behavior must pass final-head CI; Docker is unavailable locally.
+
+Actual Docker probes passed at PR #113 head
+`1cd7c91411e2d5a03d6535fc504641de4e678b09` (run `36410377867`, job
+`108888906582`): network isolation plus `json-file` positive control and `none`
+log suppression all passed, alongside prior resource/supervisor/controller contracts.
+The complete final-head workflow set remains the merge gate after this status update.
+
+Scope remains the synthetic no-network container and its Docker log driver. Approved
+destination allowlisting, network-enabled TLS composition, host/platform/database logs,
+image provenance and launcher trust remain unqualified. No real credentials or runtime
+activation is introduced; production and live-execution switches remain unchanged.
+
 ## Current agent state
 
 The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract, an offline full credential-stack composition path, a credential-gated provider-action boundary, persistence-safe action/verifier error handling, ephemeral diagnostic metadata and a static persistence-redaction audit.

@@ -90,6 +90,7 @@ def compatibility_probe():
 
 def main(mode):
     verify_limits()  # No resource stress unless actual kernel limits are verified.
+    from network_isolation_probe import network_probe
     if mode == "memory-hog":
         # Bias OOM selection toward this synthetic hog, away from the observer.
         Path("/proc/self/oom_score_adj").write_text("500")
@@ -102,7 +103,7 @@ def main(mode):
             blocks.append(block)
         require(len(blocks) == 0, "memory_limit_not_enforced")
     probes = {"cpu": cpu_probe, "memory": memory_probe,
-              "pids": pids_probe, "compatibility": compatibility_probe}
+              "pids": pids_probe, "compatibility": compatibility_probe, "network": network_probe}
     require(mode in probes, "unknown_probe")
     probes[mode]()
     print("synthetic_host_limits_ok:" + mode, flush=True)

@@ -135,9 +135,9 @@ containers are removed even after timeout; cleanup failure fails the contract.
 
 Existing OS and parent-death guard tests also run inside these limits. Containers
 use a non-root identity, dropped capabilities, no-new-privileges, read-only code/root,
-an ephemeral bounded /tmp, no network and Docker log driver `none`. Network/logging
-settings are fixture precautions only; no egress or platform-log qualification is
-claimed by this resource test. The runner resolves the Python image tag once to a
+an ephemeral bounded /tmp, no network and Docker log driver `none`. The separate
+network/log-driver probes below cover those narrow settings; they do not qualify
+permitted-destination egress or platform logs. The runner resolves the Python image tag once to a
 local immutable image ID and records that ID. Image provenance/approved digest and
 actual deployment qualification are still open; the test tag can change between runs.
 
@@ -193,6 +193,25 @@ and a deployed always-on reconciler remain unqualified. Temporary JSON receipts
 contain synthetic resource identities only, no credentials or database state. No
 real action is automatically resumed or replayed, and no activation switch changes.
 
+## Synthetic no-network and Docker log-driver evidence
+
+The fixture verifies loopback-only interfaces and route tables before socket tests.
+A successful local TCP exchange is the positive control. TCP connect and UDP send
+to documentation-only numeric IPv4/IPv6 destinations must fail with a routing-unreachable
+error; timeouts, connection refusal and generic permission errors are not accepted.
+IPv6 disabled at the socket-family level is an explicit no-egress case. No DNS lookup
+or real endpoint is used. This tests `--network none`, not an endpoint allowlist or
+DNS/IPv6 policy for a network-enabled deployment.
+
+Separate disposable logging fixtures emit two fixed non-secret markers directly to
+stdout/stderr. An explicit `json-file` positive control must return both markers and
+have a log path. The default `none` profile must have no log path and no retrievable
+marker output; only empty success or the known unsupported-driver response counts.
+Arbitrary command/daemon/permission errors fail. The observer captures responses in
+memory without printing them, and removes both fixtures. No real credentials enter
+the positive-control log. This does not audit daemon/system journals, tracing, database
+logs, application-written files, host storage erasure or the CI platform itself.
+
 Next qualify controlled launcher/image
 integrity, permitted-destination egress, and platform/database log custody. No real
 host is declared ready by these tests. Full TLS/database composition under deployment
@@ -203,6 +222,8 @@ out of this code/CI-only sequence.
 ## Official references checked
 
 OS references checked 2026-09-28:
+- [Docker none network driver](https://docs.docker.com/engine/network/drivers/none/)
+- [Docker logging driver configuration](https://docs.docker.com/engine/logging/configure/)
 - [Linux PID namespace init termination](https://www.man7.org/linux/man-pages/man7/pid_namespaces.7.html)
 - [Linux pidfd exit observation](https://man7.org/linux/man-pages/man2/pidfd_open.2.html)
 - [Linux cgroup v2 resource controllers](https://cdn.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)
