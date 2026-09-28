@@ -1,4 +1,5 @@
 import { applyAutomaticBankFit, BANK_FIT_AUTO_VERSION } from '../supabase/functions/predict-engine-dev/bank_fit_auto.ts';
+import { buildTrainingInput } from '../supabase/functions/history-pipeline-dev/training_input.ts';
 
 function assert(cond:boolean,msg:string){if(!cond)throw new Error(msg);}
 function player(car:number,style:'逃'|'両'|'追',extra:Record<string,unknown>={}){return{car_number:car,name:`P${car}`,style,...extra};}
@@ -33,4 +34,22 @@ Deno.test('missing bank evidence leaves bank_fit unset',()=>{
   const out=applyAutomaticBankFit({players:[player(1,'両')]}) as any;
   assert(out.raceData.players[0].bank_fit===undefined,'no evidence must not fabricate a bank-fit score');
   assert(out.report.skipped_cars.includes(1),'missing-evidence car must be audited');
+});
+
+Deno.test('training input captures the same normalized automatic bank-fit score',()=>{
+  const raceData:any={
+    race:{date:'2026-09-28',venue:'test',race_number:1},
+    bank_context:{track_length_m:333,home_stretch_m:42,max_banking_deg:34,wind_speed_mps:4,wind_direction:'home_tailwind',surface_condition:'dry',weather:'clear'},
+    players:[
+      player(1,'逃',{bank_history:{venue:{starts:12,win_rate:30,top2_rate:50,top3_rate:65,avg_finish:2.7}}}),
+      player(2,'追'),player(3,'両'),player(4,'追')
+    ],
+    odds:{trifecta:{}},
+    prediction_context:{source:'test'}
+  };
+  const direct=applyAutomaticBankFit(raceData) as any;
+  const training:any=buildTrainingInput({captured_at:'2026-09-28T20:00:00+09:00',race_data:raceData},{odds_sanitization:{ignored_combos:[]}},'prospective');
+  assert(training.players[0].bank_fit.score===direct.raceData.players[0].bank_fit.score,'training and serving bank-fit scores must match');
+  assert(training.bank_context.track_length_m===333,'raw bank context must be retained for audit and future features');
+  assert(training.bank_fit_automation.version===BANK_FIT_AUTO_VERSION,'training audit must retain bank-fit version');
 });
