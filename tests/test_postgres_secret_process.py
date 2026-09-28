@@ -289,7 +289,8 @@ class ProcessDeadlineTests(unittest.TestCase):
 
         process = Process()
         def create_process(**kwargs):
-            buffer, length = kwargs["args"][-2:]
+            _, _, _, _, buffer, length, parent_pid = kwargs["args"]
+            self.assertEqual(parent_pid, os.getpid())
             buffer[:len(response)] = response
             length.value = len(response)
             return process

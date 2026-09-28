@@ -2,6 +2,7 @@
 import ctypes
 import os
 import resource
+import signal
 import sys
 
 _PYTHON_OVERRIDES = frozenset({
@@ -22,6 +23,32 @@ def _prctl(option, value=0):
     call.restype = ctypes.c_int
     call.argtypes = [ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong]
     return call(option, value, 0, 0, 0)
+
+
+def guard_secret_parent(expected_parent_pid):
+    """Arm child-only SIGKILL on creator-thread death before secret work.
+
+    Check the parent on both sides of registration: an already-dead parent
+    generates no signal. Trusted factories must not change credentials or fork;
+    those operations can clear this Linux control. External reaping is required.
+    """
+    failed = False
+    try:
+        if (sys.platform != "linux" or type(expected_parent_pid) is not int
+                or expected_parent_pid <= 0 or os.getppid() != expected_parent_pid):
+            raise RuntimeError()
+        # Linux UAPI PR_SET_PDEATHSIG=1, PR_GET_PDEATHSIG=2 (int pointer).
+        if _prctl(1, signal.SIGKILL) != 0:
+            raise RuntimeError()
+        configured = ctypes.c_int()
+        if (_prctl(2, ctypes.addressof(configured)) != 0
+                or configured.value != signal.SIGKILL
+                or os.getppid() != expected_parent_pid):
+            raise RuntimeError()
+    except BaseException:
+        failed = True
+    if failed:
+        raise RuntimeError("secret_host_parent_guard_failed")
 
 
 def harden_secret_child():

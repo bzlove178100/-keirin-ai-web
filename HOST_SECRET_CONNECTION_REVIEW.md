@@ -107,7 +107,21 @@ environment before interpreter startup. no_new_privs does not remove existing pr
 trusted code can change dumpable again. Root/kernel/ptrace capabilities, swap, telemetry,
 database/platform logs and parent memory remain outside these safeguards.
 
-Next qualify external supervision (whole-process-group cleanup on parent death and
+The next slice arms Linux PR_SET_PDEATHSIG=SIGKILL in the child before request
+decode and factory work, verifies PR_GET_PDEATHSIG, and checks getppid against the
+PID captured by the spawning parent before and after registration. A missing parent
+or failed syscall/readback exits without a reply. Synthetic subprocess tests kill
+the parent with TERM and KILL while the factory ignores TERM; a disposable subreaper
+waits for the child and verifies its SIGKILL exit. This covers termination of the
+direct child after registration, not arbitrary descendants or secure memory erasure.
+
+Linux ties the signal to the creating thread, not the lifetime of every parent
+thread. Factories must not fork, change effective/filesystem IDs, or reset this
+control. Startup/imports before registration remain trusted and require external
+supervision. Child termination cannot determine whether a database write committed;
+recovery still requires authoritative read-back and must not automatically replay.
+
+Next qualify external supervision (whole-process-group cleanup/reaping and
 cgroup memory/process/CPU limits), controlled launcher/image integrity and platform/
 database log settings in disposable fixtures. Current child deadlines do not prove
 those deployment properties. No real host is declared ready by these tests.
@@ -117,6 +131,8 @@ out of this code/CI-only sequence.
 ## Official references checked
 
 OS references checked 2026-09-28:
+- [Linux parent-death signal](https://www.man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html)
+- [Linux parent process ID](https://www.man7.org/linux/man-pages/man2/getppid.2.html)
 - [Python resource limits](https://docs.python.org/3.12/library/resource.html)
 - [Linux dumpable control](https://www.man7.org/linux/man-pages/man2/PR_SET_DUMPABLE.2const.html)
 - [Linux no_new_privs](https://www.man7.org/linux/man-pages/man2/PR_SET_NO_NEW_PRIVS.2const.html)
