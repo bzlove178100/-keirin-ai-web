@@ -19,7 +19,10 @@ def require_no_default_route():
 
 
 def require_allowed_ip(value):
-    address = ipaddress.ip_address(value)
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        raise RuntimeError("synthetic_egress_allowed_ip_invalid") from None
     if address.version != 4 or address.is_loopback or address.is_unspecified or address.is_multicast:
         raise RuntimeError("synthetic_egress_allowed_ip_invalid")
     return str(address)
