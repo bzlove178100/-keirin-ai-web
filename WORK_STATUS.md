@@ -357,6 +357,29 @@ sizing choice. Supervisor crash/group cleanup, reviewed image/launcher integrity
 egress allowlisting, platform/database logs and real secret custody remain gates.
 No real credentials, migrations, provider execution or other activation switches change.
 
+## Synthetic supervisor faults (code/CI only, 2026-09-28)
+
+Main was rechecked at merged PR #110,
+`a61bc30d95306f9edda1f65c31460fe481a61f37`. Its final-head four PR workflows,
+four main workflows and Pages passed.
+
+The resource qualification fixture now adds a PID-1 supervisor, child and detached
+grandchild, all ignoring TERM. Independent cases inject abrupt supervisor exit
+without cleanup and forced container stop after a one-second grace period. The
+observer checks the three-process topology and common cgroup before the fault,
+then requires stable pidfd exit evidence, disappearance of original /proc start-time
+identities, an empty/removed cgroup and removal of the named container.
+
+Four local observer tests and three existing fixture tests pass; syntax/diff checks
+pass. Local process IDs are virtualized without matching /proc identity, so the local
+pidfd test uses controlled proc evidence. Actual host /proc, detached descendant
+termination and reaping MUST pass Docker CI with no mocks or fallback before merge.
+
+This qualifies container-internal PID-1 failure and forced stop only. Docker daemon,
+host and external controller failures/restart reconciliation remain untested, as do
+deployment-specific egress, image/launcher trust, logging and real secret custody.
+No runtime code, real secrets, migrations or activation switches are changed.
+
 ## Current agent state
 
 The project now has a generic task/runtime core, durable owner-only checkpoint/activity storage, crash-safe queue/fencing, exact task identity/claim support, single-active-run protection, strict hosted clients, credential-isolated Edge routing, SHA-pinned GitHub/CI observation, recovery inspection/proposals, hard deadline enforcement, an exact-token-bound standalone one-shot host, a manual GitHub Actions host, redacted credential preflight, static and refresh-capable credential providers, version/CAS refresh-secret recovery semantics, a durable secret-backend adapter contract, an offline full credential-stack composition path, a credential-gated provider-action boundary, persistence-safe action/verifier error handling, ephemeral diagnostic metadata and a static persistence-redaction audit.
