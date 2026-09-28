@@ -30,8 +30,30 @@ SELECT session_user::text, current_user::text, pg_catalog.current_database(),
        pg_catalog.current_setting('log_parameter_max_length_on_error')::bigint,
        pg_catalog.current_setting('log_duration'),
        pg_catalog.current_setting('log_min_duration_statement')::bigint,
-       pg_catalog.current_setting('log_min_duration_sample')::bigint
+       pg_catalog.current_setting('log_min_duration_sample')::bigint,
+       pg_catalog.current_setting('auto_explain.log_min_duration', true),
+       pg_catalog.current_setting('auto_explain.log_parameter_max_length', true),
+       pg_catalog.current_setting('pgaudit.log_parameter', true)
 """
+
+
+def _extension_log_policy_safe(auto_duration, auto_parameter_length, pgaudit_parameter):
+    # Missing custom GUCs mean the extension is not active in this session. If
+    # auto_explain is active, either plan logging must be disabled or Bind values
+    # must be suppressed. If pgAudit is active, parameter logging must stay off.
+    if auto_duration is None and auto_parameter_length is None:
+        auto_safe = True
+    elif type(auto_duration) is str and type(auto_parameter_length) is str:
+        try:
+            duration = int(auto_duration)
+            parameter_length = int(auto_parameter_length)
+        except ValueError:
+            return False
+        auto_safe = duration == -1 or parameter_length == 0
+    else:
+        auto_safe = False
+    pgaudit_safe = pgaudit_parameter is None or pgaudit_parameter == "off"
+    return auto_safe and pgaudit_safe
 
 
 def _assert_clean_environment():
@@ -121,15 +143,16 @@ class StrictPostgresConnectionFactory:
             cursor = connection.cursor()
             cursor.execute(_PREFLIGHT)
             row = cursor.fetchone()
-            # The adapter uses parameterized SQL. Reject any effective session policy
-            # that logs normal statements/durations, or error Bind values, before
-            # handing the connection to secret-bearing operations.
+            # The adapter uses parameterized SQL. Reject normal statement/duration
+            # logging, error Bind logging, and extension-specific parameter logging
+            # before handing the connection to secret-bearing operations.
             expected = (self._profile.login, self._profile.login, self._profile.database,
                         False, "off", True, False, False, statement, lock, idle,
                         "none", 0, "off", -1, -1)
-            if (type(row) is not tuple or len(row) != len(expected)
+            if (type(row) is not tuple or len(row) != len(expected) + 3
                     or any(type(actual) is not type(wanted) or actual != wanted
-                           for actual, wanted in zip(row, expected))
+                           for actual, wanted in zip(row[:len(expected)], expected))
+                    or not _extension_log_policy_safe(*row[len(expected):])
                     or cursor.fetchone() is not None):
                 raise ValueError("session_identity_rejected")
             cursor.close()
