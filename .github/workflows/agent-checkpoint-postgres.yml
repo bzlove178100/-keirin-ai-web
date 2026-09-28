@@ -12,13 +12,13 @@ permissions:
 jobs:
   host-limits-contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Qualify synthetic cgroup limits, child guards and supervisor cleanup
+      - name: Qualify synthetic host limits and supervisor/controller recovery
         env:
           AGENT_EPHEMERAL_HOST_TEST: '1'
         run: python tests/run_host_limits_contract.py
