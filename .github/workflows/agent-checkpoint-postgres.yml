@@ -70,6 +70,11 @@ jobs:
         run: env -u LD_LIBRARY_PATH python tests/run_vault_postgres_contract.py
       - name: Install pinned ephemeral certificate generator
         run: python -m pip install 'cryptography==46.0.0'
+      - name: Test PostgreSQL TLS composition inside hardened host limits
+        timeout-minutes: 4
+        env:
+          AGENT_EPHEMERAL_TLS_TEST: '1'
+        run: env -u LD_LIBRARY_PATH python tests/run_host_tls_composition.py
       - name: Test ephemeral PostgreSQL TLS, strict host and restart recovery
         timeout-minutes: 6
         env:
