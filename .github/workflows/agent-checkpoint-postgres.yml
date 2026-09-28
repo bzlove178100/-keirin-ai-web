@@ -85,3 +85,8 @@ jobs:
         env:
           AGENT_EPHEMERAL_TLS_TEST: '1'
         run: env -u LD_LIBRARY_PATH python tests/run_postgres_log_custody.py
+      - name: Test actual pgAudit parameter redaction behavior
+        timeout-minutes: 6
+        env:
+          AGENT_EPHEMERAL_TLS_TEST: '1'
+        run: env -u LD_LIBRARY_PATH python tests/run_pgaudit_log_custody.py
