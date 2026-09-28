@@ -4,7 +4,7 @@ import re
 import time
 from uuid import uuid4
 
-from run_host_limits_contract import ROOT, LAUNCHER, command, verify_image_provenance
+from run_host_limits_contract import ROOT, LAUNCHER, command
 
 SERVER = "/src/tests/support/approved_endpoint_server.py"
 CLIENT = "/src/tests/support/egress_allowlist_probe.py"
@@ -44,14 +44,19 @@ def hardened_args(name, network, image_id, script, extra_env=()):
     return args + ["--entrypoint", LAUNCHER, image_id, script]
 
 
-def inspect_container(identity):
+def inspect_container(identity, image_id, network, script):
     data = json.loads(command(["docker", "inspect", identity]))[0]
-    if (data.get("Id") != identity or data.get("Config", {}).get("Entrypoint") != [LAUNCHER]
-            or data.get("HostConfig", {}).get("ReadonlyRootfs") is not True
-            or data.get("HostConfig", {}).get("Privileged") is not False
-            or data.get("HostConfig", {}).get("CapDrop") != ["ALL"]
-            or "no-new-privileges=true" not in data.get("HostConfig", {}).get("SecurityOpt", [])
-            or data.get("HostConfig", {}).get("LogConfig", {}).get("Type") != "none"):
+    config, host = data.get("Config", {}), data.get("HostConfig", {})
+    networks = data.get("NetworkSettings", {}).get("Networks", {})
+    if (data.get("Id") != identity or data.get("Image") != image_id
+            or config.get("User") != "65534:65534"
+            or config.get("Entrypoint") != [LAUNCHER] or config.get("Cmd") != [script]
+            or host.get("NetworkMode") != network or set(networks) != {network}
+            or host.get("ReadonlyRootfs") is not True or host.get("Privileged") is not False
+            or host.get("CapDrop") != ["ALL"]
+            or "no-new-privileges=true" not in host.get("SecurityOpt", [])
+            or host.get("LogConfig", {}).get("Type") != "none"
+            or host.get("RestartPolicy", {}).get("Name") != "no"):
         raise RuntimeError("synthetic_egress_container_invalid")
     return data
 
@@ -79,29 +84,25 @@ def run_egress_probe(image_id):
         verify_network(network_data(network))
 
         server_id = command(hardened_args(server_name, network, image_id, SERVER))
-        client_placeholder = command(hardened_args(
-            client_name, network, image_id, CLIENT, ("SYNTHETIC_ALLOWED_IP=127.0.0.1",)))
-        created += [server_id, client_placeholder]
-        if not all(re.fullmatch(r"[0-9a-f]{64}", value) for value in created):
+        created.append(server_id)
+        if not re.fullmatch(r"[0-9a-f]{64}", server_id):
             raise RuntimeError("synthetic_egress_container_identity_invalid")
-        server_data = inspect_container(server_id)
-        inspect_container(client_placeholder)
+        server_data = inspect_container(server_id, image_id, network, SERVER)
         server_ip = ipv4_for(server_data, network)
 
-        # Recreate the client with the exact approved endpoint IP. The allowed
-        # destination is never discovered via external DNS.
-        command(["docker", "rm", "--force", client_placeholder])
-        created.remove(client_placeholder)
         client_id = command(hardened_args(
             client_name, network, image_id, CLIENT, ("SYNTHETIC_ALLOWED_IP=" + server_ip,)))
         created.append(client_id)
-        inspect_container(client_id)
+        if not re.fullmatch(r"[0-9a-f]{64}", client_id):
+            raise RuntimeError("synthetic_egress_container_identity_invalid")
+        inspect_container(client_id, image_id, network, CLIENT)
         exact = {server_id: server_name, client_id: client_name}
         verify_members(network_data(network), exact)
 
         # Prove preflight fails closed if any unapproved peer is attached.
         sentinel_id = command(hardened_args(sentinel_name, network, image_id, SERVER))
         created.append(sentinel_id)
+        inspect_container(sentinel_id, image_id, network, SERVER)
         try:
             verify_members(network_data(network), exact)
         except RuntimeError as error:
