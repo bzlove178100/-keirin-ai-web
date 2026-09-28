@@ -22,27 +22,29 @@ The client and one synthetic approved TCP endpoint use the already pinned image,
 UID/GID, read-only filesystem, dropped capabilities, no-new-privileges, core limit zero,
 Docker log driver `none`, and direct Python entrypoints.
 
-Before client traffic starts, the outer observer requires exactly two network members by
-full immutable container ID and exact name: the approved endpoint and the client. It also
-creates a third unapproved synthetic peer and proves that the membership preflight rejects
-the topology before traffic, then removes that peer and re-verifies the exact two-member
-set. The approved endpoint IPv4 address is obtained from Docker inspection and injected
-as a numeric value; no external DNS discovery is used.
+The approved endpoint is started first so Docker assigns its real network address. The
+client then starts behind a local `/tmp` gate and performs no socket work until the outer
+observer has verified the live network. Immediately before the gate is released, the
+observer requires exactly two live members by full immutable container ID and exact name:
+the approved endpoint and the client. It also starts a third unapproved synthetic peer
+and proves that the membership preflight rejects the topology, removes that peer and
+re-verifies the exact two-member set. The approved endpoint IPv4 address comes from Docker
+inspection and is injected numerically; no external DNS discovery is used.
 
-Inside the client, the route table must contain no non-loopback default route. A direct TCP
-exchange to the approved endpoint is the positive control. A connection to the
-RFC 5737 documentation-only address `192.0.2.1` must fail with a routing-unreachable
+After the host releases the local gate, the client requires no non-loopback default route.
+A direct TCP exchange to the approved endpoint is the positive control. A connection to
+the RFC 5737 documentation-only address `192.0.2.1` must fail with a routing-unreachable
 error; timeout, refusal, permission error or success does not count as blocking evidence.
-The exact network membership is checked again after the client exits. Containers and the
-network are removed on completion/failure and residual network presence fails cleanup.
+The client must exit successfully after these checks. Containers and the network are
+removed on completion/failure and residual network presence fails cleanup.
 
 ## What this does not qualify
 
 This is an exclusive-segment topology contract, not a general firewall or production
 service-mesh policy. It does not prove protection against a privileged Docker/host
-administrator attaching another endpoint after preflight, Docker daemon compromise,
-host routing/firewall mutation, DNS policy for a network-enabled deployment, IPv6
-allowlisting, proxy bypass, real external-provider reachability, or production TLS
+administrator attaching another endpoint after the membership preflight, Docker daemon
+compromise, host routing/firewall mutation, DNS policy for a network-enabled deployment,
+IPv6 allowlisting, proxy bypass, real external-provider reachability, or production TLS
 composition. A real deployment that shares a network with untrusted peers needs a
 separate kernel/network-policy enforcement mechanism and its own fault tests.
 
