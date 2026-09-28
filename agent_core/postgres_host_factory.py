@@ -25,7 +25,12 @@ SELECT session_user::text, current_user::text, pg_catalog.current_database(),
                WHERE member=(SELECT oid FROM pg_catalog.pg_roles WHERE rolname=session_user)),
        (SELECT setting::bigint FROM pg_catalog.pg_settings WHERE name='statement_timeout'),
        (SELECT setting::bigint FROM pg_catalog.pg_settings WHERE name='lock_timeout'),
-       (SELECT setting::bigint FROM pg_catalog.pg_settings WHERE name='idle_in_transaction_session_timeout')
+       (SELECT setting::bigint FROM pg_catalog.pg_settings WHERE name='idle_in_transaction_session_timeout'),
+       pg_catalog.current_setting('log_statement'),
+       pg_catalog.current_setting('log_parameter_max_length_on_error')::bigint,
+       pg_catalog.current_setting('log_duration'),
+       pg_catalog.current_setting('log_min_duration_statement')::bigint,
+       pg_catalog.current_setting('log_min_duration_sample')::bigint
 """
 
 
@@ -116,8 +121,12 @@ class StrictPostgresConnectionFactory:
             cursor = connection.cursor()
             cursor.execute(_PREFLIGHT)
             row = cursor.fetchone()
+            # The adapter uses parameterized SQL. Reject any effective session policy
+            # that logs normal statements/durations, or error Bind values, before
+            # handing the connection to secret-bearing operations.
             expected = (self._profile.login, self._profile.login, self._profile.database,
-                        False, "off", True, False, False, statement, lock, idle)
+                        False, "off", True, False, False, statement, lock, idle,
+                        "none", 0, "off", -1, -1)
             if (type(row) is not tuple or len(row) != len(expected)
                     or any(type(actual) is not type(wanted) or actual != wanted
                            for actual, wanted in zip(row, expected))
