@@ -26,26 +26,26 @@ Agent-only checkpoint/activity persistence and queue coordination in staging wer
 
 ## Verified repository state
 
-Current verified main through PR #127:
+Current verified functional main through PR #131:
 
-`5d1d58c6da24ac45e4010388aaa0129b20dc842a`
+`1c6d3e84632fa451629738d0720ad4f029599a23`
 
-PR #127 (`Qualify actual secret application stack in hardened client`) merged after all exact-head PR workflows passed. Its four post-merge main workflows also passed:
+PR #131 (`Qualify hardened application row-lock deadline`) merged after all exact-head PR workflows passed. Its post-merge main workflows also passed:
 
 - `keirin-ai regression`;
 - `collection progress UI regression`;
 - `agent checkpoint PostgreSQL contract`;
 - Pages build/deployment.
 
-The PostgreSQL contract run includes the new co-resident hardened application-stack test plus the existing host limits, raw authenticated composition, TLS/restart recovery, PostgreSQL log-policy and pgAudit checks.
+The PostgreSQL contract now includes the co-resident actual application stack, fail-closed lease/trust/hostname rejection cases, the real row-lock/process-deadline case, host limits, raw authenticated composition, TLS/restart recovery, PostgreSQL log-policy checks and pgAudit parameter-redaction checks.
 
-Do not treat a later main SHA as verified until its required workflows are checked again.
+Do not treat a later functional main SHA as verified until its required workflows are checked again.
 
 ## Hosted staging/runtime state
 
 Authorized staging project: `keirin-ai-staging` (`omamgmyyqnawlagbemcm`).
 
-Last bounded read-only staging verification remains from the authentication-boundary work; no new live run was started in PR #101-#127 work:
+Last bounded read-only staging verification remains from the authentication-boundary work; no new live run was started in PR #101-#131 work:
 
 - single-active trusted-run guard: present;
 - fresh trusted tasks observed then `queued` / `running`: 0;
@@ -109,9 +109,13 @@ Merged synthetic/code-only qualification now covers:
 - PR #120: Docker daemon restart on the exercised GitHub-hosted Linux/systemd profile with exact reconciliation and no target resurrection;
 - PR #123: actual pgAudit parameter-redaction behavior in a disposable PostgreSQL 17.11/bookworm profile;
 - PR #125: authenticated PostgreSQL secret operations inside the exact hardened client/container and internal-network composition, including mapped private read/CAS, cross-binding denial, stale-CAS conflict and durable read-back;
-- PR #127: the actual application secret stack now runs co-resident inside the approved immutable hardened client. `StrictPostgresConnectionFactory` + `ProcessDeadlinePostgresSecretBackend` + `PostgresSecretBackend` + `DurableVersionedSecretStore` execute against the disposable private SQL contract with the real opaque binding key. The test verifies strict CA snapshot/sealing and bootstrap-lease checks, TLS/SCRAM authentication, strict connection/log-policy preflight, initial read, versioned CAS, fresh durable read-back, stale-CAS conflict without replay, unrelated-binding preservation and child/session cleanup.
+- PR #127: the actual application secret stack runs co-resident inside the approved immutable hardened client: `StrictPostgresConnectionFactory` + `ProcessDeadlinePostgresSecretBackend` + `PostgresSecretBackend` + `DurableVersionedSecretStore` execute against the disposable private SQL contract with the real opaque binding key;
+- PR #129: the same co-resident application composition fails closed for bad CA pin/trust, stale/revoked/expired bootstrap leases and wrong hostname without mutating the durable synthetic record;
+- PR #131: a real PostgreSQL row lock blocks the application CAS while the outer process deadline is shorter than server lock/statement limits. The outward result is the fixed ambiguous-write classification, there is no automatic replay, the target and unrelated records remain unchanged after cleanup, and application/fixture database sessions are reaped.
 
-PR #127 uses a **test-only stdlib PostgreSQL protocol shim** inside the immutable Python image so the test does not bind-mount ambient host site-packages or install an unpinned runtime dependency. Existing psycopg/libpq process/TLS tests remain the separate evidence for the intended production-driver behavior. The shim is not a production driver, and PR #127 does not prove final deployment packaging of psycopg/libpq.
+During PR #131 qualification, the test-only stdlib PostgreSQL shim exposed a fixture mismatch: it advertised `autocommit=False` without opening an explicit server transaction. The shim was corrected to issue `BEGIN` before the first statement and to model `COMMIT`/`ROLLBACK` state explicitly. The row-lock test only passed after this correction, so the current synthetic no-commit evidence is based on transaction-faithful fixture behavior rather than an autocommit artifact.
+
+PR #127-#131 use a **test-only stdlib PostgreSQL protocol shim** inside the immutable Python image so the tests do not bind-mount ambient host site-packages or install an unpinned runtime dependency. Existing psycopg/libpq process/TLS tests remain separate evidence for intended production-driver behavior. The shim is not a production driver and does not prove final deployment packaging of psycopg/libpq/native dependencies.
 
 PR #120 remains limited to the exercised GitHub-hosted Linux/systemd Docker-daemon profile. It does not prove machine reboot, power-loss, kernel-panic or hostile-root recovery.
 
@@ -143,18 +147,19 @@ The recorded first eligible prospective sample is 2026-09-24 Ito Onsen 1R (7 rid
 
 ## Next work / next boundary
 
-Code-only work may continue without another live-run authorization.
+The planned synthetic co-resident application-stack slice is now complete through fail-closed lease/trust/hostname rejection and bounded row-lock/process-deadline behavior. More CI cases should be added only for a distinct, identified gap rather than to accumulate duplicate evidence.
 
 Preferred order:
 
 1. keep exact-head CI and post-merge main verification as merge gates;
-2. extend the PR #127 co-resident hardened application-stack evidence only where it adds new information: fail-closed stale/revoked/expired bootstrap leases, wrong trust/hostname, and bounded lock/deadline behavior under the same hardened container are appropriate synthetic targets; do not duplicate already-qualified cases without a distinct composition claim;
-3. keep platform/host log custody and production administrator/root/kernel claims open until the selected deployment can provide real evidence; do not simulate them in CI;
-4. keep host reboot/power-loss and production supervisor behavior open until an environment can produce representative evidence;
-5. after documented operational gates are closed, prepare a **separate** staging migration/review for a real backend. Do not combine migration, credentials and task execution in one change;
-6. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
+2. synchronize this status/review documentation after functional security changes;
+3. prepare a **review-only** staging migration package for a real durable backend: intended schema/grants, bootstrap-credential ownership, rotation/revocation procedure, trust/pin lifecycle, rollback and observation plan. Do not apply the migration or bind a credential during the review change;
+4. keep platform/host log custody and production administrator/root/kernel claims open until the selected deployment can provide real evidence; do not simulate them in CI;
+5. keep host reboot/power-loss and production supervisor behavior open until an environment can produce representative evidence;
+6. only after the operational gates and migration review are explicitly approved, perform a separate staging migration. Do not combine migration, credential activation and hosted task execution in one change;
+7. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 
-No race screenshots or owner credential resend is needed for the current code-only work.
+No race screenshots or owner credential resend is needed for the current code-only/review-only work.
 
 ## 21:00 report requirement
 
