@@ -75,7 +75,8 @@ def _lease_is_current(version):
     if _scenario() == "revoked_lease":
         return False
     try:
-        return version == int(CURRENT_VERSION_FILE.read_text()) == 1
+        current_path = CURRENT_VERSION_FILE if CURRENT_VERSION_FILE.exists() else VERSION_FILE
+        return version == int(current_path.read_text()) == 1
     except (OSError, ValueError):
         return False
 
@@ -111,8 +112,7 @@ def _wait_for_release():
         if time.monotonic() >= deadline:
             raise RuntimeError("synthetic_app_stack_release_timeout")
         time.sleep(0.02)
-    if (not PASSWORD_FILE.is_file() or not VERSION_FILE.is_file()
-            or not CURRENT_VERSION_FILE.is_file()):
+    if not PASSWORD_FILE.is_file() or not VERSION_FILE.is_file():
         raise RuntimeError("synthetic_app_stack_bootstrap_missing")
 
 
