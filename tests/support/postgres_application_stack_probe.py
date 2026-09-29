@@ -7,8 +7,9 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+for path in (ROOT, ROOT / "tests"):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from agent_core.bootstrap_lease import BootstrapPasswordLease
 from agent_core.durable_secret_store import DurableVersionedSecretStore
