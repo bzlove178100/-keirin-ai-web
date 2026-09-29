@@ -23,9 +23,11 @@ from run_secret_tls_contract import HOST, PASSWORD, _certificates
 
 PROBE = "/src/tests/support/postgres_application_stack_probe.py"
 BINDING = CredentialBinding("provider-a", "account-a", ("read:one", "write:one"))
+LOCK_READY = "/tmp/app-stack-lock-ready"
+LOCK_GO = "/tmp/app-stack-lock-go"
 
 
-def _client_args(name, network, image_id, ca_path, server_ip, ca_sha):
+def _client_args(name, network, image_id, ca_path, wrong_ca_path, server_ip, ca_sha, wrong_ca_sha):
     return [
         "docker", "create", "--name", name, "--network", network, "--cgroupns", "private",
         "--memory", "128m", "--memory-swap", "128m", "--pids-limit", "24",
@@ -36,6 +38,7 @@ def _client_args(name, network, image_id, ca_path, server_ip, ca_sha):
         "--mount", f"type=bind,src={ROOT / 'tests'},dst=/src/tests,readonly",
         "--mount", f"type=bind,src={ROOT / 'agent_core'},dst=/src/agent_core,readonly",
         "--mount", f"type=bind,src={ca_path},dst=/tls/ca.crt,readonly",
+        "--mount", f"type=bind,src={wrong_ca_path},dst=/tls/wrong-ca.crt,readonly",
         "--env", "PYTHONDONTWRITEBYTECODE=1",
         "--env", "SYNTHETIC_POSTGRES_APP_STACK_PROBE=1",
         "--env", "SYNTHETIC_DB_IP=" + server_ip,
@@ -43,6 +46,8 @@ def _client_args(name, network, image_id, ca_path, server_ip, ca_sha):
         "--env", "SYNTHETIC_DB_HOST=" + HOST,
         "--env", "SYNTHETIC_DB_CA=/tls/ca.crt",
         "--env", "SYNTHETIC_DB_CA_SHA256=" + ca_sha,
+        "--env", "SYNTHETIC_WRONG_DB_CA=/tls/wrong-ca.crt",
+        "--env", "SYNTHETIC_WRONG_DB_CA_SHA256=" + wrong_ca_sha,
         "--env", "SYNTHETIC_DB_USER=secret_test_host_a",
         "--env", "SYNTHETIC_DB_NAME=agent_checkpoint_ci",
         "--entrypoint", LAUNCHER,
@@ -50,7 +55,7 @@ def _client_args(name, network, image_id, ca_path, server_ip, ca_sha):
     ]
 
 
-def _verify_client(identity, image_id, network, ca_path, server_ip, ca_sha):
+def _verify_client(identity, image_id, network, ca_path, wrong_ca_path, server_ip, ca_sha, wrong_ca_sha):
     data = json.loads(command(["docker", "inspect", identity]))[0]
     config, host = data.get("Config", {}), data.get("HostConfig", {})
     networks = data.get("NetworkSettings", {}).get("Networks", {})
@@ -62,6 +67,8 @@ def _verify_client(identity, image_id, network, ca_path, server_ip, ca_sha):
         "SYNTHETIC_DB_HOST=" + HOST,
         "SYNTHETIC_DB_CA=/tls/ca.crt",
         "SYNTHETIC_DB_CA_SHA256=" + ca_sha,
+        "SYNTHETIC_WRONG_DB_CA=/tls/wrong-ca.crt",
+        "SYNTHETIC_WRONG_DB_CA_SHA256=" + wrong_ca_sha,
         "SYNTHETIC_DB_USER=secret_test_host_a",
         "SYNTHETIC_DB_NAME=agent_checkpoint_ci",
     }
@@ -93,12 +100,22 @@ def _verify_client(identity, image_id, network, ca_path, server_ip, ca_sha):
             or host.get("RestartPolicy", {}).get("Name") != "no"):
         raise RuntimeError("synthetic_app_stack_client_config_invalid")
     mounts = {(row.get("Destination"), row.get("RW")) for row in data.get("Mounts", [])}
-    required_mounts = {("/src/tests", False), ("/src/agent_core", False), ("/tls/ca.crt", False)}
+    required_mounts = {
+        ("/src/tests", False),
+        ("/src/agent_core", False),
+        ("/tls/ca.crt", False),
+        ("/tls/wrong-ca.crt", False),
+    }
     if not required_mounts.issubset(mounts):
         raise RuntimeError("synthetic_app_stack_client_mount_invalid")
-    ca_mount = [row for row in data.get("Mounts", []) if row.get("Destination") == "/tls/ca.crt"]
-    if len(ca_mount) != 1 or Path(ca_mount[0].get("Source", "")) != ca_path:
-        raise RuntimeError("synthetic_app_stack_ca_mount_invalid")
+    expected_sources = {
+        "/tls/ca.crt": ca_path,
+        "/tls/wrong-ca.crt": wrong_ca_path,
+    }
+    for destination, expected_source in expected_sources.items():
+        rows = [row for row in data.get("Mounts", []) if row.get("Destination") == destination]
+        if len(rows) != 1 or Path(rows[0].get("Source", "")) != expected_source:
+            raise RuntimeError("synthetic_app_stack_ca_mount_invalid")
 
 
 def _wait_running(identity):
@@ -128,6 +145,37 @@ def _write_bootstrap(identity):
         raise RuntimeError("synthetic_app_stack_bootstrap_handoff_failed")
 
 
+def _marker_exists(identity, path):
+    result = subprocess.run(
+        [
+            "docker", "exec", identity, LAUNCHER, "-c",
+            "from pathlib import Path; raise SystemExit(0 if Path(" + repr(path) + ").is_file() else 1)",
+        ],
+        capture_output=True,
+        timeout=5,
+    )
+    return result.returncode == 0
+
+
+def _wait_marker(identity, path):
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        if _marker_exists(identity, path):
+            return
+        state = json.loads(command(["docker", "inspect", identity]))[0]["State"]
+        if not state.get("Running"):
+            raise RuntimeError("synthetic_app_stack_client_exited_before_marker")
+        time.sleep(0.05)
+    raise RuntimeError("synthetic_app_stack_marker_timeout")
+
+
+def _touch_marker(identity, path):
+    command([
+        "docker", "exec", identity, LAUNCHER, "-c",
+        "from pathlib import Path; Path(" + repr(path) + ").write_text('go')",
+    ])
+
+
 def _prepare_contract(server_id):
     command([
         "docker", "exec", server_id, "psql", "--username", "postgres",
@@ -153,6 +201,58 @@ def _prepare_contract(server_id):
     return key
 
 
+def _start_lock_holder(server_id, key):
+    return subprocess.Popen(
+        [
+            "docker", "exec", "--env", "PGAPPNAME=synthetic-app-stack-lock-holder",
+            server_id, "psql", "--username", "postgres", "--dbname", "agent_checkpoint_ci",
+            "--set", "ON_ERROR_STOP=1", "--command",
+            "BEGIN; SELECT 1 FROM agent_credential_private.bindings WHERE binding_key='"
+            + key + "' FOR UPDATE; SELECT pg_sleep(8); COMMIT;",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def _wait_lock_holder(server_id, process):
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError("synthetic_app_stack_lock_holder_exited_early")
+        count = command([
+            "docker", "exec", server_id, "psql", "--username", "postgres",
+            "--dbname", "agent_checkpoint_ci", "--tuples-only", "--no-align",
+            "--command",
+            "SELECT count(*) FROM pg_stat_activity WHERE application_name='synthetic-app-stack-lock-holder' "
+            "AND state='active' AND query LIKE '%pg_sleep%';",
+        ])
+        if count == "1":
+            return
+        time.sleep(0.05)
+    raise RuntimeError("synthetic_app_stack_lock_holder_not_ready")
+
+
+def _stop_lock_holder(server_id, process):
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        subprocess.run([
+            "docker", "exec", server_id, "psql", "--username", "postgres",
+            "--dbname", "agent_checkpoint_ci", "--tuples-only", "--no-align",
+            "--command",
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            "WHERE application_name='synthetic-app-stack-lock-holder';",
+        ], capture_output=True, timeout=10)
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=3)
+    if process.returncode not in {0, -15, -9}:
+        raise RuntimeError("synthetic_app_stack_lock_holder_failed")
+
+
 def _verify_readback(server_id, key):
     record = command([
         "docker", "exec", server_id, "psql", "--username", "postgres",
@@ -174,34 +274,62 @@ def _verify_readback(server_id, key):
         "--dbname", "agent_checkpoint_ci", "--tuples-only", "--no-align",
         "--command", "SELECT count(*) FROM pg_stat_activity WHERE application_name='agent-secret-host'",
     ])
-    if record != "1:ready" or secret != "SYNTHETIC:app-stack-a1" or untouched != "0:SYNTHETIC:b0" or sessions != "0":
+    lock_sessions = command([
+        "docker", "exec", server_id, "psql", "--username", "postgres",
+        "--dbname", "agent_checkpoint_ci", "--tuples-only", "--no-align",
+        "--command", "SELECT count(*) FROM pg_stat_activity WHERE application_name='synthetic-app-stack-lock-holder'",
+    ])
+    if (record != "1:ready" or secret != "SYNTHETIC:app-stack-a1"
+            or untouched != "0:SYNTHETIC:b0" or sessions != "0" or lock_sessions != "0"):
         raise RuntimeError("synthetic_app_stack_server_readback_invalid")
 
 
-def _run_client(network, image_id, ca_path, ca_sha, server_id, server_name, server_ip, key):
+def _run_client(network, image_id, ca_path, wrong_ca_path, ca_sha, wrong_ca_sha,
+                server_id, server_name, server_ip, key):
     name = "synthetic-app-stack-client-" + uuid4().hex[:12]
     identity = None
+    lock_process = None
     try:
-        identity = command(_client_args(name, network, image_id, ca_path, server_ip, ca_sha))
+        identity = command(_client_args(
+            name, network, image_id, ca_path, wrong_ca_path, server_ip, ca_sha, wrong_ca_sha
+        ))
         if re.fullmatch(r"[0-9a-f]{64}", identity) is None:
             raise RuntimeError("synthetic_app_stack_client_identity_invalid")
-        _verify_client(identity, image_id, network, ca_path, server_ip, ca_sha)
+        _verify_client(
+            identity, image_id, network, ca_path, wrong_ca_path, server_ip, ca_sha, wrong_ca_sha
+        )
         command(["docker", "start", identity])
         _wait_running(identity)
         verify_members(network_data(network), {server_id: server_name, identity: name})
         _write_bootstrap(identity)
-        command([
-            "docker", "exec", identity, LAUNCHER, "-c",
-            "from pathlib import Path; Path('/tmp/app-stack-go').write_text('go')",
-        ])
+        _touch_marker(identity, "/tmp/app-stack-go")
+        _wait_marker(identity, LOCK_READY)
+        lock_process = _start_lock_holder(server_id, key)
+        _wait_lock_holder(server_id, lock_process)
+        _touch_marker(identity, LOCK_GO)
         exit_code = command(["docker", "wait", identity], timeout=45)
         state = json.loads(command(["docker", "inspect", identity]))[0]["State"]
         if exit_code != "0" or state.get("Running") or state.get("ExitCode") != 0:
             raise RuntimeError("synthetic_app_stack_client_result_invalid")
+        _stop_lock_holder(server_id, lock_process)
+        lock_process = None
         _verify_readback(server_id, key)
     finally:
+        if lock_process is not None:
+            try:
+                _stop_lock_holder(server_id, lock_process)
+            except BaseException:
+                pass
         if identity:
             subprocess.run(["docker", "rm", "--force", identity], capture_output=True, timeout=30)
+
+
+def _chown_client_trust(path):
+    command([
+        "docker", "run", "--rm", "--user", "root", "--entrypoint", LAUNCHER,
+        "--mount", f"type=bind,src={path},dst=/trust.crt", IMAGE,
+        "-c", "import os; os.chown('/trust.crt',65534,65534); os.chmod('/trust.crt',0o644)",
+    ])
 
 
 def main():
@@ -216,18 +344,19 @@ def main():
         directory.chmod(0o755)
         _certificates(directory)
         client_ca = directory / "client-ca.crt"
+        wrong_client_ca = directory / "wrong-client-ca.crt"
         client_ca.write_bytes((directory / "ca.crt").read_bytes())
+        wrong_client_ca.write_bytes((directory / "wrong-ca.crt").read_bytes())
         client_ca.chmod(0o644)
+        wrong_client_ca.chmod(0o644)
         ca_sha = sha256(client_ca.read_bytes()).hexdigest()
+        wrong_ca_sha = sha256(wrong_client_ca.read_bytes()).hexdigest()
         try:
             command(["docker", "pull", IMAGE], timeout=120)
             image_data = json.loads(command(["docker", "image", "inspect", IMAGE]))[0]
             image_id = verify_image_provenance(image_data)
-            command([
-                "docker", "run", "--rm", "--user", "root", "--entrypoint", LAUNCHER,
-                "--mount", f"type=bind,src={client_ca},dst=/ca.crt", IMAGE,
-                "-c", "import os; os.chown('/ca.crt',65534,65534); os.chmod('/ca.crt',0o644)",
-            ])
+            _chown_client_trust(client_ca)
+            _chown_client_trust(wrong_client_ca)
             command([
                 "docker", "run", "--rm", "--user", "root", "--mount",
                 f"type=bind,src={directory},dst=/tls", POSTGRES_IMAGE,
@@ -264,7 +393,10 @@ def main():
             key = _prepare_contract(server_id)
             server_ip = _server_ip(server_id, network)
             verify_members(network_data(network), {server_id: server_name})
-            _run_client(network, image_id, client_ca, ca_sha, server_id, server_name, server_ip, key)
+            _run_client(
+                network, image_id, client_ca, wrong_client_ca, ca_sha, wrong_ca_sha,
+                server_id, server_name, server_ip, key,
+            )
         finally:
             if server_id:
                 subprocess.run(["docker", "rm", "--force", "--volumes", server_id],
@@ -273,7 +405,9 @@ def main():
             if command(["docker", "network", "ls", "--quiet", "--filter", "name=^" + network + "$"]):
                 raise RuntimeError("synthetic_app_stack_network_cleanup_failed")
 
-    print("Synthetic hardened application stack: StrictFactory + process deadline + durable store + TLS/SCRAM/private CAS PASS")
+    print(
+        "Synthetic hardened application stack: success + lease/trust/name fail-closed + bounded lock deadline PASS"
+    )
 
 
 if __name__ == "__main__":
