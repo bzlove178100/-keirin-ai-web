@@ -204,14 +204,6 @@ def _run_client(network, image_id, ca_path, ca_sha, server_id, server_name, serv
             subprocess.run(["docker", "rm", "--force", identity], capture_output=True, timeout=30)
 
 
-def _restore_client_ca_owner(path, uid, gid):
-    subprocess.run([
-        "docker", "run", "--rm", "--user", "root",
-        "--mount", f"type=bind,src={path},dst=/ca.crt",
-        IMAGE, "-c", "import os; os.chown('/ca.crt'," + str(uid) + "," + str(gid) + ")",
-    ], capture_output=True, timeout=30)
-
-
 def main():
     if os.environ.get("AGENT_EPHEMERAL_TLS_TEST") != "1":
         raise SystemExit("refusing_non_ephemeral_application_stack_composition")
@@ -219,8 +211,6 @@ def main():
     network = "synthetic-app-stack-" + uuid4().hex[:12]
     server_name = "synthetic-app-stack-db-" + uuid4().hex[:12]
     server_id = None
-    client_ca = None
-    original_uid, original_gid = os.getuid(), os.getgid()
     with tempfile.TemporaryDirectory(prefix="synthetic-app-stack-") as temporary:
         directory = Path(temporary)
         directory.chmod(0o755)
@@ -234,7 +224,7 @@ def main():
             image_data = json.loads(command(["docker", "image", "inspect", IMAGE]))[0]
             image_id = verify_image_provenance(image_data)
             command([
-                "docker", "run", "--rm", "--user", "root",
+                "docker", "run", "--rm", "--user", "root", "--entrypoint", LAUNCHER,
                 "--mount", f"type=bind,src={client_ca},dst=/ca.crt", IMAGE,
                 "-c", "import os; os.chown('/ca.crt',65534,65534); os.chmod('/ca.crt',0o644)",
             ])
@@ -280,13 +270,8 @@ def main():
                 subprocess.run(["docker", "rm", "--force", "--volumes", server_id],
                                capture_output=True, timeout=30)
             subprocess.run(["docker", "network", "rm", network], capture_output=True, timeout=30)
-            if client_ca and client_ca.exists():
-                _restore_client_ca_owner(client_ca, original_uid, original_gid)
-            try:
-                if command(["docker", "network", "ls", "--quiet", "--filter", "name=^" + network + "$"]):
-                    raise RuntimeError("synthetic_app_stack_network_cleanup_failed")
-            except RuntimeError:
-                raise
+            if command(["docker", "network", "ls", "--quiet", "--filter", "name=^" + network + "$"]):
+                raise RuntimeError("synthetic_app_stack_network_cleanup_failed")
 
     print("Synthetic hardened application stack: StrictFactory + process deadline + durable store + TLS/SCRAM/private CAS PASS")
 
