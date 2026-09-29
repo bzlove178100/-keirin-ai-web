@@ -1,11 +1,15 @@
 # Staging secret backend: Vault with transactional version fencing
 
-Reviewed: 2026-09-27 (Asia/Tokyo).
-Status: **selected for an offline prototype; real-secret activation blocked**.
+Reviewed: 2026-09-29 (Asia/Tokyo).
+Status: **candidate selected; synthetic stack qualified through PR #131; review-only migration package prepared; real-secret activation blocked**.
 
 This is the concrete follow-on to `REAL_AUTH_INTEGRATION_REQUIREMENTS.md`. It selects
 a candidate and specifies its implementation boundary. It does not create roles,
 change grants, store secrets, deploy a function, or authorize a provider refresh.
+
+The current migration-planning boundary is documented in
+`STAGING_SECRET_BACKEND_MIGRATION_REVIEW.md`. That package is review-only; no real Vault
+migration, host login, password, refresh credential or provider binding has been applied.
 
 ## 1. Decision and evidence
 
@@ -32,7 +36,7 @@ warns that access to the decrypted view permits reading plaintext. [S1]
 
 ### Read-only staging observations
 
-Catalog checks on the authorized staging project at this review found:
+Catalog checks on the authorized staging project at the 2026-09-27 review found:
 
 | Observation | Result |
 | --- | --- |
@@ -48,15 +52,17 @@ These are object privileges, not a complete exploitability assessment. Schema ac
 inherited roles, API exposure and other functions also matter. No Vault rows, names,
 values, keys or counts were read. `ops/credential_vault_inventory.sql` is the repeatable
 catalog-only inventory for subsequent reviews; it is not a readiness certificate.
+`ops/staging_secret_backend_preflight.sql` now adds a broader review-only catalog/config
+inventory for the next evidence refresh. Neither query authorizes a migration.
 
-The current service-role access fails this design's dedicated-host isolation target.
+The observed service-role access fails this design's dedicated-host isolation target.
 Do not store agent refresh secrets in this Vault until effective access is restricted
 and regression-tested. Review dependencies before changing project-wide Vault grants.
 If those grants cannot safely be restricted, use a separately approved isolated backend.
 
 The changelog announces a PostgreSQL minor-version rollout after the observed version.
 Recheck supported patch level and relevant upgrade prerequisites before activation;
-this change does not upgrade the project or claim it is affected by a specific defect. [S6]
+this design does not upgrade the project or claim it is affected by a specific defect. [S6]
 
 ## 2. Host identity and private boundary
 
@@ -107,9 +113,13 @@ the project administrator password or service-role API key into this adapter.
 
 Use a private metadata row keyed by the existing opaque binding key. Store exact schema,
 provider/account/capability binding, version, state, generation, attempt identifiers,
-fixed failure classification and an optional Vault secret UUID. The refresh value exists
-only in Vault and transient host memory. Vault names/descriptions contain no identity,
-token or provider payload. A raw secret UUID is never accepted from a runtime caller.
+fixed failure classification and an optional Vault secret reference. The refresh value
+exists only in Vault and transient host memory. Vault names/descriptions contain no identity,
+token or provider payload. A raw secret identifier is never accepted from a runtime caller.
+
+Do not hard-code the hosted Vault secret-reference type from the historical observation.
+The next catalog preflight must confirm the current extension schema and function signatures
+before exact migration DDL is drafted.
 
 Enforce uniqueness of the metadata binding and non-null Vault reference; one Vault entry
 must not be shared across bindings. Enforce integer ranges, field allowlists and state
@@ -166,13 +176,13 @@ Before any real credential is provisioned, provide evidence for each item:
 
 | Gate | Required evidence | Current status |
 | --- | --- | --- |
-| Effective host isolation | ACL/membership tests and denied reads/calls for API roles and other bindings; reviewed existing Vault dependencies | Blocked by observed service-role privileges |
+| Effective host isolation | ACL/membership tests and denied reads/calls for API roles and other bindings; reviewed existing Vault dependencies | Blocked by observed service-role privileges; refresh evidence before migration DDL |
 | Root key lifecycle | Supported key rotation/re-encryption, rollback and compromise procedure, with a synthetic rehearsal | Unverified |
 | Backup/restore | Same-project and cross-project recovery procedure; old refresh values never silently resume | Unverified |
 | Bootstrap host credential | Approved host facility and rotation procedure; no repository/CI-output exposure | Unconfigured |
-| Logging and telemetry | Synthetic canary scan of SQL statements, bind parameters, errors, audit logs, tracing and host output | Unverified |
-| Target runtime | Supported patched Postgres/extension versions, verified TLS endpoint and stable session identity | Not fully verified |
-| Atomicity and faults | Two real sessions/processes, rollback between Vault and metadata changes, lost commit acknowledgement, restart and revoke races | Unverified for Vault |
+| Logging and telemetry | Synthetic canary scan of SQL statements, bind parameters, errors, audit logs, tracing and host output | Synthetic local/container evidence exists; real platform custody unverified |
+| Target runtime | Supported patched Postgres/extension versions, verified TLS endpoint and stable session identity | Historical versions observed; fresh staging inventory required |
+| Atomicity and faults | Two real sessions/processes, rollback between Vault and metadata changes, lost commit acknowledgement, restart and revoke races | Synthetic PostgreSQL/app stack qualified; unverified for hosted Vault |
 
 Vault key portability documented by Supabase does **not** establish a safe in-place key
 rotation procedure. Copying/replacing a root key is not a substitute for re-encryption.
@@ -188,36 +198,46 @@ access, and treat provider-side revocation as a separate, confirmed operation.
 
 ## 6. Implementation sequence and acceptance
 
-1. Implement private SQL read/CAS and ACL contracts in an isolated local PostgreSQL fixture,
-   with synthetic Vault functions and explicit rollback/fault cases. This verifies SQL
-   behavior only and cannot certify encryption or the hosted extension.
-2. Implement a host adapter with injected connection creation, bounded I/O, strict returned
-   records, fixed errors and no automatic retries; pin any new driver dependency.
-3. Review the real extension version/functions, grant changes and operational gates above.
-   Prepare a separate staging migration only after that review; no automatic deployment.
-4. Run isolated staging tests with synthetic secrets before real credentials. Prove all
-   metadata/secret updates roll back together and the dedicated role cannot read other data.
-5. Close the operational gates, then separately consider provisioning and authentication-only
-   refresh tests. Hosted tasks, scheduler, provider generation/write and reports remain
-   separate activation boundaries under `REAL_AUTH_INTEGRATION_REQUIREMENTS.md`.
+The original local implementation slice is now complete at the **synthetic** boundary.
+Repository evidence through PR #131 includes full refresh-record validation, independent
+PostgreSQL CAS behavior, bounded host adapter/process deadlines, verify-full TLS, strict
+bootstrap lease fencing, hardened-container composition, fail-closed trust/lease/hostname
+negative cases and a real row-lock/process-deadline ambiguity case. This does not certify
+hosted Vault encryption, grants, key lifecycle, platform logs or a real bootstrap facility.
 
-### Initial SQL/ACL prototype
+Next sequence:
 
-`tests/support/vault_postgres_contract.sql` and
-`tests/vault_postgres_contract_cases.sql` implement the initial local fixture from step 1.
-`tests/run_vault_postgres_contract.py` accepts only the explicit ephemeral CI database
-configuration and wraps setup/tests in a transaction that is rolled back.
+1. Review `STAGING_SECRET_BACKEND_MIGRATION_REVIEW.md` and the read-only
+   `ops/staging_secret_backend_preflight.sql`. Merge review artifacts only after normal CI;
+   merging them does not authorize any live staging action.
+2. Obtain a fresh **read-only** staging catalog/configuration inventory before drafting DDL.
+   Confirm current PostgreSQL/Vault versions, exact Vault function signatures/owners,
+   effective role memberships/privileges, proposed-name conflicts and Data API exposure.
+3. Based on that evidence, prepare a separate timestamped migration PR with exact role,
+   schema, table, policy, function, grant/revoke and rollback SQL. Do not auto-apply it and
+   include no password or real secret.
+4. Only after explicit staging-apply authorization, apply that reviewed DDL with no secret
+   rows and run identity/ACL/catalog checks.
+5. In a separate phase, use synthetic hosted Vault values to prove real-backend concurrency,
+   rollback, ambiguous-write, restart and revoke behavior before any real credential.
+6. Close the operational gates, then separately consider real credential provisioning and
+   authentication-only refresh tests. Hosted tasks, scheduler, provider generation/write
+   and reports remain separate activation boundaries under
+   `REAL_AUTH_INTEGRATION_REQUIREMENTS.md`.
 
-The fixture uses plaintext **synthetic markers** in a `synthetic_vault` table. Its reduced
-record contains version/state/secret only. It tests database-login identity, per-binding
-authorization, denied direct table/API access, stale CAS, atomic rollback in both update
-orders, and terminal revocation. It is not a deployable Vault adapter or a complete
-`RefreshSecretRecord` SQL validator. Session identities are changed in one isolated test
-connection; this does not establish simultaneous independent-session CAS behavior.
+### Current synthetic SQL/ACL evidence
 
-**Next code slice:** complete raw-record validation (binding identity, capabilities,
-generation/attempt/failure fields) and independent-session CAS tests, then the bounded
-host adapter. Real extension encryption, key lifecycle and deployment gates remain open.
+`tests/support/vault_postgres_contract.sql` and the associated contract cases remain a
+**synthetic fixture**, not deployable migration SQL. The fixture now models the complete
+refresh-record field set, dedicated host identities, per-binding mapping, denied direct
+Vault/table access, strict replacement validation, row locking, stale CAS, rollback/fault
+behavior and revocation using `SYNTHETIC:` values only.
+
+The co-resident hardened application tests use that private contract to exercise the actual
+application stack. They deliberately do not prove Supabase Vault encryption, real hosted
+function signatures, hosted ACLs, root-key handling, provider refresh semantics or final
+production psycopg/libpq packaging.
+
 Existing PR #97 SQLite evidence applies only to that test backend.
 
 ## Sources checked

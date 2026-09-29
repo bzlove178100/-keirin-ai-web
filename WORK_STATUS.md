@@ -26,18 +26,25 @@ Agent-only checkpoint/activity persistence and queue coordination in staging wer
 
 ## Verified repository state
 
-Current verified functional main through PR #131:
+Current verified functional baseline through PR #131:
 
 `1c6d3e84632fa451629738d0720ad4f029599a23`
 
-PR #131 (`Qualify hardened application row-lock deadline`) merged after all exact-head PR workflows passed. Its post-merge main workflows also passed:
+PR #131 (`Qualify hardened application row-lock deadline`) merged after all exact-head PR workflows passed. Its post-merge main workflows also passed.
 
+Documentation synchronization PR #132 then merged to main as:
+
+`0c6fa49b289122178221a35b8e768e49c0109a1f`
+
+Its post-merge main checks also passed, including:
+
+- `agent runtime read-only smoke`;
 - `keirin-ai regression`;
 - `collection progress UI regression`;
 - `agent checkpoint PostgreSQL contract`;
 - Pages build/deployment.
 
-The PostgreSQL contract now includes the co-resident actual application stack, fail-closed lease/trust/hostname rejection cases, the real row-lock/process-deadline case, host limits, raw authenticated composition, TLS/restart recovery, PostgreSQL log-policy checks and pgAudit parameter-redaction checks.
+The PostgreSQL contract includes the co-resident actual application stack, fail-closed lease/trust/hostname rejection cases, the real row-lock/process-deadline case, host limits, raw authenticated composition, TLS/restart recovery, PostgreSQL log-policy checks and pgAudit parameter-redaction checks.
 
 Do not treat a later functional main SHA as verified until its required workflows are checked again.
 
@@ -45,7 +52,7 @@ Do not treat a later functional main SHA as verified until its required workflow
 
 Authorized staging project: `keirin-ai-staging` (`omamgmyyqnawlagbemcm`).
 
-Last bounded read-only staging verification remains from the authentication-boundary work; no new live run was started in PR #101-#131 work:
+Last bounded read-only staging verification remains from the authentication-boundary work; no new live run was started in PR #101-#132 work:
 
 - single-active trusted-run guard: present;
 - fresh trusted tasks observed then `queued` / `running`: 0;
@@ -90,6 +97,12 @@ PR #101-#106 added and qualified the bounded host adapter stack:
 - reviewed CA SHA-256, sealed Linux memfd trust snapshot and bootstrap credential version/expiry/revocation fencing.
 
 No live endpoint, live bootstrap secret, Vault migration or production factory is bound.
+
+A **review-only** staging migration package is now prepared in
+`STAGING_SECRET_BACKEND_MIGRATION_REVIEW.md` with a catalog-only preflight query in
+`ops/staging_secret_backend_preflight.sql`. Neither file is a migration and neither applies
+or authorizes database changes. No file for this package has been added under
+`supabase/migrations`.
 
 ## Host/process hardening and recovery qualification
 
@@ -147,17 +160,20 @@ The recorded first eligible prospective sample is 2026-09-24 Ito Onsen 1R (7 rid
 
 ## Next work / next boundary
 
-The planned synthetic co-resident application-stack slice is now complete through fail-closed lease/trust/hostname rejection and bounded row-lock/process-deadline behavior. More CI cases should be added only for a distinct, identified gap rather than to accumulate duplicate evidence.
+The planned synthetic co-resident application-stack slice is complete through fail-closed lease/trust/hostname rejection and bounded row-lock/process-deadline behavior. More CI cases should be added only for a distinct, identified gap rather than to accumulate duplicate evidence.
+
+The review-only staging migration package is prepared. It defines intended schema/role/grant boundaries, bootstrap-credential ownership/rotation/revocation requirements, trust/pin lifecycle, rollback, observation and hard blockers. Its preflight SQL is catalog/configuration-only and deliberately avoids Vault/application rows.
 
 Preferred order:
 
 1. keep exact-head CI and post-merge main verification as merge gates;
-2. synchronize this status/review documentation after functional security changes;
-3. prepare a **review-only** staging migration package for a real durable backend: intended schema/grants, bootstrap-credential ownership, rotation/revocation procedure, trust/pin lifecycle, rollback and observation plan. Do not apply the migration or bind a credential during the review change;
-4. keep platform/host log custody and production administrator/root/kernel claims open until the selected deployment can provide real evidence; do not simulate them in CI;
-5. keep host reboot/power-loss and production supervisor behavior open until an environment can produce representative evidence;
-6. only after the operational gates and migration review are explicitly approved, perform a separate staging migration. Do not combine migration, credential activation and hosted task execution in one change;
-7. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
+2. merge the review-only package only if its CI is clean; this merge itself authorizes no live staging action;
+3. before drafting actual migration DDL, obtain a **fresh read-only staging catalog inventory** for PostgreSQL/Vault versions, exact Vault function signatures/owners, role memberships and effective privileges. Treat this as a separate live staging evidence step rather than silently executing it during code review;
+4. use that refreshed evidence to draft a separate timestamped migration PR with exact DDL and rollback, still without a password or real secret and still without automatic apply;
+5. keep platform/host log custody and production administrator/root/kernel claims open until the selected deployment can provide real evidence; do not simulate them in CI;
+6. keep host reboot/power-loss and production supervisor behavior open until an environment can produce representative evidence;
+7. only after the operational gates and migration review are explicitly approved, perform a separate staging migration. Do not combine migration, credential activation and hosted task execution in one change;
+8. keep live hosted execution, long-lived host, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery disabled until separately authorized.
 
 No race screenshots or owner credential resend is needed for the current code-only/review-only work.
 
