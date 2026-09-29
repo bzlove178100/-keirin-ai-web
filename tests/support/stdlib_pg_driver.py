@@ -185,7 +185,7 @@ class Cursor:
             raise RuntimeError("synthetic_driver_cursor_closed")
         if type(sql) is not str or not isinstance(params, (tuple, list)):
             raise ValueError("synthetic_driver_query_invalid")
-        self._rows = _query(self._connection._stream, sql, tuple(params))
+        self._rows = self._connection._execute(sql, tuple(params))
         self._index = 0
         return self
 
@@ -210,21 +210,42 @@ class Connection:
     def __init__(self, stream):
         self._stream = stream
         self._closed = False
+        self._in_transaction = False
 
     def cursor(self):
         if self._closed:
             raise RuntimeError("synthetic_driver_connection_closed")
         return Cursor(self)
 
+    def _execute(self, sql, params):
+        if self._closed:
+            raise RuntimeError("synthetic_driver_connection_closed")
+        # Real psycopg with autocommit=False opens an explicit transaction before
+        # the first statement. The fixture must model that boundary faithfully:
+        # otherwise a CAS statement can autocommit on the server even if the child
+        # process is killed before PostgresSecretBackend reaches connection.commit().
+        if not self._in_transaction:
+            _query(self._stream, "BEGIN", ())
+            self._in_transaction = True
+        return _query(self._stream, sql, params)
+
     def commit(self):
         if self._closed:
             raise RuntimeError("synthetic_driver_connection_closed")
+        if not self._in_transaction:
+            return
         _query(self._stream, "COMMIT", ())
+        self._in_transaction = False
 
     def rollback(self):
         if self._closed:
             raise RuntimeError("synthetic_driver_connection_closed")
-        _query(self._stream, "ROLLBACK", ())
+        if not self._in_transaction:
+            return
+        try:
+            _query(self._stream, "ROLLBACK", ())
+        finally:
+            self._in_transaction = False
 
     def close(self):
         if self._closed:
