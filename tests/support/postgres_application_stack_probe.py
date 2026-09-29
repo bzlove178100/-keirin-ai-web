@@ -1,4 +1,5 @@
 """Synthetic co-resident application secret-stack probe for the hardened client."""
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 import multiprocessing
@@ -17,13 +18,19 @@ from agent_core.postgres_host_factory import StrictPostgresConnectionFactory
 from agent_core.postgres_host_profile import PostgresHostProfile
 from agent_core.postgres_secret_process import ProcessDeadlinePostgresSecretBackend
 from agent_core.refresh_credentials import CredentialBinding
-from agent_core.versioned_secret_store import SecretStoreConflict
+from agent_core.versioned_secret_store import (
+    SecretStoreAmbiguousWrite,
+    SecretStoreConflict,
+    SecretStoreError,
+)
 from support.stdlib_pg_driver import connect as stdlib_connect
 
 BINDING = CredentialBinding("provider-a", "account-a", ("read:one", "write:one"))
 PASSWORD_FILE = Path("/tmp/bootstrap-password")
 VERSION_FILE = Path("/tmp/bootstrap-version")
 GATE = Path("/tmp/app-stack-go")
+LOCK_READY = Path("/tmp/app-stack-lock-ready")
+LOCK_GO = Path("/tmp/app-stack-lock-go")
 
 
 def _required(name):
@@ -44,22 +51,37 @@ def _profile():
     )
 
 
+def _bootstrap_mode():
+    mode = os.environ.get("SYNTHETIC_BOOTSTRAP_MODE", "normal")
+    if mode not in {"normal", "expired", "stale", "revoked"}:
+        raise RuntimeError("synthetic_app_stack_bootstrap_mode_invalid")
+    return mode
+
+
 def _password_source():
     profile = _profile()
     password = PASSWORD_FILE.read_text()
     version = int(VERSION_FILE.read_text())
     if password != "SYNTHETIC:tls-ci-only" or version != 1:
         raise RuntimeError("synthetic_app_stack_bootstrap_invalid")
+    mode = _bootstrap_mode()
+    expires_at = int(time.time()) - 1 if mode == "expired" else int(time.time()) + 60
     return BootstrapPasswordLease(
-        profile.login, profile.database, version, int(time.time()) + 60, password
+        profile.login, profile.database, version, expires_at, password
     )
 
 
 def _lease_is_current(version):
     try:
-        return version == int(VERSION_FILE.read_text()) == 1
+        configured = int(VERSION_FILE.read_text())
     except (OSError, ValueError):
         return False
+    mode = _bootstrap_mode()
+    if mode == "revoked":
+        return False
+    if mode == "stale":
+        configured += 1
+    return version == configured == 1
 
 
 def strict_connection_factory(**limits):
@@ -74,34 +96,76 @@ def strict_connection_factory(**limits):
     )(**limits)
 
 
-def _store():
+def _store(*, operation_timeout_ms=8000, statement_timeout_ms=4000, lock_timeout_ms=1000):
     return DurableVersionedSecretStore(
         ProcessDeadlinePostgresSecretBackend(
             strict_connection_factory,
             BINDING,
-            operation_timeout_ms=8000,
+            operation_timeout_ms=operation_timeout_ms,
             connect_timeout_seconds=3,
-            statement_timeout_ms=4000,
-            lock_timeout_ms=1000,
+            statement_timeout_ms=statement_timeout_ms,
+            lock_timeout_ms=lock_timeout_ms,
         )
     )
 
 
-def _wait_for_release():
-    deadline = time.monotonic() + 10
-    while not GATE.exists():
+def _expect_fixed(error_type, message, action):
+    try:
+        action()
+    except error_type as error:
+        if (type(error) is not error_type or str(error) != message
+                or error.__context__ is not None or error.__cause__ is not None):
+            raise RuntimeError("synthetic_app_stack_error_contract_invalid") from None
+        return
+    raise RuntimeError("synthetic_app_stack_expected_failure_missing")
+
+
+@contextmanager
+def _temporary_environment(**updates):
+    original = {key: os.environ.get(key) for key in updates}
+    try:
+        for key, value in updates.items():
+            os.environ[key] = value
+        yield
+    finally:
+        for key, value in original.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+def _wait_for(path, error):
+    deadline = time.monotonic() + 12
+    while not path.exists():
         if time.monotonic() >= deadline:
-            raise RuntimeError("synthetic_app_stack_release_timeout")
+            raise RuntimeError(error)
         time.sleep(0.02)
+
+
+def _wait_for_release():
+    _wait_for(GATE, "synthetic_app_stack_release_timeout")
     if not PASSWORD_FILE.is_file() or not VERSION_FILE.is_file():
         raise RuntimeError("synthetic_app_stack_bootstrap_missing")
+
+
+def _assert_no_child_leak(before_children):
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if {child.pid for child in multiprocessing.active_children()} == before_children:
+            return
+        time.sleep(0.02)
+    raise RuntimeError("synthetic_app_stack_child_not_reaped")
 
 
 def main():
     if os.environ.get("SYNTHETIC_POSTGRES_APP_STACK_PROBE") != "1":
         raise RuntimeError("synthetic_app_stack_gate_required")
-    if _required("SYNTHETIC_DB_USER") != "secret_test_host_a" or _required("SYNTHETIC_DB_NAME") != "agent_checkpoint_ci":
+    if (_required("SYNTHETIC_DB_USER") != "secret_test_host_a"
+            or _required("SYNTHETIC_DB_NAME") != "agent_checkpoint_ci"):
         raise RuntimeError("synthetic_app_stack_identity_invalid")
+    _required("SYNTHETIC_WRONG_DB_CA")
+    _required("SYNTHETIC_WRONG_DB_CA_SHA256")
     _wait_for_release()
     before_children = {child.pid for child in multiprocessing.active_children()}
     try:
@@ -122,28 +186,79 @@ def main():
         if stored != candidate or _store().read(BINDING) != candidate:
             raise RuntimeError("synthetic_app_stack_cas_readback_invalid")
 
-        try:
-            _store().compare_and_swap(BINDING, expected_version=0, replacement=candidate)
-        except SecretStoreConflict as error:
-            if (type(error) is not SecretStoreConflict
-                    or str(error) != "secret_store_version_conflict"
-                    or error.__context__ is not None or error.__cause__ is not None):
-                raise RuntimeError("synthetic_app_stack_conflict_contract_invalid") from None
-        else:
-            raise RuntimeError("synthetic_app_stack_stale_cas_accepted")
-
+        _expect_fixed(
+            SecretStoreConflict,
+            "secret_store_version_conflict",
+            lambda: _store().compare_and_swap(
+                BINDING, expected_version=0, replacement=candidate
+            ),
+        )
         if _store().read(BINDING) != candidate:
             raise RuntimeError("synthetic_app_stack_stale_cas_mutated")
-        if {child.pid for child in multiprocessing.active_children()} != before_children:
-            raise RuntimeError("synthetic_app_stack_child_not_reaped")
+
+        for mode in ("expired", "stale", "revoked"):
+            with _temporary_environment(SYNTHETIC_BOOTSTRAP_MODE=mode):
+                _expect_fixed(
+                    SecretStoreError,
+                    "secret_store_backend_unavailable",
+                    lambda: _store().read(BINDING),
+                )
+            if _store().read(BINDING) != candidate:
+                raise RuntimeError("synthetic_app_stack_lease_failure_mutated")
+
+        with _temporary_environment(SYNTHETIC_DB_HOST="wrong.synthetic.invalid"):
+            _expect_fixed(
+                SecretStoreError,
+                "secret_store_backend_unavailable",
+                lambda: _store().read(BINDING),
+            )
+        if _store().read(BINDING) != candidate:
+            raise RuntimeError("synthetic_app_stack_wrong_hostname_mutated")
+
+        with _temporary_environment(
+            SYNTHETIC_DB_CA=_required("SYNTHETIC_WRONG_DB_CA"),
+            SYNTHETIC_DB_CA_SHA256=_required("SYNTHETIC_WRONG_DB_CA_SHA256"),
+        ):
+            _expect_fixed(
+                SecretStoreError,
+                "secret_store_backend_unavailable",
+                lambda: _store().read(BINDING),
+            )
+        if _store().read(BINDING) != candidate:
+            raise RuntimeError("synthetic_app_stack_wrong_trust_mutated")
+
+        LOCK_READY.write_text("ready")
+        _wait_for(LOCK_GO, "synthetic_app_stack_lock_release_timeout")
+        blocked_candidate = replace(
+            candidate,
+            version=2,
+            refresh_secret="SYNTHETIC:must-not-commit",
+        )
+        _expect_fixed(
+            SecretStoreAmbiguousWrite,
+            "secret_store_write_ambiguous",
+            lambda: _store(
+                operation_timeout_ms=1500,
+                statement_timeout_ms=6000,
+                lock_timeout_ms=5000,
+            ).compare_and_swap(
+                BINDING, expected_version=1, replacement=blocked_candidate
+            ),
+        )
+        if _store().read(BINDING) != candidate:
+            raise RuntimeError("synthetic_app_stack_deadline_mutated")
+        _assert_no_child_leak(before_children)
     finally:
-        for path in (PASSWORD_FILE, VERSION_FILE, GATE):
+        for path in (PASSWORD_FILE, VERSION_FILE, GATE, LOCK_READY, LOCK_GO):
             try:
                 path.unlink()
             except FileNotFoundError:
                 pass
 
-    print("synthetic_postgres_application_stack_ok", flush=True)
+    print(
+        "synthetic_postgres_application_stack_ok:read-cas,lease-failclosed,wrong-name,wrong-trust,deadline",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
