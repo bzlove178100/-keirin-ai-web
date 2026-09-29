@@ -26,16 +26,18 @@ Agent-only checkpoint/activity persistence and queue coordination in staging wer
 
 ## Verified repository state
 
-Current verified main through PR #125:
+Current verified main through PR #127:
 
-`1293aea494a840cba92cac364e24ade9f818dee7`
+`5d1d58c6da24ac45e4010388aaa0129b20dc842a`
 
-PR #125 (`Qualify authenticated secret operations in hardened host composition`) merged after all exact-head PR workflows passed. Its four post-merge main workflows also passed:
+PR #127 (`Qualify actual secret application stack in hardened client`) merged after all exact-head PR workflows passed. Its four post-merge main workflows also passed:
 
 - `keirin-ai regression`;
 - `collection progress UI regression`;
 - `agent checkpoint PostgreSQL contract`;
 - Pages build/deployment.
+
+The PostgreSQL contract run includes the new co-resident hardened application-stack test plus the existing host limits, raw authenticated composition, TLS/restart recovery, PostgreSQL log-policy and pgAudit checks.
 
 Do not treat a later main SHA as verified until its required workflows are checked again.
 
@@ -43,7 +45,7 @@ Do not treat a later main SHA as verified until its required workflows are check
 
 Authorized staging project: `keirin-ai-staging` (`omamgmyyqnawlagbemcm`).
 
-Last bounded read-only staging verification remains from the authentication-boundary work; no new live run was started in PR #101-#125 work:
+Last bounded read-only staging verification remains from the authentication-boundary work; no new live run was started in PR #101-#127 work:
 
 - single-active trusted-run guard: present;
 - fresh trusted tasks observed then `queued` / `running`: 0;
@@ -106,9 +108,10 @@ Merged synthetic/code-only qualification now covers:
 - PR #119: PostgreSQL TLS handshake composed inside the hardened client/container and exact internal network, with valid CA/name positive control and wrong-name/wrong-CA rejection;
 - PR #120: Docker daemon restart on the exercised GitHub-hosted Linux/systemd profile with exact reconciliation and no target resurrection;
 - PR #123: actual pgAudit parameter-redaction behavior in a disposable PostgreSQL 17.11/bookworm profile;
-- PR #125: authenticated PostgreSQL secret operations inside the exact hardened client/container and internal-network composition. Exact network membership is verified before synthetic bootstrap handoff or the first client socket. A stdlib TLS/SCRAM-SHA-256 client authenticates as the dedicated synthetic login, performs mapped private `read_binding` and CAS, proves cross-binding denial, verifies stale-CAS conflict without replay, and confirms durable read-back while the unrelated binding remains unchanged.
+- PR #125: authenticated PostgreSQL secret operations inside the exact hardened client/container and internal-network composition, including mapped private read/CAS, cross-binding denial, stale-CAS conflict and durable read-back;
+- PR #127: the actual application secret stack now runs co-resident inside the approved immutable hardened client. `StrictPostgresConnectionFactory` + `ProcessDeadlinePostgresSecretBackend` + `PostgresSecretBackend` + `DurableVersionedSecretStore` execute against the disposable private SQL contract with the real opaque binding key. The test verifies strict CA snapshot/sealing and bootstrap-lease checks, TLS/SCRAM authentication, strict connection/log-policy preflight, initial read, versioned CAS, fresh durable read-back, stale-CAS conflict without replay, unrelated-binding preservation and child/session cleanup.
 
-PR #125 closes the previous transport/auth/private-SQL composition gap, but it intentionally does **not** claim that the application `StrictPostgresConnectionFactory` + `ProcessDeadlinePostgresSecretBackend` stack itself runs inside that exact immutable client image. Those application components remain separately qualified by their existing PostgreSQL/TLS/process tests.
+PR #127 uses a **test-only stdlib PostgreSQL protocol shim** inside the immutable Python image so the test does not bind-mount ambient host site-packages or install an unpinned runtime dependency. Existing psycopg/libpq process/TLS tests remain the separate evidence for the intended production-driver behavior. The shim is not a production driver, and PR #127 does not prove final deployment packaging of psycopg/libpq.
 
 PR #120 remains limited to the exercised GitHub-hosted Linux/systemd Docker-daemon profile. It does not prove machine reboot, power-loss, kernel-panic or hostile-root recovery.
 
@@ -127,7 +130,7 @@ Still unqualified or deployment-specific:
 - real Vault encryption/key lifecycle and current staging Vault grant remediation;
 - production/root/kernel/ptrace/swap and operator custody;
 - host reboot/power-loss recovery and production deployment supervisor behavior;
-- actual application strict-factory/process-backend execution inside the final hardened immutable container composition;
+- final deployment packaging/provenance of the intended PostgreSQL driver and its native dependencies;
 - deployment DNS/address lifecycle and trust/pin distribution.
 
 Synthetic evidence must not be described as end-to-end platform or production qualification.
@@ -145,7 +148,7 @@ Code-only work may continue without another live-run authorization.
 Preferred order:
 
 1. keep exact-head CI and post-merge main verification as merge gates;
-2. if it can be done without weakening the immutable-image/launcher boundary, qualify the real application strict-factory/process-backend composition inside an equivalently hardened disposable client; do not solve this by bind-mounting ambient host site-packages or by unpinned runtime installs;
+2. extend the PR #127 co-resident hardened application-stack evidence only where it adds new information: fail-closed stale/revoked/expired bootstrap leases, wrong trust/hostname, and bounded lock/deadline behavior under the same hardened container are appropriate synthetic targets; do not duplicate already-qualified cases without a distinct composition claim;
 3. keep platform/host log custody and production administrator/root/kernel claims open until the selected deployment can provide real evidence; do not simulate them in CI;
 4. keep host reboot/power-loss and production supervisor behavior open until an environment can produce representative evidence;
 5. after documented operational gates are closed, prepare a **separate** staging migration/review for a real backend. Do not combine migration, credentials and task execution in one change;

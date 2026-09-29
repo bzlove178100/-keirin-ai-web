@@ -6,8 +6,8 @@ Updated: 2026-09-29 (Asia/Tokyo)
 
 ## Verified base
 
-Current verified main is PR #125 merge `1293aea494a840cba92cac364e24ade9f818dee7`.
-Its post-merge `keirin-ai regression`, collection UI, PostgreSQL/host contract and Pages workflows all passed. Production prediction, prediction DB writes, automatic external race-data fetching, hosted task/provider execution, scheduler/recurrence, provider write/generation and live report delivery remain disabled.
+Current verified main is PR #127 merge `5d1d58c6da24ac45e4010388aaa0129b20dc842a`.
+Its post-merge `keirin-ai regression`, collection UI, PostgreSQL/host contract and Pages workflows all passed. The PostgreSQL/host run includes the co-resident application stack, raw authenticated composition, existing TLS/restart recovery, log-policy and pgAudit checks. Production prediction, prediction DB writes, automatic external race-data fetching, hosted task/provider execution, scheduler/recurrence, provider write/generation and live report delivery remain disabled.
 
 ## Connection and secret-backend boundary
 
@@ -28,23 +28,36 @@ The synthetic PostgreSQL 17 path qualifies these code-only controls:
 - PostgreSQL TLS from the hardened client composition with hostname/CA negative controls;
 - Docker-daemon restart recovery on the exercised GitHub-hosted Linux/systemd profile;
 - actual pgAudit parameter-redaction behavior in the disposable qualified profile;
-- authenticated TLS/SCRAM-SHA-256 private secret read/CAS inside the exact hardened client/network composition.
+- authenticated TLS/SCRAM-SHA-256 private secret read/CAS inside the exact hardened client/network composition;
+- the actual application strict-factory/process-backend/durable-store chain executing co-resident inside the hardened immutable client.
 
 These controls are cumulative synthetic evidence. They do not select or authorize a live endpoint, credential source, secret migration or hosted execution path.
 
 ## Authenticated hardened-host composition
 
-PR #125 extends the PR #119 transport-only composition without adding a real credential or live endpoint.
+PR #125 extended the PR #119 transport-only composition without adding a real credential or live endpoint.
 
-The disposable client uses the already approved immutable Python image/launcher and the same hardened controls: 128 MiB memory with no additional swap, PID/CPU limits, read-only root, dropped capabilities, `no-new-privileges`, non-root identity, Docker log driver `none`, restart policy `no`, core limit zero, bounded tmpfs and read-only test/trust mounts.
+The disposable client uses the approved immutable Python image/launcher and hardened controls: 128 MiB memory with no additional swap, PID/CPU limits, read-only root, dropped capabilities, `no-new-privileges`, non-root identity, Docker log driver `none`, restart policy `no`, core limit zero, bounded tmpfs and read-only test/trust mounts.
 
 The client and disposable PostgreSQL server are the only members of the dedicated internal network. Exact membership is verified before either the synthetic bootstrap password is handed to the client or the client release marker permits its first database socket.
 
 The fixed synthetic password is passed only over Docker exec stdin into the client's tmpfs after that preflight; it is not placed in the container environment. A stdlib PostgreSQL v3 client performs TLS 1.2+ hostname/CA verification and SCRAM-SHA-256 authentication as `secret_test_host_a`.
 
-After authentication the probe verifies session/database/read-write/TLS identity, reads only its mapped private binding, proves the other binding is denied, performs a versioned CAS, confirms durable read-back, proves stale CAS returns the fixed conflict without replay, and verifies the unrelated binding is unchanged. The composed application-name session must be gone afterward.
+After authentication the raw probe verifies session/database/read-write/TLS identity, reads only its mapped private binding, proves the other binding is denied, performs a versioned CAS, confirms durable read-back, proves stale CAS returns the fixed conflict without replay, and verifies the unrelated binding is unchanged. The composed application-name session must be gone afterward.
 
-This closes the earlier authenticated transport/private-SQL composition gap. It does **not** prove that `StrictPostgresConnectionFactory` plus `ProcessDeadlinePostgresSecretBackend` itself is executing inside that exact immutable client image. Those application components remain separately qualified by the existing process/TLS/PostgreSQL tests. A later composition must preserve the immutable-image/launcher trust boundary; ambient host site-packages or unpinned runtime dependency installation are not acceptable substitutes.
+## Actual application-stack hardened composition
+
+PR #127 closes the prior co-residency gap while preserving the immutable-image/launcher boundary.
+
+Inside the same hardened client profile, the test runs the actual application classes:
+
+`StrictPostgresConnectionFactory -> ProcessDeadlinePostgresSecretBackend -> PostgresSecretBackend -> DurableVersionedSecretStore`.
+
+The private SQL fixture is remapped to the real opaque binding key produced by `DurableVersionedSecretStore.key_for(...)`. Synthetic bootstrap password/version material is handed into tmpfs only after exact two-member network verification. The strict factory then performs its existing reviewed-CA snapshot/sealing, bootstrap lease/current-version checks, TLS/SCRAM connection, identity/privilege/session/log-policy preflight and handoff before backend operations are allowed.
+
+The co-resident test proves initial durable read, versioned CAS, fresh read-back, fixed stale-version conflict without replay, preservation of the unrelated binding and process/database-session cleanup.
+
+To avoid either bind-mounting ambient host site-packages or installing an unpinned dependency into the approved immutable Python client, PR #127 uses a **test-only stdlib PostgreSQL protocol/DB-API shim** for this composition. The shim implements only the surface required by the real application classes. Existing pinned psycopg/libpq process/TLS/recovery tests remain the separate evidence for the intended production driver. The shim is not a production driver, and this composition does not by itself prove final deployment packaging/provenance of psycopg/libpq and native dependencies.
 
 ## Daemon restart and reconciliation
 
@@ -59,15 +72,15 @@ A later live factory must remain separately reviewed and operator-configured.
 | Boundary | Required behavior | Current status |
 | --- | --- | --- |
 | Destination | One operator-approved primary endpoint/database/port; no task-provided DSN, host lists or automatic failover | Real destination remains unconfigured |
-| Transport | verify-full TLS, immutable reviewed trust, approved hostname, bounded settings | Synthetic hardened transport/auth composition qualified; real endpoint/pin lifecycle unconfigured |
-| Database identity | Dedicated non-admin login; exact database/session identity; primary/read-write checks; no role switching | Synthetic direct-login and composed SCRAM session checks qualified; actual hosted grants remain a deployment gate |
-| Database privileges | Narrow read/CAS functions only; no direct secret-table access | Synthetic SQL/ACL and composed mapped-read/CAS evidence qualified; real Vault/database grants unqualified |
-| Bootstrap credential | Resolve only inside protected host execution from an approved facility; no admin/service-role secret, task input, repo file or command line | Synthetic post-membership tmpfs handoff is qualified only as fixture evidence; real host facility, ownership, rotation and revocation unconfigured |
+| Transport | verify-full TLS, immutable reviewed trust, approved hostname, bounded settings | Synthetic hardened transport/auth/application composition qualified; real endpoint/pin lifecycle unconfigured |
+| Database identity | Dedicated non-admin login; exact database/session identity; primary/read-write checks; no role switching | Synthetic direct-login and co-resident strict-factory checks qualified; actual hosted grants remain a deployment gate |
+| Database privileges | Narrow read/CAS functions only; no direct secret-table access | Synthetic SQL/ACL and co-resident opaque-key read/CAS evidence qualified; real Vault/database grants unqualified |
+| Bootstrap credential | Resolve only inside protected host execution from an approved facility; no admin/service-role secret, task input, repo file or command line | Synthetic post-membership tmpfs handoff and strict lease checks are fixture evidence only; real host facility, ownership, rotation and revocation unconfigured |
 | Trust/config custody | Controlled launcher, immutable image/trust files, clean environment, protected provisioning | Synthetic image/launcher/CA controls qualified; real host/root/kernel/operator custody unqualified |
-| Time/retries | One fresh bounded connection; no pool/background retry; no automatic replay after ambiguous writes | Synthetic deadline/lost-ack/recovery evidence qualified |
+| Time/retries | One fresh bounded connection; no pool/background retry; no automatic replay after ambiguous writes | Synthetic deadline/lost-ack/recovery evidence qualified; additional same-container negative/fault composition may add confidence |
 | Error/logging | Fixed outward codes; no secret-bearing connection string, SQL parameter, row or raw exception in persisted logs | Synthetic application/Docker/PostgreSQL/pgAudit evidence exists; platform/host custody still open |
 | Recovery | Authoritative read-back after ambiguous writes; exact cleanup/reconciliation; no blind replay | Synthetic DB/process/controller/daemon evidence exists; real provider/Vault and host reboot/power-loss recovery unqualified |
-| Application composition | Actual strict factory/process backend inside the final hardened immutable client boundary | Component tests and raw authenticated composition both pass separately; co-resident application-stack composition remains open |
+| Application composition | Actual strict factory/process backend/durable store inside hardened immutable client | Synthetic co-resident composition qualified by PR #127; final production-driver packaging/provenance remains separate |
 
 ## Remaining operational gates
 
@@ -78,8 +91,10 @@ Before any real secret-backend migration or provider refresh integration, eviden
 - platform/host log access, retention, restore and telemetry custody;
 - production root/kernel/ptrace/swap and administrator boundaries;
 - host reboot/power-loss and production supervisor/reconciler behavior;
-- actual strict-factory/process-backend execution inside an equivalently hardened immutable container composition;
+- final deployment packaging/provenance for the intended psycopg/libpq stack and native dependencies;
 - deployment-specific DNS/address lifecycle and trust/pin distribution.
+
+A bounded next synthetic slice may extend the same co-resident application composition with stale/revoked/expired bootstrap-lease rejection, wrong trust/hostname rejection and lock/deadline behavior. Such tests must add a distinct composition claim rather than merely repeat component coverage.
 
 A real-backend migration must be a separate reviewed change. Do not combine migration, credential activation and hosted task execution in one step.
 
