@@ -85,6 +85,11 @@ jobs:
         env:
           AGENT_EPHEMERAL_TLS_TEST: '1'
         run: env -u LD_LIBRARY_PATH python tests/run_application_stack_hardened_composition.py
+      - name: Test hardened application stack fail-closed rejection cases
+        timeout-minutes: 6
+        env:
+          AGENT_EPHEMERAL_TLS_TEST: '1'
+        run: env -u LD_LIBRARY_PATH python tests/run_application_stack_hardened_rejections.py
       - name: Test ephemeral PostgreSQL TLS, strict host and restart recovery
         timeout-minutes: 6
         env:
