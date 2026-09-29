@@ -26,11 +26,11 @@ Agent-only checkpoint/activity persistence and queue coordination in staging wer
 
 ## Verified repository state
 
-Current verified main through PR #123:
+Current verified main through PR #125:
 
-`e0e16b90a839782d6120f69660e75165fa853ff2`
+`1293aea494a840cba92cac364e24ade9f818dee7`
 
-PR #123 (`Qualify actual pgAudit parameter redaction behavior`) merged after all exact-head PR workflows passed. All four post-merge main workflows for that SHA also passed:
+PR #125 (`Qualify authenticated secret operations in hardened host composition`) merged after all exact-head PR workflows passed. Its four post-merge main workflows also passed:
 
 - `keirin-ai regression`;
 - `collection progress UI regression`;
@@ -43,7 +43,7 @@ Do not treat a later main SHA as verified until its required workflows are check
 
 Authorized staging project: `keirin-ai-staging` (`omamgmyyqnawlagbemcm`).
 
-Last bounded read-only staging verification remains from the authentication-boundary work; no new live run was started in PR #101-#123 work:
+Last bounded read-only staging verification remains from the authentication-boundary work; no new live run was started in PR #101-#125 work:
 
 - single-active trusted-run guard: present;
 - fresh trusted tasks observed then `queued` / `running`: 0;
@@ -102,17 +102,17 @@ Merged synthetic/code-only qualification now covers:
 - PR #114: approved immutable Python image digest plus fixed launcher;
 - PR #115: dedicated internal Docker network with exact membership and synthetic permitted-destination/blocked-egress evidence;
 - PR #116: effective PostgreSQL core log-policy checks and observed Bind-marker absence;
-- PR #117: auto_explain/pgAudit configuration preflight;
-- PR #118: correction requiring auto_explain plan logging itself to be disabled before secret handoff; real loaded-module synthetic positive control proves parameter-list suppression alone is insufficient because custom plans can contain bound constants;
-- PR #119: PostgreSQL TLS handshake composed inside the hardened client/container and exact internal network. Valid reviewed synthetic CA/hostname succeeds; wrong hostname and wrong CA fail. The probe is held behind a release marker until exact network membership is verified;
-- PR #120: actual Docker daemon restart on the GitHub-hosted Linux/systemd profile with `live-restore=false` and `restart=no`. The synthetic secret-host process tree must not resurrect; a fresh interpreter removes the exact immutable target, a second reconciliation is absent/no-op, prior PIDs/cgroup are gone, and an unrelated sentinel survives;
-- PR #123: behavioral pgAudit qualification using PostgreSQL 17.11/bookworm and exact package `postgresql-17-pgaudit=17.1-2.pgdg12+1`. With `pgaudit.log_parameter=on`, a synthetic positive-control parameter must be observed and strict secret handoff is rejected. With parameter logging off, a tagged audited query must still be observed while its protected synthetic parameter is absent.
+- PR #117-#118: auto_explain/pgAudit preflight and loaded auto_explain behavioral correction;
+- PR #119: PostgreSQL TLS handshake composed inside the hardened client/container and exact internal network, with valid CA/name positive control and wrong-name/wrong-CA rejection;
+- PR #120: Docker daemon restart on the exercised GitHub-hosted Linux/systemd profile with exact reconciliation and no target resurrection;
+- PR #123: actual pgAudit parameter-redaction behavior in a disposable PostgreSQL 17.11/bookworm profile;
+- PR #125: authenticated PostgreSQL secret operations inside the exact hardened client/container and internal-network composition. Exact network membership is verified before synthetic bootstrap handoff or the first client socket. A stdlib TLS/SCRAM-SHA-256 client authenticates as the dedicated synthetic login, performs mapped private `read_binding` and CAS, proves cross-binding denial, verifies stale-CAS conflict without replay, and confirms durable read-back while the unrelated binding remains unchanged.
 
-PR #119 intentionally performs only the TLS handshake in the hardened client and supplies no database credential. It does not by itself qualify database authentication/secret operations inside that exact container composition.
+PR #125 closes the previous transport/auth/private-SQL composition gap, but it intentionally does **not** claim that the application `StrictPostgresConnectionFactory` + `ProcessDeadlinePostgresSecretBackend` stack itself runs inside that exact immutable client image. Those application components remain separately qualified by their existing PostgreSQL/TLS/process tests.
 
-PR #120 intentionally qualifies only the exercised GitHub-hosted Linux/systemd Docker-daemon profile. It does not prove host reboot/power-loss recovery, hostile daemon/root custody or a production supervisor.
+PR #120 remains limited to the exercised GitHub-hosted Linux/systemd Docker-daemon profile. It does not prove machine reboot, power-loss, kernel-panic or hostile-root recovery.
 
-PR #123 qualifies actual pgAudit module behavior only in its disposable CI profile. It does not prove the hosted deployment uses the same module version/configuration, and it does not qualify external platform log custody.
+PR #123 remains limited to its disposable pgAudit profile. It does not prove the selected hosted deployment uses the same module/version/configuration or that external platform logs have acceptable custody.
 
 ## Logging / credential-custody status
 
@@ -127,7 +127,7 @@ Still unqualified or deployment-specific:
 - real Vault encryption/key lifecycle and current staging Vault grant remediation;
 - production/root/kernel/ptrace/swap and operator custody;
 - host reboot/power-loss recovery and production deployment supervisor behavior;
-- authenticated database secret operations inside the final production-equivalent hardened network/container composition;
+- actual application strict-factory/process-backend execution inside the final hardened immutable container composition;
 - deployment DNS/address lifecycle and trust/pin distribution.
 
 Synthetic evidence must not be described as end-to-end platform or production qualification.
@@ -142,10 +142,10 @@ The recorded first eligible prospective sample is 2026-09-24 Ito Onsen 1R (7 rid
 
 Code-only work may continue without another live-run authorization.
 
-Next safe work should stay inside synthetic/CI boundaries and close remaining operational evidence without activating real secrets or execution. Preferred order:
+Preferred order:
 
 1. keep exact-head CI and post-merge main verification as merge gates;
-2. qualify authenticated synthetic secret-store operations inside the exact hardened internal-network/container composition, without real credentials or a live endpoint;
+2. if it can be done without weakening the immutable-image/launcher boundary, qualify the real application strict-factory/process-backend composition inside an equivalently hardened disposable client; do not solve this by bind-mounting ambient host site-packages or by unpinned runtime installs;
 3. keep platform/host log custody and production administrator/root/kernel claims open until the selected deployment can provide real evidence; do not simulate them in CI;
 4. keep host reboot/power-loss and production supervisor behavior open until an environment can produce representative evidence;
 5. after documented operational gates are closed, prepare a **separate** staging migration/review for a real backend. Do not combine migration, credentials and task execution in one change;
