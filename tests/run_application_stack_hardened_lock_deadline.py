@@ -109,35 +109,51 @@ def _stop_lock_holder(server_id, process):
         raise RuntimeError("synthetic_lock_deadline_holder_failed")
 
 
+def _session_count(server_id, application_name):
+    if application_name not in {"agent-secret-host", LOCK_APP}:
+        raise RuntimeError("synthetic_lock_deadline_session_name_invalid")
+    return command([
+        "docker", "exec", server_id, "psql", "--username", "postgres",
+        "--dbname", "agent_checkpoint_ci", "--tuples-only", "--no-align",
+        "--command", "SELECT count(*) FROM pg_stat_activity WHERE application_name='"
+        + application_name + "'",
+    ])
+
+
+def _wait_sessions_gone(server_id):
+    # A killed client socket and a finished docker-exec process can disappear from
+    # pg_stat_activity a few scheduler ticks after their local processes have exited.
+    # Treat that as cleanup convergence, not a data-integrity failure, but keep it
+    # strictly bounded and require both fixture and application sessions to reach zero.
+    deadline = time.monotonic() + 6
+    while time.monotonic() < deadline:
+        if (_session_count(server_id, "agent-secret-host") == "0"
+                and _session_count(server_id, LOCK_APP) == "0"):
+            return
+        time.sleep(0.05)
+    raise RuntimeError("synthetic_lock_deadline_session_cleanup_timeout")
+
+
 def _verify_unchanged(server_id, key):
     record = command([
         "docker", "exec", server_id, "psql", "--username", "postgres",
         "--dbname", "agent_checkpoint_ci", "--tuples-only", "--no-align",
         "--command", "SELECT version::text || ':' || state FROM agent_credential_private.bindings WHERE binding_key='" + key + "'",
     ])
-    secret = command([
+    secret_ok = command([
         "docker", "exec", server_id, "psql", "--username", "postgres",
         "--dbname", "agent_checkpoint_ci", "--tuples-only", "--no-align",
-        "--command", "SELECT s.value FROM agent_credential_private.bindings b JOIN synthetic_vault.secrets s ON s.id=b.secret_id WHERE b.binding_key='" + key + "'",
+        "--command", "SELECT CASE WHEN s.value='SYNTHETIC:a0' THEN 'ok' ELSE 'bad' END FROM agent_credential_private.bindings b JOIN synthetic_vault.secrets s ON s.id=b.secret_id WHERE b.binding_key='" + key + "'",
     ])
-    unrelated = command([
+    unrelated_ok = command([
         "docker", "exec", server_id, "psql", "--username", "postgres",
         "--dbname", "agent_checkpoint_ci", "--tuples-only", "--no-align",
-        "--command", "SELECT b.version::text || ':' || s.value FROM agent_credential_private.bindings b JOIN synthetic_vault.secrets s ON s.id=b.secret_id WHERE b.binding_key='binding-b'",
+        "--command", "SELECT CASE WHEN b.version=0 AND s.value='SYNTHETIC:b0' THEN 'ok' ELSE 'bad' END FROM agent_credential_private.bindings b JOIN synthetic_vault.secrets s ON s.id=b.secret_id WHERE b.binding_key='binding-b'",
     ])
-    app_sessions = command([
-        "docker", "exec", server_id, "psql", "--username", "postgres",
-        "--dbname", "agent_checkpoint_ci", "--tuples-only", "--no-align",
-        "--command", "SELECT count(*) FROM pg_stat_activity WHERE application_name='agent-secret-host'",
-    ])
-    lock_sessions = command([
-        "docker", "exec", server_id, "psql", "--username", "postgres",
-        "--dbname", "agent_checkpoint_ci", "--tuples-only", "--no-align",
-        "--command", "SELECT count(*) FROM pg_stat_activity WHERE application_name='" + LOCK_APP + "'",
-    ])
-    if (record != "0:ready" or secret != "SYNTHETIC:a0"
-            or unrelated != "0:SYNTHETIC:b0" or app_sessions != "0" or lock_sessions != "0"):
-        raise RuntimeError("synthetic_lock_deadline_readback_invalid")
+    if record != "0:ready" or secret_ok != "ok" or unrelated_ok != "ok":
+        # Keep outward evidence secret-free: the query returns only fixed markers.
+        raise RuntimeError("synthetic_lock_deadline_record_mutated")
+    _wait_sessions_gone(server_id)
 
 
 def _run_client(network, image_id, ca_path, ca_sha, server_id, server_name, server_ip, key):
