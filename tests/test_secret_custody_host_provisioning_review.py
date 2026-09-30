@@ -56,7 +56,6 @@ def main():
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
         "SUPABASE_ACCESS_TOKEN",
-        "service_role",
         "refresh_token",
         "BEGIN PRIVATE KEY",
         "0.0.0.0/0",
