@@ -1,0 +1,63 @@
+{
+  "schema_version": "lightsail-secret-custody-provision-v1",
+  "status": "review_only",
+  "authorized_for_live_create": false,
+  "provider": "amazon_lightsail",
+  "region": "ap-northeast-1",
+  "instance": {
+    "os_family": "linux_unix",
+    "preferred_blueprint_family": "ubuntu_lts",
+    "exact_blueprint_id": "UNSET_LIVE_CONTROL_PLANE_VALUE",
+    "public_ipv4_required": true,
+    "vcpus": 2,
+    "memory_gib": 1,
+    "storage_gib": 40,
+    "transfer_tb": 2,
+    "max_monthly_usd": 7
+  },
+  "static_ipv4": {
+    "required": true,
+    "attach_immediately": true,
+    "address": "UNSET_PRIVATE_OPERATIONAL_VALUE",
+    "commit_address_to_repository": false
+  },
+  "initial_ingress": {
+    "public_http": false,
+    "public_https": false,
+    "public_agent_runtime": false,
+    "ssh_mode": "temporary_narrow_source_only",
+    "ipv4_review_required": true,
+    "ipv6_review_required": true
+  },
+  "initial_runtime": {
+    "hosted_worker_enabled": false,
+    "scheduler_enabled": false,
+    "provider_actions_enabled": false,
+    "production_prediction_enabled": false,
+    "prediction_db_writes_enabled": false,
+    "external_race_data_fetch_enabled": false
+  },
+  "secret_policy": {
+    "custody_database_password_present": false,
+    "supabase_service_role_key_present": false,
+    "vault_secret_present": false,
+    "provider_oauth_present": false,
+    "github_write_token_present": false
+  },
+  "qualification": {
+    "h1_readonly_preflight_required": true,
+    "host_hardening_required": true,
+    "default_deny_egress_required": true,
+    "verify_full_tls_required": true,
+    "reboot_recovery_required": true,
+    "memory_headroom_required": true,
+    "static_egress_verification_required": true
+  },
+  "cost_guard": {
+    "single_instance_only": true,
+    "no_load_balancer": true,
+    "no_managed_database": true,
+    "no_extra_block_storage": true,
+    "no_automatic_size_upgrade": true
+  }
+}
