@@ -16,7 +16,7 @@ def main():
         "GET /v1/projects/{ref}/ssl-enforcement",
         "GET /v1/projects/{ref}/network-restrictions",
         "sslmode=verify-full",
-        "do not change network restrictions until the hardened-host egress CIDR set is known",
+        "hardened-host egress CIDR set is known",
         "A guessed CIDR can",
         "separate explicit C2 DDL authorization",
         "No C2 schema apply",
