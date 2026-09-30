@@ -1,6 +1,6 @@
 # Work resume handoff
 
-Updated: 2026-09-30 (Asia/Tokyo)
+Updated: 2026-10-01 (Asia/Tokyo)
 
 Use this file when resuming in ChatGPT Work.
 
@@ -11,11 +11,13 @@ If the user says only `続けて` in Work, resume from this exact boundary witho
 ## Verified repository state
 
 - Repository: `bzlove178100/-keirin-ai-web`
-- Current verified `main`: `2f50c68e4d865029b2b86bb5575cc76112b56024`
+- Current verified `main`: `abee8b76e0538e4442961bdcbb0128297b1298a4`
 - PR #146: AWS control-plane observation review merged.
 - PR #147: status synchronization merged.
-- PR #147 exact-head CI passed before merge.
-- At handoff time, post-merge main had no failed workflow; the long PostgreSQL contract may still need a final completion check before any further repository mutation.
+- PR #148: Work resume handoff merged.
+- PR #148 exact-head CI passed before merge: collection progress UI regression, keirin-ai regression, and agent checkpoint PostgreSQL contract all succeeded.
+- No open pull request was present at the 2026-10-01 resumption check.
+- The previously pending final CI completion check is complete; no repository-review work needs to be repeated before AWS observation.
 
 ## Fixed safety state
 
