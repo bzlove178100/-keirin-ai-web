@@ -4,6 +4,7 @@ from pathlib import Path
 from test_phase_b_review_artifacts import main as phase_b_review_artifacts_main
 from test_secret_backend_architecture_decision import main as secret_backend_architecture_decision_main
 from test_secret_custody_c0_c1_review import main as secret_custody_c0_c1_review_main
+from test_secret_custody_c2_review_artifacts import main as secret_custody_c2_review_artifacts_main
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -167,6 +168,10 @@ def test_secret_custody_c0_c1_review_contract():
     secret_custody_c0_c1_review_main()
 
 
+def test_secret_custody_c2_review_artifacts_contract():
+    secret_custody_c2_review_artifacts_main()
+
+
 if __name__ == "__main__":
     test_golden_manifest_contract()
     test_iwaki_raw_fixture_keeps_kdreams_no_ticket_marker()
@@ -180,4 +185,5 @@ if __name__ == "__main__":
     test_phase_b_review_artifact_safety_contract()
     test_secret_backend_architecture_decision_contract()
     test_secret_custody_c0_c1_review_contract()
+    test_secret_custody_c2_review_artifacts_contract()
     print("keirin-ai regression checks: PASS")
