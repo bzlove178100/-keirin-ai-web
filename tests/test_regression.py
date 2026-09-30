@@ -7,6 +7,7 @@ from test_secret_custody_c0_c1_review import main as secret_custody_c0_c1_review
 from test_secret_custody_c2_review_artifacts import main as secret_custody_c2_review_artifacts_main
 from test_secret_custody_management_plane_review import main as secret_custody_management_plane_review_main
 from test_secret_custody_host_candidate import main as secret_custody_host_candidate_main
+from test_secret_custody_host_hardening_review import main as secret_custody_host_hardening_review_main
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -182,6 +183,10 @@ def test_secret_custody_host_candidate_contract():
     secret_custody_host_candidate_main()
 
 
+def test_secret_custody_host_hardening_review_contract():
+    secret_custody_host_hardening_review_main()
+
+
 if __name__ == "__main__":
     test_golden_manifest_contract()
     test_iwaki_raw_fixture_keeps_kdreams_no_ticket_marker()
@@ -198,4 +203,5 @@ if __name__ == "__main__":
     test_secret_custody_c2_review_artifacts_contract()
     test_secret_custody_management_plane_review_contract()
     test_secret_custody_host_candidate_contract()
+    test_secret_custody_host_hardening_review_contract()
     print("keirin-ai regression checks: PASS")
