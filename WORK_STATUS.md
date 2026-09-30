@@ -28,11 +28,11 @@ Agent-only checkpoint/activity persistence and queue coordination in `keirin-ai-
 
 ## Verified repository state
 
-PR #141 (`Prepare read-only Lightsail host hardening qualification`) merged to `main` as:
+PR #142 (`Prepare fail-closed Lightsail provisioning review`) merged to `main` as:
 
-`c2b0ae24b28744e7aae06ba68f844c51761722ce`
+`957bb1909740aff81c6a6a7f4dcc7cf4e7c4c511`
 
-Its corrected exact-head CI passed after an exact-case regression marker was fixed. Post-merge `main` then completed five workflows with no in-progress or failed run for that merge SHA, including collection UI, regression, read-only runtime, PostgreSQL/host contract and Pages paths.
+Its exact-head CI passed after correcting a regression guard that treated the explicitly-false `supabase_service_role_key_present` field as if it were live secret material. Post-merge `main` then completed five workflows with zero failed and zero in-progress runs for that merge SHA, including collection UI, regression, read-only runtime, PostgreSQL/host contract and Pages paths.
 
 The PostgreSQL contract continues to cover the co-resident application stack, fail-closed lease/trust/hostname rejection, real row-lock/process-deadline behavior, hardened host limits, TLS/restart recovery, log-policy checks and pgAudit parameter-redaction checks.
 
@@ -128,11 +128,9 @@ The preflight script is intentionally offline and read-only. It checks the expec
 
 The future host begins **untrusted / no-secret**. Passing host hardening by itself does not authorize C2 DDL or any credential use.
 
-## Provisioning review in progress
+## Provisioning review complete
 
-Current branch: `agent-secret-host-provisioning-review-v1-20260930`.
-
-Review-only artifacts prepared on this branch:
+PR #142 added:
 
 - `SECRET_CUSTODY_HOST_PROVISIONING_REVIEW.md`;
 - `review/lightsail_provisioning_manifest.template.json`;
@@ -157,18 +155,17 @@ For the hardened host, start with exactly one USD 7/month candidate after specif
 
 The next safe sequence is:
 
-1. merge the provisioning review only if exact-head CI is clean;
-2. in an authenticated AWS control-plane session, confirm Tokyo availability, exact Ubuntu LTS blueprint and displayed Micro 1 GB price before creation;
-3. require a specific live-provision authorization before creating the instance/static IP;
-4. create exactly one candidate and attach exactly one static IPv4;
-5. run only the read-only/no-secret H1 preflight first;
-6. review actual host facts before applying any mutating hardening;
-7. apply a separately reviewed hardening package, then verify static egress, OS-level default-deny egress, TLS `verify-full`, reboot/recovery and memory headroom;
-8. use that verified static egress only when configuring the Supabase network restriction;
-9. verify Data API disabled and SSL enforcement enabled, changing each separately only if required;
-10. require fresh explicit authorization before applying C2 DDL to the live custody project;
-11. use only clearly synthetic credential material for C3;
-12. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
+1. in an authenticated AWS control-plane session, confirm Tokyo availability, exact Ubuntu LTS blueprint and displayed Micro 1 GB price before creation;
+2. require a specific live-provision authorization before creating the instance/static IP;
+3. create exactly one candidate and attach exactly one static IPv4;
+4. run only the read-only/no-secret H1 preflight first;
+5. review actual host facts before applying any mutating hardening;
+6. apply a separately reviewed hardening package, then verify static egress, OS-level default-deny egress, TLS `verify-full`, reboot/recovery and memory headroom;
+7. use that verified static egress only when configuring the Supabase network restriction;
+8. verify Data API disabled and SSL enforcement enabled, changing each separately only if required;
+9. require fresh explicit authorization before applying C2 DDL to the live custody project;
+10. use only clearly synthetic credential material for C3;
+11. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
 
 Live hosted execution, long-lived worker, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery remain disabled.
 
