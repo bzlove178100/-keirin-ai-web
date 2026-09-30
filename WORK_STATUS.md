@@ -21,22 +21,25 @@ Unless a new, specific boundary is explicitly authorized:
 - scheduler / recurrence: **OFF**;
 - no real provider/OAuth refresh exchange is connected;
 - no real provider credential or refresh secret is stored in the custody project;
-- no live secret-store schema has been applied to the custody project.
+- no live secret-store schema has been applied to the custody project;
+- no paid hardened host has been provisioned.
 
 Agent-only checkpoint/activity persistence and queue coordination in `keirin-ai-staging` were separately authorized. Exact-task lease acquisition is deployed. No always-on worker is active.
 
 ## Verified repository state
 
-PR #138 (`Draft isolated secret-custody C2 schema review`) merged to `main` as:
+PR #139 (`Add fail-closed custody management-plane preflight`) merged to `main` as:
 
-`ef5e1fe85fa593e716b132bf6c473c780b497bdf`
+`f5761ae815a45a7a24c67d3866fc7aae6ad07b0f`
 
-Post-merge workflows passed:
+Its exact-head and post-merge checks passed, including:
 
 - `keirin-ai regression`;
 - `collection progress UI regression`;
+- `agent runtime read-only smoke`;
 - `agent checkpoint PostgreSQL contract`;
 - synthetic host-limits qualification;
+- TLS/restart, row-lock/process-deadline, logging and pgAudit redaction checks;
 - Pages build/deployment.
 
 The PostgreSQL contract still covers the co-resident actual application stack, fail-closed lease/trust/hostname rejection, real row-lock/process-deadline behavior, hardened host limits, TLS/restart recovery, log-policy checks and pgAudit parameter-redaction checks.
@@ -92,15 +95,15 @@ The candidate keeps the dedicated LOGIN host / NOLOGIN broker split, private met
 
 ## Management-plane preflight
 
-`SECRET_CUSTODY_MANAGEMENT_PLANE_PREFLIGHT.md` is the next review artifact. It defines three project-specific hard gates:
+PR #139 added `SECRET_CUSTODY_MANAGEMENT_PLANE_PREFLIGHT.md`. It defines three project-specific hard gates:
 
 1. Data API disabled;
 2. Postgres SSL enforcement enabled;
 3. database/pooler network restrictions limited to the approved hardened-host egress CIDR set.
 
-Current connected tooling can confirm project health and database/catalog state, but does not expose authoritative read/write controls for all three settings. Their state must therefore remain **unknown** until verified through the Dashboard or an appropriately scoped Management API path.
+Current connected tooling can confirm project health and database/catalog state, but does not expose authoritative read/write controls for all three settings. Their state therefore remains **unknown** until verified through the Dashboard or an appropriately scoped Management API path.
 
-The preflight is deliberately fail-closed:
+The preflight is fail-closed:
 
 - a denied or unavailable read is `unknown`, not safe;
 - SSL-enforcement changes are isolated because they restart the database;
@@ -108,25 +111,50 @@ The preflight is deliberately fail-closed:
 - no world-open placeholder CIDR is accepted;
 - management configuration is not batched with C2 DDL.
 
+## Hardened-host cost review
+
+`SECRET_CUSTODY_HOST_CANDIDATE.md` records the current lowest-cost candidate that preserves a reasonable qualification margin.
+
+First candidate for later qualification:
+
+- Amazon Lightsail Linux/Unix Micro 1 GB;
+- Asia Pacific (Tokyo), `ap-northeast-1`;
+- 2 vCPU, 1 GB RAM, 40 GB SSD, 2 TB transfer;
+- current published maximum bundle price: **USD 7/month**;
+- attached Lightsail static IPv4: no additional charge.
+
+No host has been provisioned and no AWS cost has been incurred.
+
+The cheaper USD 5 Lightsail 0.5 GB and USD 4 DigitalOcean 512 MiB shapes are not selected as the primary candidate because they leave materially less runtime/security-update headroom; the DigitalOcean comparison is also Singapore rather than Tokyo. GitHub static-IP larger runners require a substantially different paid-plan boundary, and the reviewed Hetzner Singapore entry is currently higher cost.
+
+The USD 7 candidate still must pass live synthetic/no-secret capacity, TLS, restart, egress, static-IP and firewall qualification. If 1 GB is insufficient, do not weaken safeguards; move to the next reviewed size.
+
+Lightsail's platform firewall does not restrict outbound traffic, so the host must enforce a default-deny OS-level egress policy before any custody credential or Vault material exists.
+
 ## Cost / availability boundary
 
-Keep the current Free project for architecture, review and no-secret qualification while it remains operationally suitable.
+Keep the Supabase Free project for architecture, review and no-secret qualification while it remains operationally suitable.
 
 Free is **not** approved for real always-on credential custody because low-activity Free projects can be paused. Before C4 real credential activation, require either a paid-plan availability boundary or another explicitly reviewed solution that provides equivalent availability.
 
 Do not generate artificial keepalive traffic and call that an availability guarantee. Do not upgrade merely for code review or no-secret testing.
 
+For the hardened host, do not create multiple paid candidates. Start with one USD 7/month candidate only when live host qualification is explicitly authorized; destroy it promptly if rejected. Move to a larger size only from evidence, not precautionary over-provisioning.
+
 ## Next work / next boundary
 
 The next safe sequence is:
 
-1. merge the management-plane review artifact if exact-head CI is clean;
-2. obtain authoritative current values for Data API / SSL enforcement / network restrictions;
-3. identify the actual hardened hosted-worker egress CIDR set before any network-restriction write;
-4. make management-plane changes one at a time only where required, with read-back and health checks;
-5. require fresh explicit authorization before applying C2 DDL to the live custody project;
-6. after C2 and rollback qualification, use only clearly synthetic credential material for C3;
-7. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
+1. merge the hardened-host candidate review if exact-head CI is clean;
+2. before any paid provisioning, re-check the selected provider's current price and Tokyo availability;
+3. require a specific live-provision authorization before creating the Lightsail instance/static IP;
+4. provision exactly one candidate and harden it using synthetic/no-secret inputs only;
+5. verify actual static egress, OS-level default-deny egress, TLS `verify-full`, restart/recovery and memory headroom;
+6. use that verified static egress only when authoritatively configuring the Supabase network restriction;
+7. verify Data API disabled and SSL enforcement enabled, changing each separately only if required;
+8. require fresh explicit authorization before applying C2 DDL to the live custody project;
+9. after C2 and rollback qualification, use only clearly synthetic credential material for C3;
+10. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
 
 Live hosted execution, long-lived worker, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery remain disabled.
 
@@ -136,4 +164,4 @@ The product requirement remains daily 21:00 Asia/Tokyo reporting of daily sales,
 
 ## Constraints
 
-Do not commit private race histories, prediction snapshots, model artifacts, credentials, private file identifiers, host allowlists or personal data. Prefer current `main`, current CI, deployed metadata and direct bounded checks over older handoff notes.
+Do not commit private race histories, prediction snapshots, model artifacts, credentials, private file identifiers, host allowlists, provider account identifiers or personal data. Prefer current `main`, current CI, deployed metadata and direct bounded checks over older handoff notes.
