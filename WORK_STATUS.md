@@ -28,11 +28,11 @@ Agent-only checkpoint/activity persistence and queue coordination in `keirin-ai-
 
 ## Verified repository state
 
-PR #143 (`Synchronize verified status through provisioning review`) merged to `main` as:
+PR #144 (`Prepare fail-closed host hardening package review`) merged to `main` as:
 
-`c2e247fb65740ccfc5f82b60b102a0f14d05a73d`
+`22d9df69f97428f79bcd4d5ee8f024e4d9e53154`
 
-Its exact-head CI passed, and post-merge `main` completed five workflows with zero failed and zero in-progress runs for that merge SHA, including collection UI, regression, read-only runtime, PostgreSQL/host contract and Pages paths.
+Its exact-head CI passed. Post-merge `main` then completed five workflows with zero failed and zero in-progress runs for that merge SHA, including collection UI, regression, read-only runtime, PostgreSQL/host contract and Pages paths.
 
 The PostgreSQL contract continues to cover the co-resident application stack, fail-closed lease/trust/hostname rejection, real row-lock/process-deadline behavior, hardened host limits, TLS/restart recovery, log-policy checks and pgAudit parameter-redaction checks.
 
@@ -78,26 +78,28 @@ The public AWS documentation was re-checked on 2026-09-30 before the provisionin
 
 No host has been provisioned and no AWS cost has been incurred. If 1 GB proves insufficient, do not weaken safeguards to preserve the USD 7 target.
 
-## Host hardening and provisioning reviews complete
+## Host hardening, provisioning and package reviews complete
 
-PR #141 added the read-only H0-H7 hardening qualification review and offline `review/lightsail_host_preflight.sh`. PR #142 added the fail-closed provisioning review and `review/lightsail_provisioning_manifest.template.json` with `authorized_for_live_create=false`.
+PR #141 added the read-only H0-H7 hardening qualification review and offline `review/lightsail_host_preflight.sh`. PR #142 added the fail-closed provisioning review and `review/lightsail_provisioning_manifest.template.json` with `authorized_for_live_create=false`. PR #144 added the declarative hardening package review, offline validator and regression guards with `authorized_for_live_apply=false`.
 
 The future host begins **untrusted / no-secret**. Passing repository review or host hardening by itself does not authorize C2 DDL or credential use.
 
-## Hardening package review in progress
+The hardening package is declarative data, not an executable host mutation script. Its validator rejects world-open CIDRs, credential-like literals, executable package/firewall/service/user mutation markers, enabled runtime gates, or any secret-policy field set true.
 
-Current branch: `agent-secret-host-hardening-package-review-v1-20260930`.
+## Recovery and rollback review in progress
 
-Review-only artifacts now prepared:
+Current branch: `agent-secret-host-recovery-review-v1-20260930`.
 
-- `SECRET_CUSTODY_HOST_HARDENING_PACKAGE_REVIEW.md`;
-- `review/secret_custody_host_hardening.plan.json`;
-- `review/validate_secret_custody_host_hardening_plan.py`;
-- `tests/test_secret_custody_host_hardening_package_review.py` plus regression wiring.
+Review-only artifacts prepared on this branch:
 
-The plan is declarative data, not an executable host mutation script. It fixes the reviewed host shape, no-secret preconditions, dedicated non-login runtime identity, root-owned/read-only filesystem boundary, systemd sandbox requirements, default-deny runtime egress, metadata-only logging, post-reboot/resource checks, disabled runtime/provider/prediction gates and a structural pre-credential rollback boundary.
+- `SECRET_CUSTODY_HOST_RECOVERY_ROLLBACK_REVIEW.md`;
+- `review/secret_custody_host_recovery.plan.json`;
+- `review/validate_secret_custody_host_recovery_plan.py`;
+- `tests/test_secret_custody_host_recovery_review.py` plus regression wiring.
 
-`authorized_for_live_apply=false` is mandatory. The validator rejects world-open CIDRs, credential-like literals, executable package/firewall/service/user mutation markers in plan data, enabled runtime gates, or any secret-policy field set true.
+The recovery plan is fail-closed and pre-credential only. It keeps the runtime disabled and host no-secret on any preflight, hardening, network/TLS, capacity or reboot/recovery failure. It forbids automatic AWS deletion/resize/reboot/snapshot/replacement, automatic firewall relaxation or egress widening, protected Supabase/Vault/provider/prediction/race-data mutations, insecure TLS/plaintext fallback and credential introduction during recovery.
+
+AWS resource destruction remains a separate explicit live action after sanitized evidence is preserved. The recovery validator reads only repository JSON and rejects live authorization, destructive/executable markers, world-open CIDRs, credential-like literals, protected-domain mutation permissions or enabled runtime gates.
 
 No AWS, host, Supabase, Vault, provider, prediction or race-data state is changed by this branch.
 
@@ -105,18 +107,18 @@ No AWS, host, Supabase, Vault, provider, prediction or race-data state is change
 
 Keep the Supabase Free project for architecture, review and no-secret qualification while it remains operationally suitable. Free is not approved for real always-on credential custody because low-activity Free projects can be paused. Before C4 real credential activation, require either a paid-plan availability boundary or an equivalent separately reviewed solution.
 
-For the hardened host, start with exactly one USD 7/month candidate only after a specific live-provision authorization, qualify it with synthetic/no-secret inputs, and destroy it promptly if rejected. Do not keep multiple paid hosts running for convenience.
+For the hardened host, start with exactly one USD 7/month candidate only after a specific live-provision authorization, qualify it with synthetic/no-secret inputs, and destroy it promptly if rejected after a separately authorized live cleanup. Do not keep multiple paid hosts running for convenience.
 
 ## Next work / next boundary
 
 The next safe sequence is:
 
-1. merge the hardening-package review only if exact-head CI is clean;
+1. merge the recovery/rollback review only if exact-head CI is clean;
 2. in an authenticated AWS control-plane session, confirm Tokyo availability, exact Ubuntu LTS blueprint and displayed Micro 1 GB price before creation;
 3. require a specific live-provision authorization before creating the instance/static IP;
 4. create exactly one candidate and attach exactly one static IPv4;
 5. run only the read-only/no-secret H1 preflight first;
-6. compare actual host facts to the reviewed hardening plan before any mutation;
+6. compare actual host facts to the reviewed hardening and recovery plans before any mutation;
 7. require a separate live-hardening authorization before applying any mutating host package;
 8. verify static egress, OS-level default-deny egress, TLS `verify-full`, reboot/recovery and memory headroom before any credential exists;
 9. use that verified static egress only when configuring the Supabase network restriction;
