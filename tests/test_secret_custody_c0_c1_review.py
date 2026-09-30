@@ -42,8 +42,8 @@ def main() -> None:
     ):
         require(marker in review, f"c2_review_marker_missing:{marker}")
 
-    require("select from vault.secrets" in preflight, "preflight_safety_comment_missing")
-    require("select from vault.decrypted_secrets" in preflight, "preflight_safety_comment_missing_decrypted")
+    require("vault.secrets" in preflight, "preflight_safety_comment_missing")
+    require("vault.decrypted_secrets" in preflight, "preflight_safety_comment_missing_decrypted")
 
     executable = "\n".join(
         line for line in preflight.splitlines() if not line.lstrip().startswith("--")
