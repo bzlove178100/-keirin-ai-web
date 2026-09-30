@@ -12,7 +12,7 @@ def main():
     required_doc = [
         "review only — no host exists and nothing in this package is authorized to mutate a live machine",
         "untrusted / no-secret",
-        "do not add a swap file",
+        "Do not add a swap file",
         "default deny",
         "TLS `verify-full`",
         "no kernel OOM kill",
