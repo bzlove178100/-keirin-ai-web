@@ -47,7 +47,11 @@ def test_oidc_role_permissions_are_catalog_read_only():
         assert action in template
     assert "sts:AssumeRoleWithWebIdentity" in template
     assert "sts.amazonaws.com" in template
-    assert "bzlove178100@320407427/-keirin-ai-web@1357382962" in template
+    assert "Default: bzlove178100" in template
+    assert "Default: '320407427'" in template
+    assert "Default: -keirin-ai-web" in template
+    assert "Default: '1357382962'" in template
+    assert "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepository}@${GitHubRepositoryId}:ref:refs/heads/${GitHubBranch}" in template
 
     forbidden = (
         "lightsail:Allocate",
