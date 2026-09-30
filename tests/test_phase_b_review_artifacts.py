@@ -12,6 +12,10 @@ def normalized(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower()).strip()
 
 
+def sql_without_line_comments(text: str) -> str:
+    return "\n".join(line.split("--", 1)[0] for line in text.splitlines())
+
+
 def require(condition: bool, label: str) -> None:
     if not condition:
         raise AssertionError(label)
@@ -27,8 +31,8 @@ def main() -> None:
     forward_raw = FORWARD.read_text(encoding="utf-8")
     rollback_raw = ROLLBACK.read_text(encoding="utf-8")
     review_raw = REVIEW.read_text(encoding="utf-8")
-    forward = normalized(forward_raw)
-    rollback = normalized(rollback_raw)
+    forward = normalized(sql_without_line_comments(forward_raw))
+    rollback = normalized(sql_without_line_comments(rollback_raw))
     review = normalized(review_raw)
 
     blocker = "phase_b_preflight_service_role_vault_isolation_blocker"
@@ -65,7 +69,7 @@ def main() -> None:
         else:
             require(fragment not in forward, f"forbidden_platform_vault_revoke:{fragment}")
 
-    require(" cascade" not in rollback, "rollback_uses_cascade")
+    require(not re.search(r"\bcascade\b", rollback), "rollback_uses_cascade")
     require("phase_b_rollback_active_host_session" in rollback, "active_session_guard_missing")
     require("phase_b_rollback_nonempty_private_state" in rollback, "nonempty_state_guard_missing")
 
