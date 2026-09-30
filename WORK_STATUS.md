@@ -1,6 +1,6 @@
 # Work status
 
-Updated: 2026-09-30 (Asia/Tokyo).
+Updated: 2026-10-01 (Asia/Tokyo).
 
 This file is the current resumption snapshot. Detailed historical implementation notes remain in Git history and merged PRs.
 
@@ -28,11 +28,13 @@ Agent-only checkpoint/activity persistence and queue coordination in `keirin-ai-
 
 ## Verified repository state
 
-PR #146 (`Prepare read-only AWS control-plane observation review`) merged to `main` as:
+The current verified `main` is:
 
-`81ceb9dea591bb02a6ed155cf3bb301f62257bd4`
+`abee8b76e0538e4442961bdcbb0128297b1298a4`
 
-Its exact-head CI passed. Post-merge `main` completed five workflows with zero failed and zero in-progress runs for that merge SHA, including collection UI, regression, read-only runtime, PostgreSQL/host contract and Pages paths.
+PR #146 (`Prepare read-only AWS control-plane observation review`), PR #147 (status synchronization), and PR #148 (`Add Work resume handoff for AWS observation boundary`) are merged. No open pull request was present at the 2026-10-01 resumption check.
+
+PR #148 exact-head CI passed before merge: collection progress UI regression, keirin-ai regression, and agent checkpoint PostgreSQL contract all completed successfully. The previously pending final CI completion check is therefore closed.
 
 The PostgreSQL contract continues to cover the co-resident application stack, fail-closed lease/trust/hostname rejection, real row-lock/process-deadline behavior, hardened host limits, TLS/restart recovery, log-policy checks and pgAudit parameter-redaction checks.
 
