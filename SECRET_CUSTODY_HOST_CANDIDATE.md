@@ -1,6 +1,6 @@
 # Secret-custody hardened-host candidate
 
-Reviewed: 2026-09-30 (Asia/Tokyo)
+Reviewed: 2026-10-01 (Asia/Tokyo)
 Status: **candidate selected for later qualification — no host provisioned and no cost incurred**
 
 ## Decision
@@ -17,7 +17,7 @@ Current published bundle shape:
 - USD 7/month maximum bundle price;
 - attached Lightsail static IPv4: no additional charge.
 
-This is a qualification candidate, not an authorization to create the instance. No AWS account, instance, static IP, SSH key, IAM credential, database credential, network rule, secret, provider credential or billing commitment is created by this review.
+This is a qualification candidate, not an authorization to create the instance. No AWS account is assumed to exist or be available. Account creation is now a separate explicit authorization boundary defined in `AWS_ACCOUNT_BOOTSTRAP_BOUNDARY.md`. No AWS account, instance, static IP, SSH key, IAM credential, database credential, network rule, secret, provider credential or billing commitment is created by this review.
 
 ## Why this is the lowest-cost candidate that currently preserves operational margin
 
@@ -39,7 +39,7 @@ If live synthetic qualification shows memory pressure, OOM termination, unaccept
 
 ## Source boundary
 
-Pricing and capability statements above were checked against current provider documentation on 2026-09-30:
+Pricing and capability statements above were re-checked against current provider documentation on 2026-10-01:
 
 - Amazon Lightsail instance bundles / pricing;
 - Amazon Lightsail regions and availability zones;
@@ -47,9 +47,11 @@ Pricing and capability statements above were checked against current provider do
 - Amazon Lightsail firewall documentation;
 - DigitalOcean Droplet pricing, regional availability and Reserved IP documentation;
 - Hetzner 15 June 2026 cloud price adjustment;
-- GitHub larger-runner and Actions runner pricing documentation.
+- GitHub larger-runner and Actions runner pricing documentation;
+- Railway pricing, deployment-region and Static Outbound IP documentation;
+- Render pricing, region and dedicated outbound IP documentation.
 
-Re-check the provider control plane immediately before provisioning because prices and product limits can change.
+The 2026-10-01 re-check did not identify an alternative that improves the current Tokyo + static-egress + low-fixed-cost boundary. Re-check the provider control plane immediately before provisioning because prices and product limits can change.
 
 ## Static egress requirement
 
