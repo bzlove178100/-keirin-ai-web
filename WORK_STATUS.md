@@ -28,13 +28,13 @@ Agent-only checkpoint/activity persistence and queue coordination in `keirin-ai-
 
 ## Verified repository state
 
-The current verified `main` is:
+The verified base before this account-boundary update is:
 
-`abee8b76e0538e4442961bdcbb0128297b1298a4`
+`8997da514255d8d9dcad2a0c252f92b4c1253814`
 
-PR #146 (`Prepare read-only AWS control-plane observation review`), PR #147 (status synchronization), and PR #148 (`Add Work resume handoff for AWS observation boundary`) are merged. No open pull request was present at the 2026-10-01 resumption check.
+PR #146 through PR #149 are merged. PR #149 synchronized the AWS-observation handoff after PR #148.
 
-PR #148 exact-head CI passed before merge: collection progress UI regression, keirin-ai regression, and agent checkpoint PostgreSQL contract all completed successfully. The previously pending final CI completion check is therefore closed.
+PR #149 exact-head CI passed: collection progress UI regression, agent runtime read-only smoke, keirin-ai regression, and agent checkpoint PostgreSQL contract all completed successfully. When resuming, resolve the current `main` from GitHub rather than treating an embedded SHA as permanently current.
 
 The PostgreSQL contract continues to cover the co-resident application stack, fail-closed lease/trust/hostname rejection, real row-lock/process-deadline behavior, hardened host limits, TLS/restart recovery, log-policy checks and pgAudit parameter-redaction checks.
 
@@ -76,9 +76,9 @@ Their authoritative live state remains unknown until verified through the Dashbo
 
 PR #140 selected Amazon Lightsail Linux/Unix Micro 1 GB in Tokyo (`ap-northeast-1`) as the first later qualification candidate: 2 vCPU, 1 GB RAM, 40 GB SSD, 2 TB transfer, reviewed maximum bundle price USD 7/month, with an attached static IPv4.
 
-The public AWS documentation was re-checked on 2026-09-30 before the provisioning review. Exact Tokyo control-plane availability and the live Ubuntu LTS blueprint ID still require an authenticated AWS session immediately before creation.
+The provider boundary was re-checked on 2026-10-01. Lightsail remains the first candidate: current public documentation still shows Tokyo support and the USD 7 Micro 1 GB public-IPv4 bundle shape. Railway and Render do not currently provide a lower-friction equivalent for this design's Tokyo + stable-egress requirement, and DigitalOcean has no Tokyo region.
 
-No host has been provisioned and no AWS cost has been incurred. If 1 GB proves insufficient, do not weaken safeguards to preserve the USD 7 target.
+No existing AWS account is assumed available. `AWS_ACCOUNT_BOOTSTRAP_BOUNDARY.md` makes account creation a separate explicit authorization step before authenticated control-plane observation. No host has been provisioned and no AWS cost has been incurred. If 1 GB proves insufficient, do not weaken safeguards to preserve the USD 7 target.
 
 ## Host safety reviews complete
 
@@ -104,19 +104,21 @@ For the hardened host, start with exactly one USD 7/month candidate only after a
 
 The next safe sequence is:
 
-1. in an authenticated AWS control-plane session, fill only the reviewed observation facts: exact Tokyo availability, Ubuntu LTS blueprint, bundle shape, displayed price and static-IPv4 availability/pricing;
-2. stop if any value is unknown, ambiguous, mismatched or over the USD 7 boundary;
-3. require a specific live-provision authorization before creating the instance/static IP;
-4. create exactly one candidate and attach exactly one static IPv4;
-5. run only the read-only/no-secret H1 preflight first;
-6. compare actual host facts to the reviewed hardening and recovery plans before any mutation;
-7. require a separate live-hardening authorization before applying any mutating host package;
-8. verify static egress, OS-level default-deny egress, TLS `verify-full`, reboot/recovery and memory headroom before any credential exists;
-9. use that verified static egress only when configuring the Supabase network restriction;
-10. verify Data API disabled and SSL enforcement enabled, changing each separately only if required;
-11. require fresh explicit authorization before applying C2 DDL to the live custody project;
-12. use only clearly synthetic credential material for C3;
-13. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
+1. treat AWS account availability as unconfirmed/absent and read `AWS_ACCOUNT_BOOTSTRAP_BOUNDARY.md`;
+2. require explicit user authorization before AWS account creation; the user enters all password/payment/verification data directly into AWS;
+3. after the account exists, in an authenticated AWS control-plane session fill only the reviewed observation facts: exact Tokyo availability, Ubuntu LTS blueprint, bundle shape, displayed price and static-IPv4 availability/pricing;
+4. stop if any value is unknown, ambiguous, mismatched or over the USD 7 boundary;
+5. require a separate specific live-provision authorization before creating the instance/static IP;
+6. create exactly one candidate and attach exactly one static IPv4;
+7. run only the read-only/no-secret H1 preflight first;
+8. compare actual host facts to the reviewed hardening and recovery plans before any mutation;
+9. require a separate live-hardening authorization before applying any mutating host package;
+10. verify static egress, OS-level default-deny egress, TLS `verify-full`, reboot/recovery and memory headroom before any credential exists;
+11. use that verified static egress only when configuring the Supabase network restriction;
+12. verify Data API disabled and SSL enforcement enabled, changing each separately only if required;
+13. require fresh explicit authorization before applying C2 DDL to the live custody project;
+14. use only clearly synthetic credential material for C3;
+15. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
 
 Live hosted execution, long-lived worker, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery remain disabled.
 
