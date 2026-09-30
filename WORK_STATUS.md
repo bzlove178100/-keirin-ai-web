@@ -28,9 +28,9 @@ Agent-only checkpoint/activity persistence and queue coordination in `keirin-ai-
 
 ## Verified repository state
 
-PR #145 (`Prepare fail-closed host recovery and rollback review`) merged to `main` as:
+PR #146 (`Prepare read-only AWS control-plane observation review`) merged to `main` as:
 
-`ea4741dae3d9508f52999efd33552fc498ca6db1`
+`81ceb9dea591bb02a6ed155cf3bb301f62257bd4`
 
 Its exact-head CI passed. Post-merge `main` completed five workflows with zero failed and zero in-progress runs for that merge SHA, including collection UI, regression, read-only runtime, PostgreSQL/host contract and Pages paths.
 
@@ -78,30 +78,19 @@ The public AWS documentation was re-checked on 2026-09-30 before the provisionin
 
 No host has been provisioned and no AWS cost has been incurred. If 1 GB proves insufficient, do not weaken safeguards to preserve the USD 7 target.
 
-## Host hardening, provisioning, package and recovery reviews complete
+## Host safety reviews complete
 
-PR #141 added the read-only H0-H7 hardening qualification review and offline `review/lightsail_host_preflight.sh`. PR #142 added the fail-closed provisioning review and `review/lightsail_provisioning_manifest.template.json` with `authorized_for_live_create=false`. PR #144 added the declarative hardening package review, offline validator and regression guards with `authorized_for_live_apply=false`. PR #145 added fail-closed recovery/rollback review artifacts with `authorized_for_live_recovery=false`.
+PR #141 added the read-only H0-H7 hardening qualification review and offline `review/lightsail_host_preflight.sh`. PR #142 added the fail-closed provisioning review and `review/lightsail_provisioning_manifest.template.json` with `authorized_for_live_create=false`. PR #144 added the declarative hardening package review, offline validator and regression guards with `authorized_for_live_apply=false`. PR #145 added fail-closed recovery/rollback review artifacts with `authorized_for_live_recovery=false`. PR #146 added the read-only AWS control-plane observation review and sanitized observation template with `authorized_for_live_create=false`.
 
 The future host begins **untrusted / no-secret**. Passing repository review or host hardening by itself does not authorize C2 DDL or credential use.
 
 The hardening package is declarative data, not an executable host mutation script. The recovery plan keeps the runtime disabled and host no-secret on preflight, hardening, network/TLS, capacity or reboot/recovery failure. Automatic AWS destruction/resize/reboot/snapshot/replacement, automatic firewall relaxation/egress widening, protected Supabase/Vault/provider/prediction/race-data mutations, insecure TLS/plaintext fallback and credential introduction during recovery are forbidden by the reviewed contracts.
 
-## AWS control-plane observation review in progress
+## AWS control-plane observation review complete
 
-Current branch: `agent-secret-host-aws-observation-review-v1-20260930`.
+`SECRET_CUSTODY_AWS_CONTROL_PLANE_OBSERVATION_REVIEW.md` and `review/lightsail_control_plane_observation.template.json` define the next live observation boundary. The template fixes the expected region/host shape/price ceiling while leaving every live observation value unset. It keeps `authorized_for_live_create=false`, rejects automatic size/region substitution, forbids sensitive account/key/IP/credential material and keeps every runtime/provider/prediction gate disabled.
 
-Review-only artifacts prepared on this branch:
-
-- `SECRET_CUSTODY_AWS_CONTROL_PLANE_OBSERVATION_REVIEW.md`;
-- `review/lightsail_control_plane_observation.template.json`;
-- `review/validate_lightsail_control_plane_observation.py`;
-- `tests/test_secret_custody_aws_control_plane_observation_review.py` plus regression wiring.
-
-The template is observation-only. It fixes the already-reviewed expected region/host shape/price ceiling while leaving every live observation value unset. It keeps `authorized_for_live_create=false`, rejects automatic size/region substitution, forbids sensitive account/key/IP/credential material and keeps every runtime/provider/prediction gate disabled.
-
-The future authenticated AWS session is limited to observing exact Tokyo availability, Ubuntu LTS blueprint identifier, matching bundle shape, displayed monthly price and static-IPv4 availability/pricing. Unknown, ambiguous or mismatching values fail closed. Passing observation still requires a separate explicit live-provision instruction before any AWS resource is created.
-
-No AWS, host, Supabase, Vault, provider, prediction or race-data state is changed by this branch.
+The next authenticated AWS session is limited to observing exact Tokyo availability, Ubuntu LTS blueprint identifier, matching bundle shape, displayed monthly price and static-IPv4 availability/pricing. Unknown, ambiguous or mismatching values fail closed. Passing observation still requires a separate explicit live-provision instruction before any AWS resource is created.
 
 ## Cost / availability boundary
 
@@ -113,20 +102,19 @@ For the hardened host, start with exactly one USD 7/month candidate only after a
 
 The next safe sequence is:
 
-1. merge the AWS observation review only if exact-head CI is clean;
-2. in an authenticated AWS control-plane session, fill only the reviewed observation facts: exact Tokyo availability, Ubuntu LTS blueprint, bundle shape, displayed price and static-IPv4 availability/pricing;
-3. stop if any value is unknown, ambiguous, mismatched or over the USD 7 boundary;
-4. require a specific live-provision authorization before creating the instance/static IP;
-5. create exactly one candidate and attach exactly one static IPv4;
-6. run only the read-only/no-secret H1 preflight first;
-7. compare actual host facts to the reviewed hardening and recovery plans before any mutation;
-8. require a separate live-hardening authorization before applying any mutating host package;
-9. verify static egress, OS-level default-deny egress, TLS `verify-full`, reboot/recovery and memory headroom before any credential exists;
-10. use that verified static egress only when configuring the Supabase network restriction;
-11. verify Data API disabled and SSL enforcement enabled, changing each separately only if required;
-12. require fresh explicit authorization before applying C2 DDL to the live custody project;
-13. use only clearly synthetic credential material for C3;
-14. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
+1. in an authenticated AWS control-plane session, fill only the reviewed observation facts: exact Tokyo availability, Ubuntu LTS blueprint, bundle shape, displayed price and static-IPv4 availability/pricing;
+2. stop if any value is unknown, ambiguous, mismatched or over the USD 7 boundary;
+3. require a specific live-provision authorization before creating the instance/static IP;
+4. create exactly one candidate and attach exactly one static IPv4;
+5. run only the read-only/no-secret H1 preflight first;
+6. compare actual host facts to the reviewed hardening and recovery plans before any mutation;
+7. require a separate live-hardening authorization before applying any mutating host package;
+8. verify static egress, OS-level default-deny egress, TLS `verify-full`, reboot/recovery and memory headroom before any credential exists;
+9. use that verified static egress only when configuring the Supabase network restriction;
+10. verify Data API disabled and SSL enforcement enabled, changing each separately only if required;
+11. require fresh explicit authorization before applying C2 DDL to the live custody project;
+12. use only clearly synthetic credential material for C3;
+13. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
 
 Live hosted execution, long-lived worker, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery remain disabled.
 
