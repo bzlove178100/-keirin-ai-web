@@ -28,11 +28,11 @@ Agent-only checkpoint/activity persistence and queue coordination in `keirin-ai-
 
 ## Verified repository state
 
-PR #140 (`Select lowest-cost hardened host candidate`) merged to `main` as:
+PR #141 (`Prepare read-only Lightsail host hardening qualification`) merged to `main` as:
 
-`8dfbc0cd1459fc4fe4717460e14691508aaa681c`
+`c2b0ae24b28744e7aae06ba68f844c51761722ce`
 
-Its exact-head CI passed. Its post-merge main workflows also completed without a failure, including the regression, collection UI, read-only runtime, PostgreSQL/host contract and Pages paths.
+Its corrected exact-head CI passed after an exact-case regression marker was fixed. Post-merge `main` then completed five workflows with no in-progress or failed run for that merge SHA, including collection UI, regression, read-only runtime, PostgreSQL/host contract and Pages paths.
 
 The PostgreSQL contract continues to cover the co-resident application stack, fail-closed lease/trust/hostname rejection, real row-lock/process-deadline behavior, hardened host limits, TLS/restart recovery, log-policy checks and pgAudit parameter-redaction checks.
 
@@ -107,28 +107,41 @@ PR #140 selected the first later qualification candidate:
 - current published maximum bundle price: **USD 7/month**;
 - attached Lightsail static IPv4: no additional charge.
 
+The public AWS documentation was re-checked on 2026-09-30 before the provisioning review and still showed the same USD 7/month Micro 1 GB shape and attached-static-IPv4 pricing model. Exact Tokyo control-plane availability and the live blueprint ID still must be checked in an authenticated AWS session immediately before creation.
+
 No host has been provisioned and no AWS cost has been incurred.
 
-Cheaper 512 MiB options are not the primary candidate because they leave materially less runtime/security-update headroom; the reviewed DigitalOcean option is also Singapore rather than Tokyo. If 1 GB proves insufficient, do not weaken safeguards to preserve the USD 7 target; qualify the next reviewed size from evidence.
+Cheaper 512 MiB options are not the primary candidate because they leave materially less runtime/security-update headroom. If 1 GB proves insufficient, do not weaken safeguards to preserve the USD 7 target; qualify the next reviewed size from evidence.
 
 Lightsail's platform firewall does not supply the required outbound restriction, so the eventual host must enforce default-deny egress locally.
 
-## Host hardening review in progress
+## Host hardening review complete
 
-Current branch: `agent-secret-host-hardening-review-v1-20260930`.
-
-Review-only artifacts now prepared:
+PR #141 added:
 
 - `SECRET_CUSTODY_HOST_HARDENING_REVIEW.md`;
 - `review/lightsail_host_preflight.sh`;
 - `tests/test_secret_custody_host_hardening_review.py`;
-- regression wiring for the new review boundary.
+- regression wiring for the H0-H7 no-secret qualification boundary.
 
 The preflight script is intentionally offline and read-only. It checks the expected Linux/systemd/cgroup-v2 shape, required host tools, reviewed 1 GB-class memory floor, swap-disabled state and unexpected wildcard listeners. It does not install packages, change the firewall, restart services, edit system state, contact AWS/Supabase/GitHub or read secret values.
 
-The reviewed live-host progression is H0-H7: immutable candidate/price check, local read-only preflight, separate administrator/filesystem hardening, inbound restriction, OS-level default-deny outbound policy, verify-full TLS/database qualification, resource/reboot/recovery qualification, and only then the later C2/C3 activation gates.
-
 The future host begins **untrusted / no-secret**. Passing host hardening by itself does not authorize C2 DDL or any credential use.
+
+## Provisioning review in progress
+
+Current branch: `agent-secret-host-provisioning-review-v1-20260930`.
+
+Review-only artifacts prepared on this branch:
+
+- `SECRET_CUSTODY_HOST_PROVISIONING_REVIEW.md`;
+- `review/lightsail_provisioning_manifest.template.json`;
+- `tests/test_secret_custody_host_provisioning_review.py`;
+- regression wiring for the provisioning contract.
+
+The manifest fixes the reviewed region, 1 GB/2 vCPU/40 GB/2 TB shape, USD 7 maximum monthly boundary, attached-static-IPv4 requirement, no-secret first boot, disabled runtime/provider/prediction gates and no automatic size upgrade. It deliberately keeps `authorized_for_live_create=false` and contains no account ID, live IP, hostname, key or secret.
+
+This repository state is not an AWS provisioning authorization. Actual Lightsail creation requires a fresh live execution instruction and an authenticated AWS-capable browser/tool session.
 
 ## Cost / availability boundary
 
@@ -138,23 +151,24 @@ Free is **not** approved for real always-on credential custody because low-activ
 
 Do not generate artificial keepalive traffic and call that an availability guarantee. Do not upgrade merely for code review or no-secret testing.
 
-For the hardened host, create no paid resource until live provisioning is specifically authorized. When that boundary arrives, start with exactly one USD 7/month candidate, qualify it with synthetic/no-secret inputs, and destroy it promptly if rejected.
+For the hardened host, start with exactly one USD 7/month candidate after specific live-provision authorization, qualify it with synthetic/no-secret inputs, and destroy it promptly if rejected. Do not keep multiple paid hosts running for convenience.
 
 ## Next work / next boundary
 
 The next safe sequence is:
 
-1. merge the host-hardening review only if exact-head CI is clean;
-2. before any paid provisioning, re-check the selected Lightsail price and Tokyo availability;
+1. merge the provisioning review only if exact-head CI is clean;
+2. in an authenticated AWS control-plane session, confirm Tokyo availability, exact Ubuntu LTS blueprint and displayed Micro 1 GB price before creation;
 3. require a specific live-provision authorization before creating the instance/static IP;
-4. provision exactly one candidate and run only no-secret host qualification first;
-5. apply reviewed hardening only after its mutating package is separately reviewed;
-6. verify static egress, OS-level default-deny egress, TLS `verify-full`, reboot/recovery and memory headroom;
-7. use that verified static egress only when configuring the Supabase network restriction;
-8. verify Data API disabled and SSL enforcement enabled, changing each separately only if required;
-9. require fresh explicit authorization before applying C2 DDL to the live custody project;
-10. use only clearly synthetic credential material for C3;
-11. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
+4. create exactly one candidate and attach exactly one static IPv4;
+5. run only the read-only/no-secret H1 preflight first;
+6. review actual host facts before applying any mutating hardening;
+7. apply a separately reviewed hardening package, then verify static egress, OS-level default-deny egress, TLS `verify-full`, reboot/recovery and memory headroom;
+8. use that verified static egress only when configuring the Supabase network restriction;
+9. verify Data API disabled and SSL enforcement enabled, changing each separately only if required;
+10. require fresh explicit authorization before applying C2 DDL to the live custody project;
+11. use only clearly synthetic credential material for C3;
+12. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
 
 Live hosted execution, long-lived worker, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery remain disabled.
 
