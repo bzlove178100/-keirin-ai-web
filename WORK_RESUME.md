@@ -11,13 +11,11 @@ If the user says only `続けて` in Work, resume from this exact boundary witho
 ## Verified repository state
 
 - Repository: `bzlove178100/-keirin-ai-web`
-- Current verified `main`: `abee8b76e0538e4442961bdcbb0128297b1298a4`
-- PR #146: AWS control-plane observation review merged.
-- PR #147: status synchronization merged.
-- PR #148: Work resume handoff merged.
-- PR #148 exact-head CI passed before merge: collection progress UI regression, keirin-ai regression, and agent checkpoint PostgreSQL contract all succeeded.
-- No open pull request was present at the 2026-10-01 resumption check.
-- The previously pending final CI completion check is complete; no repository-review work needs to be repeated before AWS observation.
+- Verified base before this account-boundary update: `8997da514255d8d9dcad2a0c252f92b4c1253814`.
+- PR #146 through PR #149 are merged.
+- PR #149 exact-head CI passed: collection progress UI regression, agent runtime read-only smoke, keirin-ai regression, and agent checkpoint PostgreSQL contract all succeeded.
+- Resolve the current `main` from GitHub when resuming; do not treat an embedded SHA as permanently current.
+- No AWS account is assumed available. Account creation is a separate explicit authorization boundary.
 
 ## Fixed safety state
 
@@ -37,7 +35,13 @@ Keep all of these unchanged unless the user separately authorizes the specific l
 
 ## Immediate next action in Work
 
-Use an authenticated AWS console/browser session and perform **observation only**. Do not create or mutate any AWS resource.
+Read `AWS_ACCOUNT_BOOTSTRAP_BOUNDARY.md` first.
+
+Do **not** assume an authenticated AWS account exists and do not keep retrying AWS login. Treat account availability as unconfirmed/absent until the user explicitly confirms or creates one.
+
+If the user explicitly authorizes AWS account creation, guide the user through AWS signup while requiring passwords, payment data, verification codes and identity/contact verification to be entered directly into AWS. Do not request those secrets in ChatGPT. Account creation itself is not live-provision authorization.
+
+Only after an AWS account is established, use an authenticated AWS console/browser session and perform **observation only**. Do not create or mutate any AWS resource.
 
 Observe and record only sanitized facts required by `SECRET_CUSTODY_AWS_CONTROL_PLANE_OBSERVATION_REVIEW.md` and `review/lightsail_control_plane_observation.template.json`:
 
