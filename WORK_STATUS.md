@@ -20,18 +20,24 @@ Unless a new, specific boundary is explicitly authorized:
 - report delivery / live 21:00 scheduling: **OFF / unconfigured**;
 - scheduler / recurrence: **OFF**;
 - no real provider/OAuth refresh exchange is connected;
-- no real provider credential or refresh secret is stored in the new custody project;
-- no live secret-store schema has been applied to the new custody project.
+- no real provider credential or refresh secret is stored in the custody project;
+- no live secret-store schema has been applied to the custody project.
 
 Agent-only checkpoint/activity persistence and queue coordination in `keirin-ai-staging` were separately authorized. Exact-task lease acquisition is deployed. No always-on worker is active.
 
 ## Verified repository state
 
-PR #136 (`Select isolated project boundary for real agent secret custody`) merged to `main` as:
+PR #138 (`Draft isolated secret-custody C2 schema review`) merged to `main` as:
 
-`25fe90185bd0fabe29890d7d3cde459068350b24`
+`ef5e1fe85fa593e716b132bf6c473c780b497bdf`
 
-Its post-merge workflows passed, including `keirin-ai regression`, `collection progress UI regression`, `agent checkpoint PostgreSQL contract`, host-limits qualification and Pages build/deployment.
+Post-merge workflows passed:
+
+- `keirin-ai regression`;
+- `collection progress UI regression`;
+- `agent checkpoint PostgreSQL contract`;
+- synthetic host-limits qualification;
+- Pages build/deployment.
 
 The PostgreSQL contract still covers the co-resident actual application stack, fail-closed lease/trust/hostname rejection, real row-lock/process-deadline behavior, hardened host limits, TLS/restart recovery, log-policy checks and pgAudit parameter-redaction checks.
 
@@ -46,84 +52,81 @@ Existing runtime/checkpoint staging remains:
 
 Do not repurpose this shared application staging Vault for real agent refresh-secret custody. The 2026-09-30 Phase A inventory confirmed `service_role` can directly access decrypted Vault data in that project.
 
-## Secret-custody architecture
+## Secret-custody project
 
-PR #136 selected a separate Supabase project as the future secret-custody boundary rather than modifying the shared application staging Vault.
+A dedicated project named `keirin-ai-secret-custody` exists in `ap-northeast-1` (Tokyo).
 
-The required final boundary remains:
+Current organization plan: **Free**. Project-creation cost check returned **0 per month** and the project is currently `ACTIVE_HEALTHY`.
 
-- single-purpose secret-custody project;
-- Data API disabled;
-- runtime receives no custody-project service key;
-- hardened direct PostgreSQL only;
-- SSL enforced and client uses verify-full trust/hostname checks;
-- database/pooler ingress restricted to the approved host path;
-- dedicated LOGIN host plus NOLOGIN broker;
-- private metadata schema and exact read/CAS functions;
-- provisioning capability separated from runtime;
-- bootstrap credential custody external to the database;
-- no fallback to shared staging Vault.
+The current live security-advisor check returned zero lints. This is supplementary evidence only; it does not prove the management-plane gates below.
 
-## C0 — dedicated project provisioning
+No paid add-on, branch, database password, Vault secret, binding row, provider credential, Edge Function or hosted worker was created for the custody path.
 
-User approved the cheapest path provided it does not create an operational problem.
+## C0 / C1 complete boundary
 
-A dedicated project named `keirin-ai-secret-custody` was created in the existing `Keirin AI` organization in `ap-northeast-1` (Tokyo).
+`SECRET_CUSTODY_C0_C1_EVIDENCE.md` records the dedicated-project provisioning and catalog-only inventory.
 
-Current organization plan: **Free**.
+Observed database shape includes:
 
-The project-creation cost check returned **0 per month** and the project reported `ACTIVE_HEALTHY` after creation. This uses the second active Free-project slot; the organization currently has the runtime staging project plus the custody project.
+- PostgreSQL 17.6 family, primary;
+- `supabase_vault` 0.3.1;
+- proposed private roles/schema absent;
+- hosted `service_role` retains normal Vault privileges inside the dedicated project;
+- no secret row/value/name/description or provider credential was read;
+- no DDL/DML was submitted during C1.
 
-No branch, paid add-on, password, secret, binding, DDL, Edge Function or hosted work was created during C0.
+Project isolation, not revocation of Supabase-managed platform privileges, is the selected blast-radius boundary.
 
-## Free-plan availability gate
+## C2 review artifacts complete
 
-Free is acceptable for current architecture work and synthetic/no-secret qualification, but it is **not approved for real always-on credential custody**.
+PR #138 added the isolated-project C2 review artifacts, intentionally outside `supabase/migrations`:
 
-Supabase currently documents that low-activity Free projects may be paused after a 7-day activity window, whereas projects on paid plans are not subject to that inactivity pause. Therefore a paid-plan availability decision or an explicitly reviewed alternative must be resolved before C4 real credential activation.
+- `SECRET_CUSTODY_C2_REVIEW.md`;
+- `review/secret_custody_c2_candidate.sql`;
+- `review/secret_custody_c2_rollback.sql`;
+- regression guards for the no-secret/no-live-apply boundary.
+
+The candidate keeps the dedicated LOGIN host / NOLOGIN broker split, private metadata schema, forced RLS, exact read/CAS functions, no runtime `vault.create_secret` capability, no password, no binding row and no secret provisioning.
+
+**C2 has not been applied to Supabase.**
+
+## Management-plane preflight
+
+`SECRET_CUSTODY_MANAGEMENT_PLANE_PREFLIGHT.md` is the next review artifact. It defines three project-specific hard gates:
+
+1. Data API disabled;
+2. Postgres SSL enforcement enabled;
+3. database/pooler network restrictions limited to the approved hardened-host egress CIDR set.
+
+Current connected tooling can confirm project health and database/catalog state, but does not expose authoritative read/write controls for all three settings. Their state must therefore remain **unknown** until verified through the Dashboard or an appropriately scoped Management API path.
+
+The preflight is deliberately fail-closed:
+
+- a denied or unavailable read is `unknown`, not safe;
+- SSL-enforcement changes are isolated because they restart the database;
+- network restrictions are not applied until the actual hardened-host egress IPv4/IPv6 CIDRs are known and stable;
+- no world-open placeholder CIDR is accepted;
+- management configuration is not batched with C2 DDL.
+
+## Cost / availability boundary
+
+Keep the current Free project for architecture, review and no-secret qualification while it remains operationally suitable.
+
+Free is **not** approved for real always-on credential custody because low-activity Free projects can be paused. Before C4 real credential activation, require either a paid-plan availability boundary or another explicitly reviewed solution that provides equivalent availability.
 
 Do not generate artificial keepalive traffic and call that an availability guarantee. Do not upgrade merely for code review or no-secret testing.
 
-## C1 — fresh isolated-project inventory
-
-Read-only catalog statements were executed against `keirin-ai-secret-custody`. No Vault row/value/name/description, application row or provider credential was read; no DDL/DML statement was submitted.
-
-Observed:
-
-- PostgreSQL `17.6` (`server_version_num=170006`), primary;
-- `supabase_vault` `0.3.1`, owner `supabase_admin`;
-- `agent_secret_host`, `agent_secret_broker`, `agent_credential_private`: absent;
-- `authenticator` is LOGIN and can SET ROLE `anon`, `authenticated`, `service_role`;
-- `service_role` is NOLOGIN with `BYPASSRLS`;
-- `vault.secrets` and `vault.decrypted_secrets` have RLS disabled;
-- `service_role` has Vault schema USAGE, SELECT/DELETE on the inspected Vault relations, and EXECUTE on the observed create/update/decrypt functions;
-- `anon` and `authenticated` do not have the corresponding inspected Vault access;
-- SQL session reported `transaction_read_only=off`, so evidence is read-only statements through a writable administrative session, not a database-enforced read-only transaction.
-
-The platform-role shape is expected. Project isolation is the security boundary; it is not a claim that Supabase platform administrators or the database owner cannot decrypt database-resident Vault material.
-
-## C1 management-plane gates still open
-
-The connected management surface used in this run does not expose authoritative read/write controls for all required settings below, so none were guessed or changed:
-
-1. Data API disabled state;
-2. Postgres SSL-enforcement state;
-3. database/pooler network restrictions and final approved host CIDR.
-
-These remain hard gates before any C2 live schema apply. Documentation proving the controls exist is not evidence that this project's settings currently satisfy them.
-
-See `SECRET_CUSTODY_C0_C1_EVIDENCE.md` for the current C0/C1 record.
-
 ## Next work / next boundary
 
-Safe next work is code/review only:
+The next safe sequence is:
 
-1. adapt the Phase B candidate into an isolated-project C2 review artifact;
-2. keep it outside `supabase/migrations` and do not apply it;
-3. define a management-plane preflight for Data API, SSL enforcement and network restriction;
-4. require fresh explicit authorization before any C2 DDL is applied to the live custody project;
-5. after C2 and rollback qualification, use only clearly synthetic credential material for C3;
-6. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
+1. merge the management-plane review artifact if exact-head CI is clean;
+2. obtain authoritative current values for Data API / SSL enforcement / network restrictions;
+3. identify the actual hardened hosted-worker egress CIDR set before any network-restriction write;
+4. make management-plane changes one at a time only where required, with read-back and health checks;
+5. require fresh explicit authorization before applying C2 DDL to the live custody project;
+6. after C2 and rollback qualification, use only clearly synthetic credential material for C3;
+7. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
 
 Live hosted execution, long-lived worker, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery remain disabled.
 
@@ -133,4 +136,4 @@ The product requirement remains daily 21:00 Asia/Tokyo reporting of daily sales,
 
 ## Constraints
 
-Do not commit private race histories, prediction snapshots, model artifacts, credentials, private file identifiers or personal data. Prefer current `main`, current CI, deployed metadata and direct bounded checks over older handoff notes.
+Do not commit private race histories, prediction snapshots, model artifacts, credentials, private file identifiers, host allowlists or personal data. Prefer current `main`, current CI, deployed metadata and direct bounded checks over older handoff notes.
