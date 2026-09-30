@@ -78,7 +78,7 @@ PR #140 selected Amazon Lightsail Linux/Unix Micro 1 GB in Tokyo (`ap-northeast-
 
 The provider boundary was re-checked on 2026-10-01. Lightsail remains the first candidate: current public documentation still shows Tokyo support and the USD 7 Micro 1 GB public-IPv4 bundle shape. Railway and Render do not currently provide a lower-friction equivalent for this design's Tokyo + stable-egress requirement, and DigitalOcean has no Tokyo region.
 
-No existing AWS account is assumed available. `AWS_ACCOUNT_BOOTSTRAP_BOUNDARY.md` makes account creation a separate explicit authorization step before authenticated control-plane observation. No host has been provisioned and no AWS cost has been incurred. If 1 GB proves insufficient, do not weaken safeguards to preserve the USD 7 target.
+AWS account bootstrap is now complete. The user created the Proof of Concept account, upgraded it to the paid usage model, activated advanced features, and created the `ai-agent-team` management boundary. A USD 10 monthly AWS Budget exists and its charge-type filter excludes Credit and Refund so AWS usage remains visible while promotional credits are available. No Lightsail host or static IP has been provisioned. If 1 GB proves insufficient, do not weaken safeguards to preserve the USD 7 target.
 
 ## Host safety reviews complete
 
@@ -87,6 +87,18 @@ PR #141 added the read-only H0-H7 hardening qualification review and offline `re
 The future host begins **untrusted / no-secret**. Passing repository review or host hardening by itself does not authorize C2 DDL or credential use.
 
 The hardening package is declarative data, not an executable host mutation script. The recovery plan keeps the runtime disabled and host no-secret on preflight, hardening, network/TLS, capacity or reboot/recovery failure. Automatic AWS destruction/resize/reboot/snapshot/replacement, automatic firewall relaxation/egress widening, protected Supabase/Vault/provider/prediction/race-data mutations, insecure TLS/plaintext fallback and credential introduction during recovery are forbidden by the reviewed contracts.
+
+## AWS GitHub OIDC read-only automation
+
+Manual AWS console navigation is no longer the preferred observation path.
+
+`AWS_GITHUB_OIDC_READONLY_OBSERVATION.md`, `review/aws_github_oidc_readonly_role.yaml`, `review/aws_lightsail_readonly_observation.sh` and the manual-dispatch GitHub Actions workflow define a short-lived OIDC path that can inspect the Lightsail Tokyo catalog without long-lived AWS access keys.
+
+The reviewed role is restricted to GitHub owner/repository immutable IDs, branch `main`, audience `sts.amazonaws.com`, and exactly three Lightsail catalog reads: `GetRegions`, `GetBlueprints`, and `GetBundles`. It has no Lightsail mutation permission.
+
+The public CloudShell path in Tokyo failed during bootstrap with an environment/permission error. Do not create a CloudShell VPC environment for this observation. The OIDC path supersedes repeated CloudShell/console attempts.
+
+One bounded bootstrap remains before the workflow can run: create the reviewed CloudFormation stack in the Proof of Concept AWS account, then store its role ARN as the GitHub Actions secret `AWS_READONLY_ROLE_ARN`. No AWS account identifier or credential may be committed to the repository.
 
 ## AWS control-plane observation review complete
 
@@ -104,21 +116,24 @@ For the hardened host, start with exactly one USD 7/month candidate only after a
 
 The next safe sequence is:
 
-1. treat AWS account availability as unconfirmed/absent and read `AWS_ACCOUNT_BOOTSTRAP_BOUNDARY.md`;
-2. require explicit user authorization before AWS account creation; the user enters all password/payment/verification data directly into AWS;
-3. after the account exists, in an authenticated AWS control-plane session fill only the reviewed observation facts: exact Tokyo availability, Ubuntu LTS blueprint, bundle shape, displayed price and static-IPv4 availability/pricing;
-4. stop if any value is unknown, ambiguous, mismatched or over the USD 7 boundary;
-5. require a separate specific live-provision authorization before creating the instance/static IP;
-6. create exactly one candidate and attach exactly one static IPv4;
-7. run only the read-only/no-secret H1 preflight first;
-8. compare actual host facts to the reviewed hardening and recovery plans before any mutation;
-9. require a separate live-hardening authorization before applying any mutating host package;
-10. verify static egress, OS-level default-deny egress, TLS `verify-full`, reboot/recovery and memory headroom before any credential exists;
-11. use that verified static egress only when configuring the Supabase network restriction;
-12. verify Data API disabled and SSL enforcement enabled, changing each separately only if required;
-13. require fresh explicit authorization before applying C2 DDL to the live custody project;
-14. use only clearly synthetic credential material for C3;
-15. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
+1. merge and retain the GitHub OIDC read-only observation package;
+2. in the Proof of Concept AWS account, create only the reviewed CloudFormation OIDC stack;
+3. store only the resulting role ARN in the GitHub Actions secret `AWS_READONLY_ROLE_ARN`; do not create an AWS access key;
+4. run the manual `aws lightsail read-only observation` workflow;
+5. require Tokyo `ap-northeast-1`, an active Ubuntu Linux/Unix blueprint, and an active bundle matching 2 vCPU / 1 GiB / 40 GiB / 2 TB at no more than USD 7;
+6. keep static IPv4 allocation untested until provisioning because a live allocation probe would be mutating;
+7. stop if any required catalog value is unknown, mismatched or over budget;
+8. require a separate specific live-provision authorization before creating the instance/static IP;
+9. create exactly one candidate and attach exactly one static IPv4;
+10. run only the read-only/no-secret H1 preflight first;
+11. compare actual host facts to the reviewed hardening and recovery plans before any mutation;
+12. require a separate live-hardening authorization before applying any mutating host package;
+13. verify static egress, OS-level default-deny egress, TLS `verify-full`, reboot/recovery and memory headroom before any credential exists;
+14. use that verified static egress only when configuring the Supabase network restriction;
+15. verify Data API disabled and SSL enforcement enabled, changing each separately only if required;
+16. require fresh explicit authorization before applying C2 DDL to the live custody project;
+17. use only clearly synthetic credential material for C3;
+18. require a separate availability/cost decision plus explicit authorization before C4 real credential activation.
 
 Live hosted execution, long-lived worker, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery remain disabled.
 
