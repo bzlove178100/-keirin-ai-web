@@ -1,0 +1,71 @@
+{
+  "schema_version": "lightsail-control-plane-observation-v1",
+  "status": "review_only",
+  "observation_only": true,
+  "authorized_for_live_create": false,
+  "expected": {
+    "provider": "amazon_lightsail",
+    "region": "ap-northeast-1",
+    "os_family": "linux_unix",
+    "preferred_blueprint_family": "ubuntu_lts",
+    "vcpus": 2,
+    "memory_gib": 1,
+    "storage_gib": 40,
+    "transfer_tb": 2,
+    "max_monthly_usd": 7,
+    "static_ipv4_required": true,
+    "automatic_region_substitution_allowed": false,
+    "automatic_size_substitution_allowed": false
+  },
+  "observed": {
+    "observed_at": null,
+    "region": null,
+    "blueprint_available": null,
+    "blueprint_id": null,
+    "blueprint_label": null,
+    "bundle_available": null,
+    "bundle_id": null,
+    "vcpus": null,
+    "memory_gib": null,
+    "storage_gib": null,
+    "transfer_tb": null,
+    "displayed_monthly_usd": null,
+    "static_ipv4_available": null,
+    "static_ipv4_pricing_confirmed": null
+  },
+  "acceptance": {
+    "all_values_must_be_directly_observed": true,
+    "unknown_or_ambiguous_fails_closed": true,
+    "exact_shape_match_required": true,
+    "price_must_not_exceed_expected_max": true,
+    "separate_live_provision_authorization_required": true
+  },
+  "sensitive_data_policy": {
+    "aws_account_id_allowed": false,
+    "organization_id_allowed": false,
+    "billing_identifier_allowed": false,
+    "access_key_allowed": false,
+    "secret_key_allowed": false,
+    "session_token_allowed": false,
+    "authorization_header_allowed": false,
+    "private_key_allowed": false,
+    "instance_id_allowed": false,
+    "instance_name_allowed": false,
+    "public_ip_allowed": false,
+    "private_ip_allowed": false,
+    "static_ip_address_allowed": false,
+    "admin_source_cidr_allowed": false,
+    "private_hostname_allowed": false,
+    "database_connection_string_allowed": false,
+    "database_credential_allowed": false
+  },
+  "runtime_gates": {
+    "hosted_task_execution_enabled": false,
+    "provider_generation_write_enabled": false,
+    "scheduler_recurrence_enabled": false,
+    "report_delivery_enabled": false,
+    "production_prediction_enabled": false,
+    "prediction_db_write_enabled": false,
+    "external_race_data_fetch_enabled": false
+  }
+}
