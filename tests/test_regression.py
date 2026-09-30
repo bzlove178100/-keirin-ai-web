@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from test_phase_b_review_artifacts import main as phase_b_review_artifacts_main
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -151,6 +153,10 @@ def test_backtest_contract_separates_scope_roi_and_probability_quality():
         assert text in source, f"missing backtest contract marker: {text}"
 
 
+def test_phase_b_review_artifact_safety_contract():
+    phase_b_review_artifacts_main()
+
+
 if __name__ == "__main__":
     test_golden_manifest_contract()
     test_iwaki_raw_fixture_keeps_kdreams_no_ticket_marker()
@@ -161,4 +167,5 @@ if __name__ == "__main__":
     test_history_pipeline_safety_temporal_and_training_capture_contract()
     test_training_input_module_removes_no_ticket_markers_and_excludes_targets()
     test_backtest_contract_separates_scope_roi_and_probability_quality()
+    test_phase_b_review_artifact_safety_contract()
     print("keirin-ai regression checks: PASS")
