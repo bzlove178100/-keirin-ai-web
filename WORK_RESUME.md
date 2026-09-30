@@ -15,7 +15,10 @@ If the user says only `続けて` in Work, resume from this exact boundary witho
 - PR #146 through PR #149 are merged.
 - PR #149 exact-head CI passed: collection progress UI regression, agent runtime read-only smoke, keirin-ai regression, and agent checkpoint PostgreSQL contract all succeeded.
 - Resolve the current `main` from GitHub when resuming; do not treat an embedded SHA as permanently current.
-- No AWS account is assumed available. Account creation is a separate explicit authorization boundary.
+- AWS account bootstrap is complete: Proof of Concept account available, paid usage enabled, advanced features activated, and USD 10 AWS Budget configured with Credit/Refund excluded.
+- No Lightsail instance or static IP has been provisioned.
+- Public CloudShell in Tokyo failed with an environment/permission error; do not keep retrying CloudShell or create a CloudShell VPC environment.
+- The next observation path is GitHub Actions OIDC with short-lived read-only AWS credentials.
 
 ## Fixed safety state
 
@@ -35,15 +38,20 @@ Keep all of these unchanged unless the user separately authorizes the specific l
 
 ## Immediate next action in Work
 
-Read `AWS_ACCOUNT_BOOTSTRAP_BOUNDARY.md` first.
+Read `AWS_GITHUB_OIDC_READONLY_OBSERVATION.md` first.
 
-Do **not** assume an authenticated AWS account exists and do not keep retrying AWS login. Treat account availability as unconfirmed/absent until the user explicitly confirms or creates one.
+Do not resume screenshot-by-screenshot AWS console navigation and do not retry public CloudShell.
 
-If the user explicitly authorizes AWS account creation, guide the user through AWS signup while requiring passwords, payment data, verification codes and identity/contact verification to be entered directly into AWS. Do not request those secrets in ChatGPT. Account creation itself is not live-provision authorization.
+The next bounded bootstrap is:
 
-Only after an AWS account is established, use an authenticated AWS console/browser session and perform **observation only**. Do not create or mutate any AWS resource.
+1. create the reviewed `review/aws_github_oidc_readonly_role.yaml` CloudFormation stack in the Proof of Concept AWS account;
+2. copy only its `ReadOnlyRoleArn` output;
+3. store that ARN as the GitHub Actions secret `AWS_READONLY_ROLE_ARN`;
+4. run the manual `aws lightsail read-only observation` workflow.
 
-Observe and record only sanitized facts required by `SECRET_CUSTODY_AWS_CONTROL_PLANE_OBSERVATION_REVIEW.md` and `review/lightsail_control_plane_observation.template.json`:
+Do not create an AWS access key. The workflow uses GitHub OIDC and short-lived credentials.
+
+The workflow must observe only sanitized facts required by `SECRET_CUSTODY_AWS_CONTROL_PLANE_OBSERVATION_REVIEW.md` and `review/lightsail_control_plane_observation.template.json`:
 
 1. selected region is exactly `ap-northeast-1`;
 2. an Ubuntu LTS Linux/Unix blueprint is available and its exact blueprint identifier;
