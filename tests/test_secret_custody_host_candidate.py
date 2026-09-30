@@ -12,7 +12,7 @@ def main():
         "Amazon Lightsail, Asia Pacific (Tokyo), Linux/Unix Micro 1 GB with public IPv4",
         "USD 7/month maximum bundle price",
         "attached Lightsail static IPv4: no additional charge",
-        "do not weaken safeguards",
+        "do **not** weaken safeguards",
         "default-deny outbound at the host firewall",
         "TLS `verify-full`",
         "static egress IPv4 is observed as expected",
