@@ -7,7 +7,8 @@ DECISION = ROOT / "SECRET_BACKEND_ARCHITECTURE_DECISION.md"
 
 
 def normalized(text: str) -> str:
-    return re.sub(r"\s+", " ", text.lower()).strip()
+    text = text.lower().replace("*", "").replace("`", "")
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def require(condition: bool, label: str) -> None:
@@ -50,7 +51,7 @@ def main() -> None:
         "project_creation_boundary_missing",
     )
     require(
-        "changing `keirin-ai-staging` vault grants" in text,
+        "changing keirin-ai-staging vault grants" in text,
         "shared_vault_mutation_boundary_missing",
     )
 
