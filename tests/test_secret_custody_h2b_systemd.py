@@ -10,6 +10,7 @@ import importlib.util
 import io
 import os
 from pathlib import Path
+import stat
 import time
 import unittest
 from unittest.mock import patch
@@ -36,6 +37,21 @@ class RealSystemdTests(unittest.TestCase):
     def setUpClass(cls):
         if os.environ.get("H2B_CI_FIXTURE") != "1" or os.environ.get("GITHUB_ACTIONS") != "true":
             raise RuntimeError("Only explicitly opted-in disposable GitHub CI may run this fixture")
+        # Hosted build images may make /opt developer-writable. Tighten only
+        # these parent directory entries for this disposable fixture, preserving
+        # their exact metadata for restoration. Do not bypass H2a's real guard.
+        cls.parents = []
+        cls.addClassCleanup(cls.restore_parents)
+        for name in h2.PARENTS:
+            p = Path(name)
+            s = p.lstat()
+            if not stat.S_ISDIR(s.st_mode):
+                raise RuntimeError("CI parent must be a real directory")
+            if s.st_uid != 0 or s.st_mode & 0o022:
+                cls.parents.append((p, s))
+                print("CI fixture tightens parent: " + name, flush=True)
+                os.chown(p, 0, 0)
+                p.chmod(stat.S_IMODE(s.st_mode) & ~0o022)
         cls.host = CIHost()
         cls.package = h2.Package(cls.host)
         cls.package.fresh()  # Never adopt a pre-existing account/service/receipt.
@@ -46,6 +62,15 @@ class RealSystemdTests(unittest.TestCase):
     def cleanup_fixture(cls):
         if os.path.lexists(h2.STATE):
             cls.package.rollback(h2.UNDO)
+
+    @classmethod
+    def restore_parents(cls):
+        for p, previous in reversed(cls.parents):
+            current = p.lstat()
+            if (current.st_dev, current.st_ino) != (previous.st_dev, previous.st_ino):
+                raise RuntimeError("CI parent replaced; metadata restoration refused")
+            os.chown(p, previous.st_uid, previous.st_gid)
+            p.chmod(stat.S_IMODE(previous.st_mode))
 
     def runner(self):
         runner = h2b.Runner(h2)

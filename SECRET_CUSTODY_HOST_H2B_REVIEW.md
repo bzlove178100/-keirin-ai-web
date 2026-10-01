@@ -85,6 +85,8 @@ stop foreign units, leftover cleanup rejection and redacted diagnostics.
 
 The mandatory Ubuntu 24.04 CI job uses actual systemd 255, account tools, kernel
 cgroups and namespaces. It installs an owned H2a fixture on the disposable runner,
+normalizes any developer-writable parent directory entry to root-owned/non-writable
+for the fixture and restores its exact original metadata afterwards, then
 tests success, failed-child redaction/collection, and a stricter one-second
 manager deadline, then removes the fixture through the H2a bounded rollback.
 The CI global-host swap precondition alone is synthetic because runner swap is
