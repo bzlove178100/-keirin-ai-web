@@ -23,8 +23,11 @@ Immediate next verification boundary:
 - CloudFormation `ListStacks` in Proof of Concept Tokyo was then re-tested and succeeded: the stack list loaded with no SCP error and showed 0 stacks.
 - Next, return to the Proof of Concept session and verify that CloudFormation `ListStacks` succeeds in Tokyo `ap-northeast-1`.
 - If Tokyo CloudFormation still fails, stop and diagnose the new concrete error; do not repeat the SCP update.
-- Once Tokyo CloudFormation access is verified, continue the reviewed OIDC bootstrap: create only the reviewed OIDC stack, capture `ReadOnlyRoleArn`, register `AWS_READONLY_ROLE_ARN`, and run the read-only Lightsail observation.
-- Work should take over after the OIDC path is live, because then AWS observation can proceed through GitHub Actions instead of repeating phone-console operations. A Work cloud browser session does not inherit the user's current Safari/CloudShell session, and a prior Work AWS browser attempt returned `Site Unavailable`.
+- Tokyo CloudFormation access was verified.
+- The reviewed CloudFormation stack `keirin-ai-github-oidc-readonly` was created through a reviewed change set containing exactly two additions: `GitHubActionsOidcProvider` and `GitHubLightsailReadOnlyRole`. Both reached `CREATE_COMPLETE`.
+- The stack output `ReadOnlyRoleArn` was copied by the user and registered in GitHub as the repository Actions secret `AWS_READONLY_ROLE_ARN`; GitHub displayed `Repository secret added.`
+- The next step is to run the manual `aws lightsail read-only observation` workflow and verify the sanitized Tokyo catalog output. Do not recreate the stack or secret.
+- The OIDC bootstrap is now live enough for the next read-only GitHub Actions observation. Hand off the next substantial execution/verification to Work. Work should read this file first, then use GitHub rather than restarting phone-console AWS steps. A Work cloud browser session does not inherit the user's Safari session, but GitHub repository state is the shared handoff.
 
 
 Updated: 2026-10-01 (Asia/Tokyo)
