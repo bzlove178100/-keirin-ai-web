@@ -115,7 +115,7 @@ The manifest's `authorized_for_live_create` field stays `false` in Git. A live a
 
 ## Current tool boundary
 
-GitHub OIDC catalog observation and the separately approved Tokyo inventory update succeeded on 2026-10-01. The role has the three catalog reads plus GetInstances/GetStaticIps/GetKeyPairs conditioned on Tokyo, with no provisioning permission. The first inventory found 0 instances, 0 static IPs and 1 key pair. A default-key classifier defect prevents identifying that key; the version 2 correction awaits a separately authorized revalidation run. See `AWS_LIGHTSAIL_INVENTORY_REVIEW.md`. Actual provisioning still requires an authenticated AWS-capable control-plane session with the separately reviewed scope. Work GitHub login is not an AWS session.
+GitHub OIDC catalog observation and the separately approved Tokyo inventory update succeeded on 2026-10-01. The role has the three catalog reads plus GetInstances/GetStaticIps/GetKeyPairs conditioned on Tokyo, with no provisioning permission. The separately authorized version 2 inventory run 36856726931 succeeded on 2026-10-01 at 20:39:38 JST: 0 instances, 0 static IPs, 1 key pair and Tokyo default-key presence true. The first run's defective absence flag remains invalid; corrected metadata confirms the existing default key but not SSH login. See `AWS_LIGHTSAIL_INVENTORY_REVIEW.md`. Actual provisioning still requires an authenticated AWS-capable control-plane session with the separately reviewed scope. Work GitHub login is not an AWS session.
 
 ## Non-authorization
 
@@ -161,7 +161,7 @@ No launch script, runtime activation, real provider credential, account ID or IP
 
 ### Validation and limits
 
-Run `cfn-lint -r ap-northeast-1 -t review/aws_lightsail_candidate.json` and `python -m pytest -q tests/test_aws_lightsail_candidate_template.py`. These are offline schema and safety-contract checks only. The first Tokyo inventory completed (0 instances, 0 static IPs, 1 key), but default-key identity remains unresolved because of the recorded classifier defect. Independent account identity, current price, usable-key selection, the provisioning change set/permissions, firewall read-back, attachment and host qualification remain unverified.
+Run `cfn-lint -r ap-northeast-1 -t review/aws_lightsail_candidate.json` and `python -m pytest -q tests/test_aws_lightsail_candidate_template.py`. These are offline schema and safety-contract checks only. The corrected Tokyo inventory completed (0 instances, 0 static IPs, 1 key; default-key presence true). Independent account identity, current price, usable-key selection, the provisioning change set/permissions, firewall read-back, attachment and host qualification remain unverified.
 
 Official references:
 

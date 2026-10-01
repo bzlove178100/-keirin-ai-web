@@ -2,7 +2,7 @@
 
 Updated: 2026-10-01 (Asia/Tokyo).
 
-## Current boundary: IAM update and first inventory complete; default-key classifier corrected
+## Current boundary: corrected Tokyo inventory complete; default key observed
 
 Read this section first when the user says `続けて`. The SCP, OIDC bootstrap and initial catalog observation are complete; do not restart phone-console setup, recreate the stack/secret, or rerun the observation without a new reason.
 
@@ -14,7 +14,25 @@ Read this section first when the user says `続けて`. The SCP, OIDC bootstrap 
 - Job `observe` (`110305976403`): OIDC credential configuration and catalog observation both succeeded.
 - This validates the deployed OIDC path and the three catalog reads at that time, not resource creation permission or host readiness.
 
-## Completed Tokyo IAM update and first inventory
+## Corrected inventory verified on 2026-10-01
+
+At 20:37:39 JST the user explicitly authorized one additional corrected read-only inventory run. [Inventory run #2](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36856726931) was dispatched exactly once from main `de7cd0b97bb009f5f9394512f94bf5be33d5251b` (PR #161 merged). Job `110350863079` completed successfully, including OIDC authentication and all three inventory reads. The version 2 result was emitted at 11:39:38 UTC / 20:39:38 JST.
+
+| Observation | Verified result |
+| --- | --- |
+| Region | ap-northeast-1 |
+| Instances / static IPs / key pairs | 0 / 0 / 1 |
+| Proposed instance / static-IP name collisions | false / false |
+| Tokyo default key present | true |
+| Review reasons | empty |
+| Key login / independent account identity / stack-name inventory | Not verified |
+| Live creation authorized | false |
+
+The corrected default-key classifier is now verified against AWS metadata. This resolves the earlier default-key identity uncertainty; version 1's absence flag remains invalid historical evidence. No key was created or downloaded and no private key material was read. Metadata presence does not verify SSH login.
+
+Both authorized inventory runs are complete. Do not dispatch a third run or repeat the IAM/bootstrap setup automatically. Next, verify the intended account, proposed stack name and current blueprint/bundle/price before preparing the exact two-resource CREATE change set for separate approval. No paid host/IP creation, provisioning permission, runtime activation or Supabase change was authorized by this inventory execution.
+
+## Completed Tokyo IAM update and first inventory (historical)
 
 The user authorized the exact three-action Tokyo inventory IAM addition and one manual run at 19:20:46 JST on 2026-10-01. The resolved change-set JSON was reviewed at 19:49:27 JST: one Modify of GitHubLightsailReadOnlyRole, Replacement=False, with only the GetInstances/GetStaticIps/GetKeyPairs statement conditioned on ap-northeast-1 added. Before/after contexts preserved trust, role identity and every other property. The user's CloudFormation events screenshot confirmed role UPDATE_COMPLETE at 19:52:35 JST and stack UPDATE_COMPLETE at 19:52:49 JST.
 
@@ -35,9 +53,9 @@ Evidence is the resolved change set, completion events and successful OIDC/inven
 
 Version 1 matched `LightsailDefaultKey-ap-northeast-1`, a download filename stem, instead of the documented API default key name `LightsailDefaultKeyPair`. Its `tokyo_default_key_present=false` and `TOKYO_DEFAULT_KEY_NOT_OBSERVED` therefore do not establish default-key absence. The 0/0/1 counts remain valid. Key names were intentionally not exported, so the single key cannot be identified retrospectively from the log. Do not create or download a key on that evidence.
 
-Version 2 uses the documented API name. Regression fixtures use independent literals, including the downloaded filename stem and a custom key, so a wrong production constant cannot make its own tests pass. All 33 local inventory regression tests passed, using synthetic responses only. This is an offline code correction; it has not yet been verified against AWS.
+Version 2 uses the documented API name. Regression fixtures use independent literals, including the downloaded filename stem and a custom key, so a wrong production constant cannot make its own tests pass. All 33 local inventory regression tests passed, using synthetic responses only. PR #161 merged the correction after all five applicable CI workflows passed; the separately authorized version 2 live verification is recorded above.
 
-The original one-run authorization has been consumed. No second live dispatch has occurred. After code review and CI, obtain a narrow decision for one further run of the same three read operations on main; no additional IAM change is needed. The changed condition is the corrected classifier; success means complete version 2 inventory with a trustworthy default-key boolean. If the run fails or the key is not observed, stop and retain the uncertainty; no automatic retry, key creation or key download. Paid host/IP provisioning remains separately unapproved.
+At the end of the first run, the original one-run authorization was consumed and corrected live revalidation remained pending. The user subsequently authorized exactly one additional run at 20:37:39 JST; its successful result is recorded above. Paid host/IP provisioning remains separately unapproved.
 
 AWS documents the name in [keyPairName output](https://docs.aws.amazon.com/cli/latest/reference/lightsail/get-instance-access-details.html). This is a documentation reference only; GetInstanceAccessDetails was not called or granted.
 
@@ -60,13 +78,13 @@ AWS public documentation rechecked on 2026-10-01 states that a static IPv4 attac
 
 ## Next action and authorization boundary
 
-The Tokyo inventory IAM update and the one authorized inventory run are complete, as recorded above. Do not request the same IAM permission again or repeat phone-console setup. The current code corrects only the default-key classifier; one additional live run needs a new narrow execution decision because the original authorization was for one run.
+The Tokyo inventory IAM update and both separately authorized inventory runs are complete. The corrected classifier observed the existing Tokyo default key. Do not request the completed IAM update again, repeat phone-console setup, or rerun inventory as setup.
 
 The follow-up prepared `review/aws_lightsail_candidate.json` and expanded `SECRET_CUSTODY_HOST_PROVISIONING_REVIEW.md`. The proposal pins Ubuntu 24.04 LTS / micro_3_0 and exactly one attached static IPv4. It requests only TCP 22 from the lightsail-connect source alias, with no launch script or runtime. Default acknowledgement rejects creation; the privately supplied expected account must match and the region must be Tokyo. Both resources use Retain; execution must preserve successful resources on failure, with an explicit subsequent cleanup decision if needed.
 
 Local cfn-lint 1.57.1 completed with no findings and all 10 candidate safety-contract tests passed. The offline CI now repeats both checks. This is offline preparation, not an AWS change set or live validation.
 
-Next, resolve default-key identity with the corrected classifier under the additional one-run decision. Instance/static-IP name collisions were absent at the recorded inventory time; account identity, stack-name collision, current price/IDs, key login and provisioning permissions remain separate checks. The deployed role can perform the three Tokyo inventory reads and three original catalog reads, but cannot provision resources. Work GitHub authentication is not AWS authentication. If access is unavailable, report that precise blocker rather than repeat completed mobile/bootstrap steps.
+Default-key identity and absent instance/static-IP name collisions are verified at the corrected inventory time. Next, independently verify account identity, stack-name collision and current price/IDs before a concrete provisioning change-set review. Key login and provisioning permissions remain separate checks. The deployed role can perform the three Tokyo inventory reads and three original catalog reads, but cannot provision resources. Work GitHub authentication is not AWS authentication. If access is unavailable, report that precise blocker rather than repeat completed mobile/bootstrap steps.
 
 Prepare and inspect a CREATE change set with exactly two Add actions, then obtain specific approval of the actual change set, cost, SSH and failure-retention behavior before execution. Resolve current main and follow `AGENTS.md`. Passing observation, lint, CI or an acknowledgement string does not grant live authorization.
 
