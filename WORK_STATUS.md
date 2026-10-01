@@ -1,16 +1,20 @@
 # Work status
 
-## Current boundary: H1 passed; H2a implementation prepared; live apply pending
+## Current boundary: H2a authorized; first apply failed; correction under validation
 
-Updated: 2026-10-01 (Asia/Tokyo), after the user's `次` following H1.
+Updated: 2026-10-02 00:06 JST evidence (Asia/Tokyo).
 
-[H2a identity/files review](SECRET_CUSTODY_HOST_H2A_REVIEW.md) now specifies the exact next change and its apply/verify/rollback implementation in `review/secret_custody_h2.py`. It proposes one non-login identity, root-owned fixed directories, all-false non-secret gates, a root-only ownership receipt, and an inactive static service whose only executable is `/usr/bin/false`. It performs no service start, SSH/firewall edit, package install, reboot, cloud operation or secret access. Candidate resource/sandbox settings are not effective qualification evidence.
+The user explicitly said `適用して` at 2026-10-01 23:56:43 JST after the exact H2a identity/files/inactive-unit scope was presented. That authorization remains valid for diagnosis, bounded recovery and corrected application within the same scope; **do not ask for the same permission again**. It does not activate runtime, provider, credentials, networking changes or any other gate.
 
-The existing hardening review requires a separate live-apply decision. Complete the H2a offline CI and present this concrete scope before asking for that decision; preparation approval is not live mutation approval. No H2a command has been run on the candidate. The host remains **untrusted / no-secret**; H2-H7 and all activation/credential gates remain pending/OFF. Stop on any apply error and diagnose before a repeat or the separately acknowledged bounded rollback.
+PR #166 merged offline preparation. The user's first live command pinned commit `5cc75aa40523e405ccd0a6515386d3a41eeb886d` and script SHA-256 `50a92a2b0c4585cc965a91faf737d81d337408573cf2668dd26dc49a825473e1`. At 00:00 JST it returned `STOP HOST_COMMAND_FAILED` / `RESULT NO_RUNTIME_AUTHORIZED_DO_NOT_RETRY_APPLY`. This was **not a successful installation**.
 
-Use the existing working Termius session after approval. Resolve the reviewed immutable script commit and exact SHA-256 for the phone command; never execute a mutable branch URL. Work has no independently verified AWS/SSH session. Do not repeat paid creation, bootstrap, inventory, key import, phone keyboard setup or H1.
+At 00:06 JST screenshot IMG_8924 confirmed: the receipt directory exists; the reserved code/config directories and unit file are absent; dedicated user/group lookups each return 2; systemd reports not-found/inactive, empty fragment/drop-ins/unit-file state, and show exit 0. Receipt contents have not independently been read back. The failure is consistent with the invalid `useradd --key CREATE_MAIL_SPOOL=no` argument found in our implementation. The prior mocked account tests missed the real parser boundary. The correction removes that invalid login.defs override; system accounts already skip mail creation. Fixed stage-specific command errors retain diagnostic privacy.
 
-The dedicated offline CI job uses real temporary-file ownership with synthetic account/systemd adapters. Local Work maps only UID/GID 0, so five boundary/syntax tests passed locally and 23 transaction tests require the no-skips CI gate. No offline success proves live enforcement or full qualification.
+[H2a review and recovery](SECRET_CUSTODY_HOST_H2A_REVIEW.md) describes the defect, primary source and new real CLI test: installed Ubuntu 24.04 account tools target only a disposable chroot database, while the manager/process adapter remains synthetic. It reproduces the invalid command, checks receipt-only partial state, then exercises bounded rollback, corrected apply and verification. Require this CI step and existing regression checks to pass on the exact correction commit before merge or phone execution. Local Work has only UID/GID 0 and rejects the account CLI audit interface; it cannot substitute for this CI gate.
+
+After CI/merge, use an immutable, hash-checked corrected script. Run its existing ownership-checked rollback once, then apply only if rollback succeeds; verify afterwards. Preserve the existing receipt schema for compatibility. No blind recursive removal, unchanged retry, approval bypass, password/key request or firewall widening. Any new STOP requires diagnosis. Successful offline tests are not live success; await the phone result `INSTALLED_DISABLED_NOT_QUALIFIED` before recording installation.
+
+The candidate remains **untrusted / no-secret**; H2-H7 effective qualification and all runtime/credential gates remain pending/OFF. Work has no independently verified AWS/SSH session. The user's Termius connection works. Do not repeat provisioning, cost approval, IAM/bootstrap, inventory, key import, keyboard setup or H1.
 
 ## Previous milestone: creation and H1 completed
 
@@ -18,7 +22,7 @@ Updated: 2026-10-01 23:23 JST (Asia/Tokyo).
 
 The user's phone screenshots confirm completion of the approved single Tokyo candidate and attached static IPv4, successful native Termius SSH login, command execution and the read-only H1 result `PREFLIGHT_OK_NO_MUTATION` with zero warnings/failures. See [creation and H1 evidence](SECRET_CUSTODY_HOST_H1_EVIDENCE.md) for the sanitized chronology, immutable script identity and limits.
 
-The host remains **untrusted / no-secret**. H2-H7, workload capacity, effective sandbox/default-deny egress, static egress, TLS and reboot/recovery qualification are pending. The bounded H2a implementation and rollback are now prepared; live apply awaits a separate decision as recorded above. No runtime/provider activation or custody secret use follows from H1.
+The host remains **untrusted / no-secret**. H2-H7, workload capacity, effective sandbox/default-deny egress, static egress, TLS and reboot/recovery qualification are pending. H2a authorization and the failed first attempt are recorded above; successful installation remains pending. No runtime/provider activation or custody secret use follows from H1.
 
 Do not repeat creation, its cost approval, IAM/bootstrap, inventory, phone browser keyboard attempts, key import or H1 just to resume. The existing phone Termius path works. Work has no independently verified AWS/host session; use existing evidence and connectors within their actual permissions.
 

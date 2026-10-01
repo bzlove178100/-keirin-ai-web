@@ -97,15 +97,15 @@ class Host:
     def path(self, path):
         return Path(path)
 
-    def run(self, *args):
+    def run(self, *args, stage="HOST_COMMAND"):
         try:
             result = subprocess.run(args, env=ENV, stdin=subprocess.DEVNULL,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     timeout=20, check=False)
         except (OSError, subprocess.TimeoutExpired):
-            raise Stop("HOST_COMMAND_UNAVAILABLE") from None
-        need(result.returncode == 0, "HOST_COMMAND_FAILED")
-        need(len(result.stdout) < 65536, "HOST_COMMAND_OUTPUT_TOO_LARGE")
+            raise Stop(stage + "_UNAVAILABLE") from None
+        need(result.returncode == 0, stage + "_FAILED")
+        need(len(result.stdout) < 65536, stage + "_OUTPUT_TOO_LARGE")
         return result.stdout.decode("utf-8", errors="strict")
 
     def platform(self):
@@ -120,7 +120,7 @@ class Host:
         need(self.path("/proc/1/comm").read_text().strip() == "systemd", "SYSTEMD_PID1_REQUIRED")
         need(self.path("/sys/fs/cgroup/cgroup.controllers").is_file(), "CGROUP_V2_REQUIRED")
         need(len(self.path("/proc/swaps").read_text().splitlines()) == 1, "SWAP_MUST_BE_DISABLED")
-        version = self.run("/usr/bin/systemctl", "--version").splitlines()[0]
+        version = self.run("/usr/bin/systemctl", "--version", stage="SYSTEMD_VERSION").splitlines()[0]
         need(re.match(r"systemd 255\b", version) is not None, "UNREVIEWED_SYSTEMD")
         for command in ("/usr/sbin/useradd", "/usr/sbin/userdel", "/usr/sbin/groupdel",
                         "/usr/sbin/nologin", "/usr/bin/passwd", "/usr/bin/false", "/usr/bin/systemd-analyze"):
@@ -132,7 +132,7 @@ class Host:
         except KeyError:
             return None
         # Request only the account status; never read or emit a shadow hash.
-        status = self.run("/usr/bin/passwd", "-S", NAME).split()
+        status = self.run("/usr/bin/passwd", "-S", NAME, stage="USER_STATUS").split()
         locked = len(status) >= 2 and status[0] == NAME and status[1] == "L"
         return {"uid": p.pw_uid, "gid": p.pw_gid, "tag": p.pw_gecos,
                 "home": p.pw_dir, "shell": p.pw_shell, "locked": locked,
@@ -161,26 +161,29 @@ class Host:
 
     def unit(self):
         output = self.run("/usr/bin/systemctl", "show", UNIT_NAME,
-                          "--property=LoadState,ActiveState,UnitFileState,FragmentPath,DropInPaths,RefuseManualStart")
+                          "--property=LoadState,ActiveState,UnitFileState,FragmentPath,DropInPaths,RefuseManualStart",
+                          stage="UNIT_SHOW")
         return dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
 
     def create_user(self, tag):
+        # --system already suppresses mail-spool creation. CREATE_MAIL_SPOOL
+        # is a useradd-default setting, not a login.defs --key override.
         self.run("/usr/sbin/useradd", "--system", "--user-group", "--no-create-home",
                  "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin",
-                 "--no-log-init", "--password", "!", "--key", "CREATE_MAIL_SPOOL=no",
-                 "--comment", tag, NAME)
+                 "--no-log-init", "--password", "!",
+                 "--comment", tag, NAME, stage="USER_CREATE")
 
     def remove_user(self):
-        self.run("/usr/sbin/userdel", NAME)
+        self.run("/usr/sbin/userdel", NAME, stage="USER_REMOVE")
 
     def remove_group(self):
-        self.run("/usr/sbin/groupdel", NAME)
+        self.run("/usr/sbin/groupdel", NAME, stage="GROUP_REMOVE")
 
     def reload(self):
-        self.run("/usr/bin/systemctl", "daemon-reload")
+        self.run("/usr/bin/systemctl", "daemon-reload", stage="UNIT_RELOAD")
 
     def syntax(self):
-        self.run("/usr/bin/systemd-analyze", "verify", UNIT_PATH)
+        self.run("/usr/bin/systemd-analyze", "verify", UNIT_PATH, stage="UNIT_SYNTAX")
 
 
 class Package:

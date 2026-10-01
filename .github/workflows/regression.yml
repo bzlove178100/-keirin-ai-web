@@ -168,3 +168,7 @@ jobs:
       - name: Test H2a with real temporary-file ownership and synthetic host adapters
         # No real account, manager, network, or AWS operation is performed.
         run: sudo -n env H2_REQUIRE_FULL_FS_TESTS=1 /usr/bin/python3 -I -B tests/test_secret_custody_h2.py
+      - name: Test H2a account CLI and failed-apply recovery in an isolated chroot
+        # Real shadow executables, disposable account databases; systemd is synthetic.
+        # Never changes runner accounts or accesses AWS. No skipped CLI tests.
+        run: sudo -n /usr/bin/python3 -I -B tests/test_secret_custody_h2_cli.py
