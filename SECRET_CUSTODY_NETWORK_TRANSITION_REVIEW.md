@@ -127,6 +127,10 @@ writer/race safety, watchdog/controller death, boot persistence, reboot, real ho
 apply, runtime-identity egress isolation, TLS or workload capacity is qualified.
 The pure profiles are not deployable to the current host.
 
+## Initial CI fixture correction
+
+Initial CI on `224f0be5add39e9cd27770993e8070f3785178b9` stopped while loading the unrelated fixture table, before packet assertions. No live host was involved. The one-line nested nft fixture was replaced with explicit statement/newline boundaries, and bounded synthetic-only command diagnostics were added. The original log did not include nft stderr; do not invent its exact parser message. Require the changed-code kernel run to succeed; no test is skipped or weakened.
+
 ## Next implementation and stop conditions
 
 Complete the bounded private dependency reader and initial-anchor recovery design,

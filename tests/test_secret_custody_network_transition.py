@@ -36,7 +36,10 @@ def run(*args, data=None, success=True):
     result = subprocess.run(args, input=data, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, timeout=5)
     if success and result.returncode != 0:
-        raise RuntimeError("FIXTURE_COMMAND_FAILED:" + Path(args[0]).name)
+        # CI-only commands touch fixed synthetic namespaces/data. Bounded
+        # diagnostics identify grammar/kernel failures; never used by live code.
+        detail = result.stderr[:2000].decode("utf-8", "replace")
+        raise RuntimeError("FIXTURE_COMMAND_FAILED:" + Path(args[0]).name + ":" + detail)
     return result
 
 
@@ -216,7 +219,12 @@ def kernel_rehearsal():
         setup("host0", MAC_HOST, ("1",))
         assert rpc(proc, "setup") is True
         # Unrelated table also registers conntrack before pre-policy flows open.
-        nft('table inet unrelated_fixture { chain input { type filter hook input priority 300; policy accept; ct state invalid drop; } }')
+        nft('''table inet unrelated_fixture {
+          chain input { type filter hook input priority 300; policy accept;
+            ct state invalid drop
+          }
+        }
+        ''')
         unrelated = shape("unrelated_fixture")
         with ExitStack() as stack:
             for address in ("192.0.2.1", "2001:db8:1::1"):
