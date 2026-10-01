@@ -1,6 +1,6 @@
 # Work status
 
-## Current boundary: offline single-host proposal prepared; live creation pending
+## Current boundary: read-only inventory IAM proposal prepared; approval pending
 
 Updated: 2026-10-01 (Asia/Tokyo).
 
@@ -13,6 +13,10 @@ Static IPv4 allocation was not tested. The [AWS billing FAQ](https://docs.aws.am
 The catalog facts are recorded and the concrete single-host CloudFormation proposal is prepared offline. A separate explicit live authorization is still required before creating one paid candidate and one static IPv4. `authorized_for_live_create=false` remains in the observed result. No host or static IP was created. Do not repeat SCP edits, OIDC stack/secret setup, or the observation without new evidence requiring it. `WORK_RESUME.md` records the completed root-cause fix, browser authentication findings and next-step constraints.
 
 ## Concrete host proposal prepared offline
+
+The follow-up prepared `AWS_LIGHTSAIL_INVENTORY_REVIEW.md` and a separate existing-stack IAM update template to add exactly GetInstances, GetStaticIps and GetKeyPairs in Tokyo. A bounded inventory script emits only counts and fixed booleans/reasons; the new workflow is manual-only and approval-gated on main. The original catalog template, trust and role identity remain unchanged. This alternative can reduce repeated phone inventory checks, but the IAM update itself still needs one authenticated AWS console action.
+
+Live IAM permission expansion and inventory execution are not approved or performed. No new SSH-key evidence has been supplied; current access is still catalog-only. Local validation passed 29 synthetic privacy/pagination/permission-delta tests and cfn-lint 1.57.1. Read the inventory review, obtain authorization for the exact three-action update plus one read-only run, and verify the matching UPDATE change set. This is separate from paid provisioning; do not repeat the failed AWS browser/CloudShell path or recreate bootstrap resources.
 
 `review/aws_lightsail_candidate.json` proposes exactly one Tokyo Ubuntu 24.04 LTS / micro_3_0 candidate and one attached static IPv4. The planned names are keirin-custody-h1 and keirin-custody-h1-ip, not verified existing resources. The USD 7/month figure is the observed bundle price, subject to a fresh pre-execution price check.
 
@@ -122,7 +126,7 @@ For the hardened host, start with exactly one USD 7/month candidate only after a
 
 ## Next work / next boundary
 
-1. Use the prepared template/review; do not repeat completed catalog observation or bootstrap. Verify the intended AWS account, absent resource names, existing Tokyo key metadata, selected IDs and current price through an authenticated AWS control plane.
+1. Present the prepared three-action Tokyo inventory IAM update and one read-only workflow run for authorization. Alternatively use already authenticated console inventory without expanding permissions. No live update or new key observation is complete. After an approved matching existing-stack update, verify it and run the inventory once; do not repeat bootstrap or unchanged failed browser paths. Verify account, stack-name collision, selected IDs and current price separately because this inventory does not cover them.
 2. Prepare and inspect a CREATE change set containing exactly the candidate and attached IPv4. Obtain explicit approval of the actual change set, USD 7/month bundle, browser-SSH ingress and failure-retention behavior before executing it. Offline checks are not live authorization.
 3. Do not substitute a region/size or allocate an address as a test. Missing or changed facts require diagnosis before mutation.
 4. After authorized creation, run only the read-only/no-secret H1 preflight.

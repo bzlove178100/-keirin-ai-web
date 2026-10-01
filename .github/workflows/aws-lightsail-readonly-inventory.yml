@@ -1,0 +1,35 @@
+name: aws lightsail read-only inventory
+
+on:
+  workflow_dispatch:
+    inputs:
+      inventory_update_approved:
+        description: Confirm user approved the reviewed Tokyo read-only inventory IAM update
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  inventory:
+    if: inputs.inventory_update_approved == true && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out reviewed main
+        uses: actions/checkout@v4
+      - name: Configure short-lived AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_READONLY_ROLE_ARN }}
+          aws-region: ap-northeast-1
+          role-session-name: github-lightsail-readonly-inventory
+          mask-aws-account-id: true
+      - name: Observe inventory without exporting operational identifiers
+        env:
+          AWS_REGION: ap-northeast-1
+          AWS_DEFAULT_REGION: ap-northeast-1
+        run: python3 review/aws_lightsail_readonly_inventory.py

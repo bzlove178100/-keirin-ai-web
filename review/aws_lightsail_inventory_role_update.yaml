@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Read-only GitHub Actions OIDC role for Lightsail observation.
+  Creates no Lightsail resource and grants no mutating AWS permission.
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Default: bzlove178100
+  GitHubOwnerId:
+    Type: String
+    Default: '320407427'
+  GitHubRepository:
+    Type: String
+    Default: -keirin-ai-web
+  GitHubRepositoryId:
+    Type: String
+    Default: '1357382962'
+  GitHubBranch:
+    Type: String
+    Default: main
+  RoleName:
+    Type: String
+    Default: keirin-ai-github-lightsail-readonly
+
+Resources:
+  GitHubActionsOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      Tags:
+        - Key: Purpose
+          Value: keirin-ai-readonly-observation
+
+  GitHubLightsailReadOnlyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      MaxSessionDuration: 3600
+      Description: Read-only Lightsail observation role for one GitHub repository.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubActionsOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub >-
+                  repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepository}@${GitHubRepositoryId}:ref:refs/heads/${GitHubBranch}
+      Policies:
+        - PolicyName: LightsailObservationOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadOnlyLightsailCatalog
+                Effect: Allow
+                Action:
+                  - lightsail:GetRegions
+                  - lightsail:GetBlueprints
+                  - lightsail:GetBundles
+                Resource: '*'
+              - Sid: ReadOnlyTokyoInventory
+                Effect: Allow
+                Action:
+                  - lightsail:GetInstances
+                  - lightsail:GetStaticIps
+                  - lightsail:GetKeyPairs
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: ap-northeast-1
+      Tags:
+        - Key: Purpose
+          Value: keirin-ai-readonly-observation
+
+Outputs:
+  ReadOnlyRoleArn:
+    Description: Store this value as the GitHub Actions secret AWS_READONLY_ROLE_ARN.
+    Value: !GetAtt GitHubLightsailReadOnlyRole.Arn
