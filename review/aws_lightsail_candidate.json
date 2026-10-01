@@ -1,0 +1,181 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Review-only: one no-secret Lightsail Tokyo Ubuntu 24.04 Micro candidate and attached static IPv4. Fresh live authorization and reviewed change set required.",
+  "Metadata": {
+    "Review": {
+      "AuthorizedForLiveCreate": false,
+      "ObservationRun": "36842907590",
+      "ObservedAtUtc": "2026-10-01T09:28:26Z",
+      "BundlePriceCeilingUsdPerMonth": 7,
+      "NoAutomaticRetry": true,
+      "NoAutomaticCleanup": true
+    }
+  },
+  "Parameters": {
+    "LiveCreateAcknowledgement": {
+      "Type": "String",
+      "Default": "NOT_AUTHORIZED",
+      "AllowedValues": [
+        "NOT_AUTHORIZED",
+        "ONE_CANDIDATE_USD7_APPROVED"
+      ],
+      "Description": "Set approved value only after fresh user authorization of this exact paid creation."
+    },
+    "ExpectedAccountId": {
+      "Type": "String",
+      "NoEcho": true,
+      "AllowedPattern": "^[0-9]{12}$",
+      "Description": "Privately verify the Proof of Concept account ID; not the management account."
+    },
+    "ExistingKeyPairName": {
+      "Type": "String",
+      "MinLength": 1,
+      "MaxLength": 255,
+      "AllowedPattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+      "Description": "Name of an already verified Lightsail key pair in Tokyo. No key creation or private key download."
+    },
+    "AvailabilityZone": {
+      "Type": "String",
+      "Default": "ap-northeast-1a",
+      "AllowedValues": [
+        "ap-northeast-1a",
+        "ap-northeast-1c",
+        "ap-northeast-1d"
+      ],
+      "Description": "Use one observed Tokyo zone; do not switch automatically after capacity failure."
+    },
+    "InstanceName": {
+      "Type": "String",
+      "Default": "keirin-custody-h1",
+      "MinLength": 3,
+      "MaxLength": 63,
+      "AllowedPattern": "^[a-zA-Z][a-zA-Z0-9-]*[a-zA-Z0-9]$",
+      "Description": "Planned name; verify no existing matching resource before creating."
+    },
+    "StaticIpName": {
+      "Type": "String",
+      "Default": "keirin-custody-h1-ip",
+      "MinLength": 3,
+      "MaxLength": 63,
+      "AllowedPattern": "^[a-zA-Z][a-zA-Z0-9-]*[a-zA-Z0-9]$",
+      "Description": "Planned name; verify no existing matching static IP before creating."
+    }
+  },
+  "Rules": {
+    "ApprovedCreation": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "LiveCreateAcknowledgement"
+              },
+              "ONE_CANDIDATE_USD7_APPROVED"
+            ]
+          },
+          "AssertDescription": "Fresh user authorization is required before paid creation."
+        }
+      ]
+    },
+    "TokyoOnly": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::Region"
+              },
+              "ap-northeast-1"
+            ]
+          },
+          "AssertDescription": "Only Tokyo ap-northeast-1 is reviewed."
+        }
+      ]
+    },
+    "ExpectedAccountOnly": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              {
+                "Ref": "ExpectedAccountId"
+              }
+            ]
+          },
+          "AssertDescription": "Use the privately verified Proof of Concept account."
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "CustodyCandidate": {
+      "Type": "AWS::Lightsail::Instance",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "InstanceName": {
+          "Ref": "InstanceName"
+        },
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZone"
+        },
+        "BlueprintId": "ubuntu_24_04",
+        "BundleId": "micro_3_0",
+        "KeyPairName": {
+          "Ref": "ExistingKeyPairName"
+        },
+        "Networking": {
+          "Ports": [
+            {
+              "Protocol": "tcp",
+              "FromPort": 22,
+              "ToPort": 22,
+              "Cidrs": [],
+              "Ipv6Cidrs": [],
+              "CidrListAliases": [
+                "lightsail-connect"
+              ]
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Purpose",
+            "Value": "no-secret-host-qualification"
+          },
+          {
+            "Key": "Runtime",
+            "Value": "disabled"
+          }
+        ]
+      }
+    },
+    "CustodyStaticIp": {
+      "Type": "AWS::Lightsail::StaticIp",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "DependsOn": "CustodyCandidate",
+      "Properties": {
+        "StaticIpName": {
+          "Ref": "StaticIpName"
+        },
+        "AttachedTo": {
+          "Ref": "InstanceName"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "QualificationBoundary": {
+      "Value": "UNTRUSTED_NO_SECRET_H1_REQUIRED"
+    },
+    "Region": {
+      "Value": {
+        "Ref": "AWS::Region"
+      }
+    }
+  }
+}

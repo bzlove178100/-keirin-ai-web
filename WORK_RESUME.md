@@ -2,7 +2,7 @@
 
 Updated: 2026-10-01 (Asia/Tokyo).
 
-## Current boundary: live AWS read-only observation passed
+## Current boundary: offline single-host proposal prepared; live creation pending
 
 Read this section first when the user says `続けて`. The SCP, OIDC bootstrap and initial catalog observation are complete; do not restart phone-console setup, recreate the stack/secret, or rerun the observation without a new reason.
 
@@ -33,9 +33,13 @@ AWS public documentation rechecked on 2026-10-01 states that a static IPv4 attac
 
 ## Next action and authorization boundary
 
-Report the observed values and stop before provisioning. Passing observation is not permission to create resources.
+The follow-up prepared `review/aws_lightsail_candidate.json` and expanded `SECRET_CUSTODY_HOST_PROVISIONING_REVIEW.md`. The proposal pins Ubuntu 24.04 LTS / micro_3_0 and exactly one attached static IPv4. It requests only TCP 22 from the lightsail-connect source alias, with no launch script or runtime. Default acknowledgement rejects creation; the privately supplied expected account must match and the region must be Tokyo. Both resources use Retain; execution must preserve successful resources on failure, with an explicit subsequent cleanup decision if needed.
 
-Before asking for live provisioning, locate and read the current provisioning review and manifest rather than guessing a new implementation. The reviewed artifacts include `review/lightsail_provisioning_manifest.template.json`, host preflight, hardening and recovery reviews. Resolve current main and follow `AGENTS.md`.
+Local cfn-lint 1.57.1 completed with no findings and all 10 candidate safety-contract tests passed. The offline CI now repeats both checks. This is offline preparation, not an AWS change set or live validation.
+
+Next, use an authenticated AWS control plane to verify intended account, absent resource names, an existing Tokyo Lightsail key pair (metadata only), and current price/IDs. The existing OIDC role cannot perform that inventory or provision resources; keep it unchanged. Work GitHub authentication is not AWS authentication. No AWS session, existing key, collision check, live change set or provisioning permission has been verified by this preparation. If access is unavailable, report that precise blocker rather than repeat completed mobile/bootstrap steps.
+
+Prepare and inspect a CREATE change set with exactly two Add actions, then obtain specific approval of the actual change set, cost, SSH and failure-retention behavior before execution. Resolve current main and follow `AGENTS.md`. Passing observation, lint, CI or an acknowledgement string does not grant live authorization.
 
 A later explicit live-provision authorization must identify exactly one Tokyo candidate, its selected observed Ubuntu LTS blueprint, the USD 7/month bundle ceiling and one attached static IPv4. Do not substitute region/size or create multiple paid hosts. Unknown, unavailable, ambiguous or over-budget values remain a hard stop.
 

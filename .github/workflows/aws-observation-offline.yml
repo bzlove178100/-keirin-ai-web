@@ -6,6 +6,8 @@ on:
     paths:
       - 'review/aws_*'
       - 'tests/test_aws_oidc_readonly_observation.py'
+      - 'tests/test_aws_lightsail_candidate_template.py'
+      - 'SECRET_CUSTODY_HOST_PROVISIONING_REVIEW.md'
       - '.github/workflows/aws-*'
       - 'AWS_GITHUB_OIDC_READONLY_OBSERVATION.md'
       - 'WORK_RESUME.md'
@@ -15,6 +17,8 @@ on:
     paths:
       - 'review/aws_*'
       - 'tests/test_aws_oidc_readonly_observation.py'
+      - 'tests/test_aws_lightsail_candidate_template.py'
+      - 'SECRET_CUSTODY_HOST_PROVISIONING_REVIEW.md'
       - '.github/workflows/aws-*'
       - 'AWS_GITHUB_OIDC_READONLY_OBSERVATION.md'
       - 'WORK_RESUME.md'
@@ -36,6 +40,10 @@ jobs:
         run: python -m pip install pytest==8.3.5 cfn-lint==1.57.1
       - name: Validate OIDC CloudFormation template offline
         run: cfn-lint -r ap-northeast-1 -t review/aws_github_oidc_readonly_role.yaml
+      - name: Validate candidate CloudFormation template offline
+        run: cfn-lint -r ap-northeast-1 -t review/aws_lightsail_candidate.json
+      - name: Verify candidate safety contract without AWS access
+        run: python -m pytest -q tests/test_aws_lightsail_candidate_template.py
       - name: Check shell syntax
         run: bash -n review/aws_lightsail_readonly_observation.sh
       - name: Verify synthetic catalog rejection without AWS credentials
