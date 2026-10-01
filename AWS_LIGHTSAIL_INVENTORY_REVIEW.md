@@ -1,8 +1,36 @@
-# Tokyo Lightsail read-only inventory update proposal
+# Tokyo Lightsail read-only inventory review and evidence
 
-Prepared 2026-10-01. Status: OFFLINE REVIEW ONLY; IAM update and live inventory are not authorized or performed by this document.
+Updated 2026-10-01. Status: approved IAM update and first inventory completed; version 2 default-key correction awaits separately authorized live revalidation. This document is evidence, not execution authority.
 
-## Reason and alternatives
+## Completed Tokyo IAM update and first inventory
+
+The user authorized the exact three-action Tokyo inventory IAM addition and one manual run at 19:20:46 JST on 2026-10-01. The resolved change-set JSON was reviewed at 19:49:27 JST: one Modify of GitHubLightsailReadOnlyRole, Replacement=False, with only the GetInstances/GetStaticIps/GetKeyPairs statement conditioned on ap-northeast-1 added. Before/after contexts preserved trust, role identity and every other property. The user's CloudFormation events screenshot confirmed role UPDATE_COMPLETE at 19:52:35 JST and stack UPDATE_COMPLETE at 19:52:49 JST.
+
+Evidence is the resolved change set, completion events and successful OIDC/inventory calls. A separate post-update IAM policy/trust read-back was not performed; do not claim independent live read-back.
+
+[Inventory run #1](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36852494617) ran exactly once on main `a713b6d57199975e13c32edd84cee9d2ed2da602` (PR #160 merged). Job `110337191404` succeeded, including OIDC and inventory. Sanitized output time: 2026-10-01 10:59:23 UTC / 19:59:23 JST.
+
+| Observation | Verified result |
+| --- | --- |
+| Region | ap-northeast-1 |
+| Instances / static IPs / key pairs | 0 / 0 / 1 |
+| Proposed instance / static-IP name collisions | false / false |
+| Default key identity | Unknown; version 1 classifier was defective |
+| Key login / independent account identity / stack-name inventory | Not verified |
+| Live creation authorized | false |
+
+### Default-key classification defect and correction
+
+Version 1 matched `LightsailDefaultKey-ap-northeast-1`, a download filename stem, instead of the documented API default key name `LightsailDefaultKeyPair`. Its `tokyo_default_key_present=false` and `TOKYO_DEFAULT_KEY_NOT_OBSERVED` therefore do not establish default-key absence. The 0/0/1 counts remain valid. Key names were intentionally not exported, so the single key cannot be identified retrospectively from the log. Do not create or download a key on that evidence.
+
+Version 2 uses the documented API name. Regression fixtures use independent literals, including the downloaded filename stem and a custom key, so a wrong production constant cannot make its own tests pass. All 33 local inventory regression tests passed, using synthetic responses only. This is an offline code correction; it has not yet been verified against AWS.
+
+The original one-run authorization has been consumed. No second live dispatch has occurred. After code review and CI, obtain a narrow decision for one further run of the same three read operations on main; no additional IAM change is needed. The changed condition is the corrected classifier; success means complete version 2 inventory with a trustworthy default-key boolean. If the run fails or the key is not observed, stop and retain the uncertainty; no automatic retry, key creation or key download. Paid host/IP provisioning remains separately unapproved.
+
+AWS documents the name in [keyPairName output](https://docs.aws.amazon.com/cli/latest/reference/lightsail/get-instance-access-details.html). This is a documentation reference only; GetInstanceAccessDetails was not called or granted.
+
+
+## Original proposal: reason and alternatives (historical)
 
 Catalog run 36842907590 succeeded with the existing GitHub OIDC role, but that role grants only GetRegions, GetBlueprints and GetBundles. It cannot check existing instances, static IPs or key pairs. No SSH-key screenshot or other new key evidence has been received. Work's AWS browser previously returned Site Unavailable, and the available plugin search found no AWS control-plane plugin. Do not repeat that failed browser path, CloudShell launch or bootstrap without changed evidence.
 
@@ -22,11 +50,11 @@ The added statement requires `aws:RequestedRegion=ap-northeast-1`. These list/re
 
 It adds no instance/IP/key creation, deletion, attachment, port change, SSH access, DownloadDefaultKeyPair, GetInstanceAccessDetails, CloudFormation deployment or IAM-management permission. No access key, OIDC provider, role or GitHub secret is to be newly created. The original catalog template remains unchanged as the reviewed baseline; applying it later to remove the inventory statement is a separate reviewed IAM update, not an automatic rollback.
 
-## Approval and one existing-stack update
+## Original approved execution procedure (completed; do not repeat)
 
-The approval request is limited to this three-action Tokyo read-only IAM delta and one subsequent manual inventory run. It does not include the paid host proposal or any key creation.
+The original approval request was limited to this three-action Tokyo read-only IAM delta and one subsequent manual inventory run. It does not include the paid host proposal or any key creation.
 
-After the user authorizes that scope:
+The original procedure was:
 
 1. In the authenticated Proof of Concept account, Tokyo CloudFormation, select the existing `keirin-ai-github-oidc-readonly` stack. Do not create another stack or re-register AWS_READONLY_ROLE_ARN.
 2. Use Update stack / replace current template with the reviewed inventory-update template from the exact approved Git commit. Preserve every existing parameter value, role name and stack setting. First compare the live template/policy with the original baseline; unexpected drift is a stop, not permission to overwrite.
@@ -34,7 +62,7 @@ After the user authorizes that scope:
 4. Execute only if the actual change set matches the authorized scope. A matching change set does not require repeating the same approval; any new difference does. Verify UPDATE_COMPLETE and read back the role's inline policy and unchanged trust. If AWS denies the operation, stop and diagnose the specific returned action; do not alter SCP or add broader permissions.
 5. Run `aws lightsail read-only inventory` from main exactly once, setting its approval checkbox only after the authorized IAM update is verified. Keep the existing role-ARN secret. Do not dispatch as a permission probe before approval/update.
 
-The stack update still needs an authenticated AWS console action because the connected GitHub role cannot update its own permissions. This proposal reduces repeated inventory checks; it does not remove that one-time AWS action or establish a Work AWS browser session.
+The user completed the one-time stack update in their authenticated AWS console. The connected GitHub role still cannot update its own permissions; this does not establish a Work AWS browser session.
 
 ## Inventory behavior and privacy
 

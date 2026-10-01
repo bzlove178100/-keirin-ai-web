@@ -115,7 +115,7 @@ The manifest's `authorized_for_live_create` field stays `false` in Git. A live a
 
 ## Current tool boundary
 
-GitHub OIDC catalog observation succeeded on 2026-10-01. The deployed role permits only GetRegions, GetBlueprints and GetBundles; it cannot create resources or inspect existing instances/key pairs. `AWS_LIGHTSAIL_INVENTORY_REVIEW.md` separately proposes three Tokyo inventory reads, pending authorization and an existing-stack update; it grants no provisioning permission. Actual provisioning still requires an authenticated AWS-capable control-plane session with the separately reviewed scope. Work GitHub login is not an AWS session.
+GitHub OIDC catalog observation and the separately approved Tokyo inventory update succeeded on 2026-10-01. The role has the three catalog reads plus GetInstances/GetStaticIps/GetKeyPairs conditioned on Tokyo, with no provisioning permission. The first inventory found 0 instances, 0 static IPs and 1 key pair. A default-key classifier defect prevents identifying that key; the version 2 correction awaits a separately authorized revalidation run. See `AWS_LIGHTSAIL_INVENTORY_REVIEW.md`. Actual provisioning still requires an authenticated AWS-capable control-plane session with the separately reviewed scope. Work GitHub login is not an AWS session.
 
 ## Non-authorization
 
@@ -142,7 +142,7 @@ The requested platform firewall is TCP 22 only, using AWS's `lightsail-connect` 
 
 ### Execution sequence after approval
 
-1. Use the intended Proof of Concept account's authenticated AWS control plane, in Tokyo. The existing GitHub OIDC role cannot deploy this template. Its separate Tokyo inventory-read proposal requires its own authorization; do not add provisioning permissions, a provisioning workflow or IAM access keys.
+1. Use the intended Proof of Concept account's authenticated AWS control plane, in Tokyo. The existing GitHub OIDC role cannot deploy this template. Its Tokyo inventory-read update is complete; additional live inventory runs require their scoped authorization; do not add provisioning permissions, a provisioning workflow or IAM access keys.
 2. Verify account, region, the proposed stack/instance/static-IP names are absent, the required existing key pair is available, and the selected blueprint/bundle/price remain correct. Any denied or incomplete inventory leaves the result unknown and stops creation.
 3. Upload the template for a CREATE change set; leave OnStackFailure unset so DisableRollback can be selected at execution. Privately supply ExpectedAccountId and the verified ExistingKeyPairName, and inspect the resolved parameters. Use one zone from the observed set; no automatic capacity fallback.
 4. The change set must contain exactly two Add actions: CustodyCandidate (AWS::Lightsail::Instance) and CustodyStaticIp (AWS::Lightsail::StaticIp). No modify/remove/import/nested stack/IAM/key/add-on action is acceptable. Review any service-managed key or service-role side effect instead of treating it as implicitly authorized.
@@ -161,7 +161,7 @@ No launch script, runtime activation, real provider credential, account ID or IP
 
 ### Validation and limits
 
-Run `cfn-lint -r ap-northeast-1 -t review/aws_lightsail_candidate.json` and `python -m pytest -q tests/test_aws_lightsail_candidate_template.py`. These are offline schema and safety-contract checks only. The live account inventory, current price, key existence, AWS change-set validation, permissions, firewall read-back, attachment and host qualification are still unverified.
+Run `cfn-lint -r ap-northeast-1 -t review/aws_lightsail_candidate.json` and `python -m pytest -q tests/test_aws_lightsail_candidate_template.py`. These are offline schema and safety-contract checks only. The first Tokyo inventory completed (0 instances, 0 static IPs, 1 key), but default-key identity remains unresolved because of the recorded classifier defect. Independent account identity, current price, usable-key selection, the provisioning change set/permissions, firewall read-back, attachment and host qualification remain unverified.
 
 Official references:
 

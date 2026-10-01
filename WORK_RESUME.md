@@ -2,17 +2,44 @@
 
 Updated: 2026-10-01 (Asia/Tokyo).
 
-## Current boundary: read-only inventory IAM proposal prepared; approval pending
+## Current boundary: IAM update and first inventory complete; default-key classifier corrected
 
 Read this section first when the user says `続けて`. The SCP, OIDC bootstrap and initial catalog observation are complete; do not restart phone-console setup, recreate the stack/secret, or rerun the observation without a new reason.
 
 - Repository: `bzlove178100/-keirin-ai-web`.
-- Observed main: `f08bfbb3ed59478653f9055757b138e7c0141dcf` (PR #157 merged).
+- Catalog run's historical main: `f08bfbb3ed59478653f9055757b138e7c0141dcf` (PR #157 merged).
 - PR #157 head `e21f161075908fac10e938a56c11ab6440640cc5` passed all five applicable CI workflows.
 - Live workflow: [aws lightsail read-only observation #1](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36842907590).
 - The workflow was dispatched exactly once from main on 2026-10-01, completed successfully, and emitted the sanitized catalog result at 09:28:26 UTC / 18:28:26 JST.
 - Job `observe` (`110305976403`): OIDC credential configuration and catalog observation both succeeded.
 - This validates the deployed OIDC path and the three catalog reads at that time, not resource creation permission or host readiness.
+
+## Completed Tokyo IAM update and first inventory
+
+The user authorized the exact three-action Tokyo inventory IAM addition and one manual run at 19:20:46 JST on 2026-10-01. The resolved change-set JSON was reviewed at 19:49:27 JST: one Modify of GitHubLightsailReadOnlyRole, Replacement=False, with only the GetInstances/GetStaticIps/GetKeyPairs statement conditioned on ap-northeast-1 added. Before/after contexts preserved trust, role identity and every other property. The user's CloudFormation events screenshot confirmed role UPDATE_COMPLETE at 19:52:35 JST and stack UPDATE_COMPLETE at 19:52:49 JST.
+
+Evidence is the resolved change set, completion events and successful OIDC/inventory calls. A separate post-update IAM policy/trust read-back was not performed; do not claim independent live read-back.
+
+[Inventory run #1](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36852494617) ran exactly once on main `a713b6d57199975e13c32edd84cee9d2ed2da602` (PR #160 merged). Job `110337191404` succeeded, including OIDC and inventory. Sanitized output time: 2026-10-01 10:59:23 UTC / 19:59:23 JST.
+
+| Observation | Verified result |
+| --- | --- |
+| Region | ap-northeast-1 |
+| Instances / static IPs / key pairs | 0 / 0 / 1 |
+| Proposed instance / static-IP name collisions | false / false |
+| Default key identity | Unknown; version 1 classifier was defective |
+| Key login / independent account identity / stack-name inventory | Not verified |
+| Live creation authorized | false |
+
+### Default-key classification defect and correction
+
+Version 1 matched `LightsailDefaultKey-ap-northeast-1`, a download filename stem, instead of the documented API default key name `LightsailDefaultKeyPair`. Its `tokyo_default_key_present=false` and `TOKYO_DEFAULT_KEY_NOT_OBSERVED` therefore do not establish default-key absence. The 0/0/1 counts remain valid. Key names were intentionally not exported, so the single key cannot be identified retrospectively from the log. Do not create or download a key on that evidence.
+
+Version 2 uses the documented API name. Regression fixtures use independent literals, including the downloaded filename stem and a custom key, so a wrong production constant cannot make its own tests pass. All 33 local inventory regression tests passed, using synthetic responses only. This is an offline code correction; it has not yet been verified against AWS.
+
+The original one-run authorization has been consumed. No second live dispatch has occurred. After code review and CI, obtain a narrow decision for one further run of the same three read operations on main; no additional IAM change is needed. The changed condition is the corrected classifier; success means complete version 2 inventory with a trustworthy default-key boolean. If the run fails or the key is not observed, stop and retain the uncertainty; no automatic retry, key creation or key download. Paid host/IP provisioning remains separately unapproved.
+
+AWS documents the name in [keyPairName output](https://docs.aws.amazon.com/cli/latest/reference/lightsail/get-instance-access-details.html). This is a documentation reference only; GetInstanceAccessDetails was not called or granted.
 
 ## Verified catalog facts
 
@@ -33,15 +60,13 @@ AWS public documentation rechecked on 2026-10-01 states that a static IPv4 attac
 
 ## Next action and authorization boundary
 
-The latest continuation prepared `AWS_LIGHTSAIL_INVENTORY_REVIEW.md`, `review/aws_lightsail_inventory_role_update.yaml`, a bounded/sanitized inventory script and a manual-only workflow. This is an alternative to repeated phone inventory checks. It adds only GetInstances/GetStaticIps/GetKeyPairs in Tokyo to the existing role, pending explicit approval and a matching existing-stack UPDATE change set. It preserves the original OIDC template and all trust/identity parameters. No live IAM update or inventory dispatch has occurred. The current deployed permission remains the three catalog reads.
-
-No SSH-key screenshot or new key evidence was received after the request to inspect Lightsail keys. Do not infer completion from `続けて`. Do not repeat Work's failed AWS browser or CloudShell paths. Next, present the concrete three-read-action update and one inventory run for authorization; after authorization, guide one existing-stack update and verify its exact difference before the run. That is an IAM permission change, not paid host creation. An authenticated AWS console action is still needed for this one-time update; the role cannot update itself.
+The Tokyo inventory IAM update and the one authorized inventory run are complete, as recorded above. Do not request the same IAM permission again or repeat phone-console setup. The current code corrects only the default-key classifier; one additional live run needs a new narrow execution decision because the original authorization was for one run.
 
 The follow-up prepared `review/aws_lightsail_candidate.json` and expanded `SECRET_CUSTODY_HOST_PROVISIONING_REVIEW.md`. The proposal pins Ubuntu 24.04 LTS / micro_3_0 and exactly one attached static IPv4. It requests only TCP 22 from the lightsail-connect source alias, with no launch script or runtime. Default acknowledgement rejects creation; the privately supplied expected account must match and the region must be Tokyo. Both resources use Retain; execution must preserve successful resources on failure, with an explicit subsequent cleanup decision if needed.
 
 Local cfn-lint 1.57.1 completed with no findings and all 10 candidate safety-contract tests passed. The offline CI now repeats both checks. This is offline preparation, not an AWS change set or live validation.
 
-Next, verify intended account, absent resource names, an existing Tokyo Lightsail key pair (metadata only), and current price/IDs. The deployed OIDC role cannot perform that inventory or provision resources; the separate inventory update above is not yet approved/applied and grants no provisioning permission. Work GitHub authentication is not AWS authentication. No AWS session, existing key, collision check, live change set or provisioning permission has been verified by this preparation. If access is unavailable, report that precise blocker rather than repeat completed mobile/bootstrap steps.
+Next, resolve default-key identity with the corrected classifier under the additional one-run decision. Instance/static-IP name collisions were absent at the recorded inventory time; account identity, stack-name collision, current price/IDs, key login and provisioning permissions remain separate checks. The deployed role can perform the three Tokyo inventory reads and three original catalog reads, but cannot provision resources. Work GitHub authentication is not AWS authentication. If access is unavailable, report that precise blocker rather than repeat completed mobile/bootstrap steps.
 
 Prepare and inspect a CREATE change set with exactly two Add actions, then obtain specific approval of the actual change set, cost, SSH and failure-retention behavior before execution. Resolve current main and follow `AGENTS.md`. Passing observation, lint, CI or an acknowledgement string does not grant live authorization.
 
@@ -80,7 +105,7 @@ All remain unchanged:
 - no C2 live secret-store DDL applied;
 - no paid hardened host or static IPv4 provisioned by this work.
 
-The successful workflow made only the reviewed three Lightsail catalog reads after short-lived OIDC authentication. It did not query account-specific static IP resources, allocate an IP, create a host, change IAM/SCP, or change Supabase.
+The original catalog workflow made its three catalog reads. The later inventory workflow made the three authorized Tokyo inventory reads after short-lived OIDC authentication. The user separately completed the reviewed IAM update. Neither workflow allocated an IP, created a host/key, downloaded key material, or changed IAM/SCP or Supabase.
 
 ## Offline validation and remaining maintenance
 

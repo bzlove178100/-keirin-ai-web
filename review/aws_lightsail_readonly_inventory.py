@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 REGION = "ap-northeast-1"
 INSTANCE_NAME = "keirin-custody-h1"
 STATIC_IP_NAME = "keirin-custody-h1-ip"
-DEFAULT_KEY_NAME = "LightsailDefaultKey-ap-northeast-1"
+# AWS API key-pair name, not the downloaded PEM filename stem.
+DEFAULT_KEY_NAME = "LightsailDefaultKeyPair"
 MAX_PAGES = 20
 MAX_SECONDS = 120
 OPERATIONS = (
@@ -117,7 +118,7 @@ def observe():
     if DEFAULT_KEY_NAME not in keys:
         reasons.append("TOKYO_DEFAULT_KEY_NOT_OBSERVED")
     return {
-        "inventory_version": 1,
+        "inventory_version": 2,
         "observed_at_utc": datetime.now(timezone.utc).isoformat(),
         "region": REGION,
         "inventory_complete": True,
