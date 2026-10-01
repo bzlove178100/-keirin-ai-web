@@ -100,7 +100,7 @@ The public CloudShell path in Tokyo failed during bootstrap with an environment/
 
 One bounded bootstrap remains before the workflow can run: create the reviewed CloudFormation stack in the Proof of Concept AWS account, then store its role ARN as the GitHub Actions secret `AWS_READONLY_ROLE_ARN`. No AWS account identifier or credential may be committed to the repository.
 
-The 2026-10-01 session is blocked before verified AWS application: Work Cloud Browser returned `Site Unavailable`; the Root-attached regional SCP restricts Tokyo despite account-level activation; and full-text replacement in the phone policy editor could not be completed. A narrowly scoped private SCP draft was approved, but successful saving/read-back is unverified. The existing `builderid:*` validation finding is unresolved. No stack creation, role-ARN secret registration or live workflow success has been verified. See `WORK_RESUME.md` for the exact restart boundary; do not repeat Cloud Browser/CloudShell/mobile-editor attempts.
+The Work Cloud Browser previously returned `Site Unavailable`, and the phone policy editor caused repeated troubleshooting. The user later confirmed on 2026-10-01 that the regional SCP/policy step is complete. Treat that live step as completed unless AWS returns a new, concrete permission failure that directly contradicts it; this completion is user-reported and has not been independently read back from AWS by ChatGPT. Do not repeat Cloud Browser/CloudShell/mobile-editor or SCP-editing attempts. No OIDC stack creation, role-ARN secret registration or live workflow success has been verified. See `WORK_RESUME.md` for the exact restart boundary.
 
 Offline observation hardening now requires exact Tokyo before any AWS call, explicitly active catalog entries, an identifiable Ubuntu LTS OS blueprint, and an identifiable matching bundle with one public IPv4 and a finite nonnegative numeric price. Synthetic stub tests cover missing/malformed facts and API failure without AWS credentials or network calls. These tests are not evidence of live catalog availability or AWS policy validation.
 
@@ -120,7 +120,7 @@ For the hardened host, start with exactly one USD 7/month candidate only after a
 
 The next safe sequence is:
 
-1. retain the merged GitHub OIDC package and resolve the documented access/SCP blocker through a usable authorized path, verifying saved state rather than repeating unsuccessful phone editing;
+1. retain the merged GitHub OIDC package and treat the regional SCP/policy step as completed per the user's 2026-10-01 confirmation; do not reopen the old phone-editing flow unless a new concrete AWS permission error requires it;
 2. in the Proof of Concept AWS account, create only the reviewed CloudFormation OIDC stack;
 3. store only the resulting role ARN in the GitHub Actions secret `AWS_READONLY_ROLE_ARN`; do not create an AWS access key;
 4. run the manual `aws lightsail read-only observation` workflow;
