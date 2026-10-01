@@ -2,7 +2,21 @@
 
 Updated: 2026-10-02 (Asia/Tokyo).
 
-## Current boundary: independent recovery rehearsal and private dependency reader
+## Current boundary: live dependencies observed; maintenance policy design
+
+Updated: 2026-10-02 08:40 JST (Asia/Tokyo).
+
+PR #174 merged at `1aa360b257da55d91facb857ff16b8be41a63d3e`. Its corrected head `e0ae01e3d92d84e4f127e997cd36bcd9b54a3864` passed all five workflows, rechecked on resumption. Regression run `36904707742` includes successful independent recovery job `110512222225` and local reader job `110512222345`. The earlier CI parser defect is historical and corrected.
+
+The user has now supplied the complete requested dependency evidence: IMG_8937–IMG_8946, terminal captures at 08:17–08:32 JST. The immutable reader finished with `LOCAL_DEPENDENCIES_OBSERVED_WITH_UNRESOLVED_ITEMS_NO_MUTATION` and returned to the prompt. All selected sections were observed; `mutation=false`, `qualification=false`. This closes the request for that reader output. Do not ask for another identical run or more screenshots of these sections.
+
+Sanitized observations: two interfaces; one DNS endpoint consistent with networkd's DHCPv4 provider data; zero fallback DNS entries; nine Chrony sources, one selected; nine IPv4 and seven IPv6 routes; DHCPv4 address/default-route configuration, DHCPv6 global address configuration, and an RA-derived IPv6 default route. One SSH endpoint tuple is caller-supplied/unverified. These are private user-supplied observations, not an independent Work host session, durable endpoint guarantees or packet-policy qualification. Exact addresses, allowlists and account identifiers stay out of public GitHub.
+
+See [maintenance dependency design](SECRET_CUSTODY_NETWORK_MAINTENANCE_DESIGN.md) for the evidence-to-test matrix and initial-anchor decision. Next repository implementation is an isolated dynamic-address/control-packet fixture: real renewal/rebind, RA/ND and PMTU behavior with negative controls, preserving the existing transition/recovery tests. A UDP echo on DHCP ports does not qualify lease renewal. No live firewall installer or command is ready; the initial restricted maintenance anchor and recovery from a wrong shared allowlist remain unresolved.
+
+H1 and measured H2a/H2b/H2c/H2d are complete. Keep H2a inactive and every runtime/provider/credential/prediction/data-fetch/scheduler/report gate OFF. No extra AWS inventory, IAM change, resource, secret, reboot or live firewall action follows from this evidence. Current unfiltered host state is not an allowed automatic fallback.
+
+## Historical PR #174 preparation: independent recovery rehearsal and private dependency reader
 
 Updated: 2026-10-02 (Asia/Tokyo).
 
@@ -168,7 +182,7 @@ AWS public documentation rechecked on 2026-10-01 states that a static IPv4 attac
 ## Next action and authorization boundary
 
 1. Creation, native SSH and read-only H1 are complete. Use `SECRET_CUSTODY_HOST_H1_EVIDENCE.md`; do not recreate or re-run setup without a changed condition.
-2. H2a installation and H2b live verification are complete. Finish exact-head CI for bounded H2c synthetic memory verification and use the existing Termius session once; preserve the fixed inactive installation and all gates.
+2. H2a installation and measured H2b/H2c/H2d verification are complete. H3 dependency observation is also complete; follow the current maintenance design above, not historical phone-run instructions.
 3. Confirm complete relevant current firewall rules before H3/H4; preserve the bounded phone/browser administration path. The manual /32 source differs from the original browser-only template.
 4. Qualify effective sandbox/resource limits, no-secret capacity, default-deny egress, verified static egress, TLS verify-full and reboot/recovery before introducing custody credentials.
 5. Use verified hardened-host egress for separately authorized Supabase network restrictions; verify Data API disabled and SSL enforcement, changing each separately only if required.

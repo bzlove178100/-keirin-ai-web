@@ -57,7 +57,7 @@ array. It also shows that `get-property` does not apply `arg_auto_start`.
 The correction uses explicit `call ... Properties.Get ss ...`, which applies
 `--auto-start=no`, and parses its typed variant correctly. Fixtures cover that
 wire format, multiple families and empty arrays; no assertion is removed.
-Require fresh CI for the corrected head before merge or a phone command.
+The corrected head `e0ae01e3d92d84e4f127e997cd36bcd9b54a3864` subsequently passed all five workflows and merged in PR #174. Regression run `36904707742` passed recovery job `110512222225` and dependency job `110512222345`.
 
 `flock` serializes the cooperating fixture controller/worker. It is **not** an
 nft generation compare-and-swap, an exclusion mechanism against other root
@@ -102,10 +102,13 @@ reader formats; optional uninstalled services may legitimately be unavailable.
 
 ## Remaining live boundary and next step
 
-After exact-head CI passes and merge is read back, provide one immutable,
-hash-checked phone command for the reader's explicitly private output. This
-collects new missing dependencies; it does not repeat nft/UFW general baseline.
-Review its selected values privately and put only sanitized status in GitHub.
+The immutable corrected reader was executed and its complete selected output
+was supplied in IMG_8937–IMG_8946 at 08:17–08:32 JST. The final result is
+`LOCAL_DEPENDENCIES_OBSERVED_WITH_UNRESOLVED_ITEMS_NO_MUTATION`.
+This observation request is complete; do not repeat it. See the
+[maintenance dependency design](SECRET_CUSTODY_NETWORK_MAINTENANCE_DESIGN.md)
+for sanitized findings, their limits, concrete next tests and the initial-anchor
+blocker. Private endpoints remain outside public GitHub.
 
 Still unresolved: initial maintenance-anchor transition from the unfiltered
 baseline, independently usable recovery, authoritative browser-SSH source-range
