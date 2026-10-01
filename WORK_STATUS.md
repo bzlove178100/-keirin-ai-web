@@ -4,6 +4,10 @@ Updated: 2026-10-01 (Asia/Tokyo).
 
 This file is the current resumption snapshot. Detailed historical implementation notes remain in Git history and merged PRs.
 
+## Immediate boundary: diagnose, do not repeat
+
+Live AWS navigation and creation are paused at the user's request to stop repeated ad-hoc instructions. Read the latest AWS browser/app/session incident in `WORK_RESUME.md` and the mandatory troubleshooting protocol in `AGENTS.md` before resuming. The SCP step remains user-reported complete. Browser console access was observed, but a stable IAM route, target-account/Tokyo access and OIDC bootstrap are not verified. Generic URLs, repeated sign-in/account selection and service navigation did not establish a stable IAM path; do not repeat them under unchanged conditions. App deletion was suggested only and is not a verified fix. Establish a diagnostic hypothesis, a distinguishing check and a stop condition before asking for further user action. This incident boundary takes precedence over the later bootstrap sequence below.
+
 ## Product direction
 
 `AI_AGENT_REQUIREMENTS.md` is authoritative. The target is a broad autonomous AI agent for research, text/image/video/code generation, learning/evaluation, task execution, recovery and reporting. Keirin AI is the first major execution target, not the only scope.
@@ -28,9 +32,9 @@ Agent-only checkpoint/activity persistence and queue coordination in `keirin-ai-
 
 ## Verified repository state
 
-The verified base before this account-boundary update is:
+The verified base before this incident/protocol update is:
 
-`b03ee168390ef2d98e432cbae80638d11572875c`
+`d77ed768e8d0ed33327437b2156115541f491516` (PR #155 merged).
 
 PR #151 is merged and contains the GitHub OIDC read-only observation package. PR #149 previously synchronized the AWS-observation handoff after PR #148.
 
@@ -100,7 +104,7 @@ The public CloudShell path in Tokyo failed during bootstrap with an environment/
 
 One bounded bootstrap remains before the workflow can run: create the reviewed CloudFormation stack in the Proof of Concept AWS account, then store its role ARN as the GitHub Actions secret `AWS_READONLY_ROLE_ARN`. No AWS account identifier or credential may be committed to the repository.
 
-The Work Cloud Browser previously returned `Site Unavailable`, and the phone policy editor caused repeated troubleshooting. The user later confirmed on 2026-10-01 that the regional SCP/policy step is complete. Treat that live step as completed unless AWS returns a new, concrete permission failure that directly contradicts it; this completion is user-reported and has not been independently read back from AWS by ChatGPT. Do not repeat Cloud Browser/CloudShell/mobile-editor or SCP-editing attempts. No OIDC stack creation, role-ARN secret registration or live workflow success has been verified. See `WORK_RESUME.md` for the exact restart boundary.
+The Work Cloud Browser previously returned `Site Unavailable`, and the phone policy editor caused repeated troubleshooting. The user later confirmed on 2026-10-01 that the regional SCP/policy step is complete. Treat that live step as completed unless AWS returns a new, concrete permission failure relevant to the intended operation; this completion is user-reported and has not been independently read back from AWS by ChatGPT. Do not repeat failed Cloud Browser/CloudShell/mobile-editor or SCP-editing attempts under unchanged conditions. No OIDC stack creation, role-ARN secret registration or live workflow success has been verified; unverified is not proof of absence. The subsequent browser/app/session incident is the current blocker. See `WORK_RESUME.md` for its evidence, attempted paths, unverified hypotheses and restart conditions.
 
 Offline observation hardening now requires exact Tokyo before any AWS call, explicitly active catalog entries, an identifiable Ubuntu LTS OS blueprint, and an identifiable matching bundle with one public IPv4 and a finite nonnegative numeric price. Synthetic stub tests cover missing/malformed facts and API failure without AWS credentials or network calls. These tests are not evidence of live catalog availability or AWS policy validation.
 
@@ -108,7 +112,7 @@ Offline observation hardening now requires exact Tokyo before any AWS call, expl
 
 `SECRET_CUSTODY_AWS_CONTROL_PLANE_OBSERVATION_REVIEW.md` and `review/lightsail_control_plane_observation.template.json` define the next live observation boundary. The template fixes the expected region/host shape/price ceiling while leaving every live observation value unset. It keeps `authorized_for_live_create=false`, rejects automatic size/region substitution, forbids sensitive account/key/IP/credential material and keeps every runtime/provider/prediction gate disabled.
 
-The next authenticated AWS session is limited to observing exact Tokyo availability, Ubuntu LTS blueprint identifier, matching bundle shape, displayed monthly price and static-IPv4 availability/pricing. Unknown, ambiguous or mismatching values fail closed. Passing observation still requires a separate explicit live-provision instruction before any AWS resource is created.
+The next authenticated AWS observation session, after resolving access and the bounded bootstrap, is limited to observing exact Tokyo availability, Ubuntu LTS blueprint identifier, matching bundle shape, displayed monthly price and static-IPv4 availability/pricing. Unknown, ambiguous or mismatching values fail closed. Passing observation still requires a separate explicit live-provision instruction before any Lightsail instance or static IP is created.
 
 ## Cost / availability boundary
 
@@ -118,10 +122,10 @@ For the hardened host, start with exactly one USD 7/month candidate only after a
 
 ## Next work / next boundary
 
-The next safe sequence is:
+First apply the incident and troubleshooting boundary at the top of this file. Do not ask the user to repeat a known failed path or create resources while diagnosis remains unresolved. After the browser route, intended account/region and relevant access are verified, the subsequent safe sequence is:
 
-1. retain the merged GitHub OIDC package and treat the regional SCP/policy step as completed per the user's 2026-10-01 confirmation; do not reopen the old phone-editing flow unless a new concrete AWS permission error requires it;
-2. in the Proof of Concept AWS account, create only the reviewed CloudFormation OIDC stack;
+1. retain the merged GitHub OIDC package and treat the regional SCP/policy step as completed per the user's 2026-10-01 confirmation; do not reopen the old phone-editing flow unless new relevant evidence requires it;
+2. check for an existing stack/provider/role in the Proof of Concept account; review the concrete change set and obtain separate execution confirmation before creating only the reviewed CloudFormation OIDC stack;
 3. store only the resulting role ARN in the GitHub Actions secret `AWS_READONLY_ROLE_ARN`; do not create an AWS access key;
 4. run the manual `aws lightsail read-only observation` workflow;
 5. require Tokyo `ap-northeast-1`, an active Ubuntu Linux/Unix blueprint, and an active bundle matching 2 vCPU / 1 GiB / 40 GiB / 2 TB at no more than USD 7;
@@ -149,14 +153,14 @@ The product requirement remains daily 21:00 Asia/Tokyo reporting of daily sales,
 
 Do not commit private race histories, prediction snapshots, model artifacts, credentials, private file identifiers, host allowlists, provider account identifiers or personal data. Prefer current `main`, current CI, deployed metadata and direct bounded checks over older handoff notes.
 
-## Catalog command error privacy (2026-10-01)
+## Catalog command error privacy (2026-10-01, historical validation)
 
 PR #152 is merged (`cb32f7f2351536cfef26ac0702252aeb8e593574`). The follow-up suppresses raw stderr from all three catalog AWS CLI commands, including warnings on successful commands. Failures report only the fixed operation name and exit status, preserve the original nonzero status, and stop before subsequent commands or a success report. Partial stdout remains in the temporary directory and is removed on exit. This intentionally sacrifices raw diagnostic detail to avoid publishing account IDs or role ARNs. It does not change credential-action logging or AWS CLI internal retry behavior.
 
-Local shell syntax validation and 58 offline tests passed, including synthetic private stderr/partial-stdout canaries at each of the three failure points. No real AWS calls were made. OIDC stack creation, role secret setup, the pending SCP save, and live observation remain unverified; Cloud Browser/CloudShell retries remain paused.
+Local shell syntax validation and 58 offline tests passed, including synthetic private stderr/partial-stdout canaries at each of the three failure points. No real AWS calls were made during that validation. It verified no OIDC stack, role secret or live observation. The later user-reported SCP completion and current access incident supersede the former pending-policy note; failed Cloud Browser/CloudShell retries remain paused.
 
-## OIDC template preflight (2026-10-01)
+## OIDC template preflight (2026-10-01, historical validation)
 
 Verified base: PR #153 merged, main `c3fd6d1488f1b4c8113ca652ca7dd109c15413d4`; its five exact-head CI workflows succeeded. The unchanged OIDC CloudFormation template passed local `cfn-lint==1.57.1` for Tokyo with no findings and no AWS credentials in the validation process environment. The offline CI now repeats that template check alongside the existing catalog tests. This is local schema validation, not AWS account/change-set validation or deployment.
 
-The next live dependency is still an available authorized AWS path and read-back of the pending policy state. Do not repeat the blocked browser/CloudShell attempts or failed phone editing instructions. No stack, role secret, or live observation was verified by this offline work.
+The regional SCP/policy step is treated as complete based on the user's later confirmation. Resume from the current browser/app/session diagnosis, not the former pending-policy instruction. Do not repeat failed browser/CloudShell/phone-editor attempts under unchanged conditions. No stack, role secret, or live observation was verified by the offline work.

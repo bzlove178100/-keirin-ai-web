@@ -6,19 +6,39 @@ Use this file when resuming in ChatGPT Work.
 
 ## Resume command
 
-If the user says only `続けて` in Work, resume from this exact boundary without redoing prior repository review work.
+If the user says only `続けて` in Work, read the latest incident state below and the troubleshooting protocol in `AGENTS.md` before proposing an operation. Resume without redoing completed work or repeating failed instructions under unchanged conditions.
+
+## Latest incident state: AWS browser/app/session loop
+
+The user requested a stop to ad-hoc instructions and repeated manual work. Live AWS navigation and creation are paused pending evidence-based diagnosis. This is the current immediate boundary; the later OIDC bootstrap sequence below is not an instruction to restart it now.
+
+Evidence from user-provided screens on 2026-10-01 (screen times are not independently verified AWS timestamps):
+
+- A CloudFormation `ListStacks` error explicitly referred to `us-east-1` and an SCP deny. It does not establish a deny in Tokyo.
+- A later CloudFormation screen displayed no red error and 0 stacks with the active-status filter. Account and region were not visible. This is not evidence of no stacks in all accounts/regions, no IAM provider/role, or stack-creation authorization.
+- Browser console home and service search were reached. The user reports that selecting IAM opened the AWS mobile app sign-in screen.
+- Entering the suggested generic IAM URL subsequently showed `Choose AWS sessions`, with Proof of Concept listed as signed in 11 minutes earlier. The screen itself showed no authentication error.
+- Regional policy completion remains user-reported, as recorded in PR #155. Do not ask for SCP editing again without new relevant evidence.
+
+Unresolved: the browser/app routing and account/session transition mechanism, the exact authentication method, effective target-account/Tokyo permissions, existing OIDC provider/role, stack creation, role-ARN registration and live observation. Do not label an 8-hour session timeout, IAM Identity Center, universal links or a cookie fault as the established cause from these screens alone.
+
+Already attempted without a stable verified IAM path: generic console/IAM URLs, repeated account selection/sign-in guidance, browser address-bar paste guidance and service-search navigation. Do not start this sequence over. AWS app deletion was only suggested; execution and outcome were not reported. It is not the default next action or a verified fix. No private screenshot, account ID, session URL, role ARN or personal identifier is stored here.
+
+Before any further user action, state the remaining diagnostic question, the evidence supporting the hypothesis, what has changed since the failed attempt, the least-invasive distinguishing check, its success criterion and its stop condition. Use existing evidence and available read-only tools first. Ask for only the missing information that changes the next decision, not another screenshot of an already understood screen. Do not dispatch a live workflow as an access probe.
+
+A verified browser route to IAM and the intended CloudFormation account/region must be established before returning to the duplicate check and reviewed change set. Distinguish route recovery from IAM/SCP authorization and from live stack creation. A workaround is not a proven root-cause fix.
 
 ## Verified repository state
 
 - Repository: `bzlove178100/-keirin-ai-web`
-- Verified base before this offline observation update: `b03ee168390ef2d98e432cbae80638d11572875c`.
+- Verified base for this incident/protocol update: `d77ed768e8d0ed33327437b2156115541f491516` (PR #155 merged).
 - PR #151 (GitHub OIDC read-only observation) is merged.
 - PR #149 exact-head CI passed: collection progress UI regression, agent runtime read-only smoke, keirin-ai regression, and agent checkpoint PostgreSQL contract all succeeded.
 - Resolve the current `main` from GitHub when resuming; do not treat an embedded SHA as permanently current.
-- AWS account bootstrap is complete: Proof of Concept account available, paid usage enabled, advanced features activated, and USD 10 AWS Budget configured with Credit/Refund excluded.
-- No Lightsail instance or static IP has been provisioned.
+- AWS account bootstrap is recorded as complete: Proof of Concept account available, paid usage enabled, advanced features activated, and USD 10 AWS Budget configured with Credit/Refund excluded.
+- No Lightsail instance or static IP provisioning has been verified.
 - Public CloudShell in Tokyo failed with an environment/permission error; do not keep retrying CloudShell or create a CloudShell VPC environment.
-- The next observation path is GitHub Actions OIDC with short-lived read-only AWS credentials.
+- The planned observation path is GitHub Actions OIDC with short-lived read-only AWS credentials, after the unresolved access/bootstrap boundary.
 
 ## Fixed safety state
 
@@ -36,22 +56,22 @@ Keep all of these unchanged unless the user separately authorizes the specific l
 - no C2 live secret-store DDL applied;
 - no paid hardened host provisioned.
 
-## Immediate next action in Work
+## Subsequent bootstrap after access diagnosis
 
-Read `AWS_GITHUB_OIDC_READONLY_OBSERVATION.md` first.
+Read `AWS_GITHUB_OIDC_READONLY_OBSERVATION.md` together with the latest incident state above.
 
 Do not resume screenshot-by-screenshot AWS console navigation and do not retry public CloudShell or repeat the regional SCP phone-editing flow.
 
-### Current bootstrap state (2026-10-01)
+### Policy and bootstrap state (2026-10-01)
 
-- The Work Cloud Browser returned `Site Unavailable` for AWS. The cause is not established; do not repeat that browser attempt. The user's phone session cannot be controlled through that browser.
-- The user later confirmed that the regional SCP/policy step is complete. Treat that step as completed unless AWS returns a new, concrete permission failure that directly contradicts it. This completion is user-reported; it has not been independently read back from AWS by ChatGPT.
+- The Work Cloud Browser returned `Site Unavailable` for AWS. The cause is not established; do not repeat that browser attempt without a material change. The user's phone session cannot be controlled through that browser.
+- The user later confirmed that the regional SCP/policy step is complete. Treat that step as completed unless AWS returns a new, concrete permission failure relevant to the intended operation. This completion is user-reported; it has not been independently read back from AWS by ChatGPT.
 - The earlier phone-editor difficulty and `builderid:*` validation finding are historical troubleshooting context only. Do not ask the user to repeat that editing flow or remove existing policy exceptions solely to clear the old finding.
-- The OIDC CloudFormation stack, its `ReadOnlyRoleArn` output, the repository secret, and a live observation run remain unverified.
+- The OIDC CloudFormation stack, its `ReadOnlyRoleArn` output, the repository secret, and a live observation run remain unverified; unverified is not proof of absence.
 
-The next live action is CloudFormation, not Organizations/SCP editing. Before stack creation, check for an existing stack/provider/role so a partial prior attempt is not duplicated. Stack execution remains a separate important-operation confirmation after reviewing the concrete change set.
+After the access boundary is resolved, the next bootstrap is CloudFormation, not Organizations/SCP editing. Before stack creation, check for an existing stack/provider/role in the intended account so a partial prior attempt is not duplicated. Stack execution remains a separate important-operation confirmation after reviewing the concrete change set.
 
-The next bounded bootstrap is:
+The subsequent bounded bootstrap is:
 
 1. create the reviewed `review/aws_github_oidc_readonly_role.yaml` CloudFormation stack in the Proof of Concept AWS account;
 2. copy only its `ReadOnlyRoleArn` output;
@@ -88,14 +108,14 @@ Report the observed sanitized values to the user and stop. Passing observation i
 
 If authorized later, continue with exactly one candidate, then read-only/no-secret H1 preflight before any host mutation. Any live hardening, Supabase network restriction, Data API/SSL management change, C2 DDL, synthetic C3 credential, or C4 real credential activation remains a separate authorization boundary.
 
-## Catalog command error privacy (2026-10-01)
+## Catalog command error privacy (2026-10-01, historical validation)
 
 PR #152 is merged (`cb32f7f2351536cfef26ac0702252aeb8e593574`). The follow-up suppresses raw stderr from all three catalog AWS CLI commands, including warnings on successful commands. Failures report only the fixed operation name and exit status, preserve the original nonzero status, and stop before subsequent commands or a success report. Partial stdout remains in the temporary directory and is removed on exit. This intentionally sacrifices raw diagnostic detail to avoid publishing account IDs or role ARNs. It does not change credential-action logging or AWS CLI internal retry behavior.
 
-Local shell syntax validation and 58 offline tests passed, including synthetic private stderr/partial-stdout canaries at each of the three failure points. No real AWS calls were made. OIDC stack creation, role secret setup, the pending SCP save, and live observation remain unverified; Cloud Browser/CloudShell retries remain paused.
+Local shell syntax validation and 58 offline tests passed, including synthetic private stderr/partial-stdout canaries at each of the three failure points. No real AWS calls were made during that validation. It verified no OIDC stack, role secret or live observation. The later user-reported SCP completion and current access incident above supersede the former pending-policy note; failed Cloud Browser/CloudShell retries remain paused.
 
-## OIDC template preflight (2026-10-01)
+## OIDC template preflight (2026-10-01, historical validation)
 
 Verified base: PR #153 merged, main `c3fd6d1488f1b4c8113ca652ca7dd109c15413d4`; its five exact-head CI workflows succeeded. The unchanged OIDC CloudFormation template passed local `cfn-lint==1.57.1` for Tokyo with no findings and no AWS credentials in the validation process environment. The offline CI now repeats that template check alongside the existing catalog tests. This is local schema validation, not AWS account/change-set validation or deployment.
 
-The regional SCP/policy step is now treated as complete based on the user's later confirmation. Do not repeat the blocked browser/CloudShell attempts or failed phone editing instructions. The next live dependency is creating the reviewed OIDC CloudFormation stack in the Proof of Concept account. No stack, role secret, or live observation has yet been verified.
+The regional SCP/policy step is treated as complete based on the user's later confirmation. Do not repeat failed phone editing instructions. Resume from the latest access incident, not the old pending-policy or create-stack instruction. No stack, role secret, or live observation has yet been verified.
