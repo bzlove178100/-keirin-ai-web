@@ -75,7 +75,7 @@ It rejects any region other than Tokyo `ap-northeast-1` before an AWS call. It f
 - exactly one included public IPv4 address;
 - a finite nonnegative numeric price no greater than USD 7/month.
 
-Missing activity state, malformed numeric values (including booleans, numeric strings and NaN), or absent LTS evidence are not success. An entry with incomplete facts cannot become a candidate. No alternative region/size is selected. API errors stop execution without retry or a success report.
+Missing activity state, malformed numeric values (including booleans, numeric strings and NaN), or absent LTS evidence are not success. An entry with incomplete facts cannot become a candidate. No alternative region/size is selected. A failed CLI command stops the script without a subsequent command or success report; AWS CLI internal retries are unchanged.
 
 Run `python3 -m pytest -q tests/test_aws_oidc_readonly_observation.py` for the offline synthetic contract. The test substitutes a local AWS CLI stub and does not use AWS credentials. Passing it does not validate AWS IAM/SCP policy, establish actual blueprint availability, or authorize provisioning.
 
@@ -108,3 +108,15 @@ Passing the read-only workflow does not authorize:
 PR #152 is merged (`cb32f7f2351536cfef26ac0702252aeb8e593574`). The follow-up suppresses raw stderr from all three catalog AWS CLI commands, including warnings on successful commands. Failures report only the fixed operation name and exit status, preserve the original nonzero status, and stop before subsequent commands or a success report. Partial stdout remains in the temporary directory and is removed on exit. This intentionally sacrifices raw diagnostic detail to avoid publishing account IDs or role ARNs. It does not change credential-action logging or AWS CLI internal retry behavior.
 
 Local shell syntax validation and 58 offline tests passed, including synthetic private stderr/partial-stdout canaries at each of the three failure points. No real AWS calls were made. OIDC stack creation, role secret setup, the pending SCP save, and live observation remain unverified; Cloud Browser/CloudShell retries remain paused.
+
+## Offline template validation
+
+The offline workflow installs `cfn-lint==1.57.1` and runs:
+
+```sh
+cfn-lint -r ap-northeast-1 -t review/aws_github_oidc_readonly_role.yaml
+```
+
+The unchanged OIDC template passed this check with no findings on 2026-10-01, with AWS credentials absent from the validation process environment. The check validates template syntax/resource properties before upload. It does not contact the target account, validate effective IAM/SCP access or the emitted GitHub token, detect existing providers/roles, or create a change set. Live read-back and execution confirmation remain required.
+
+Tool reference: [AWS CloudFormation cfn-lint](https://github.com/aws-cloudformation/cfn-lint).
