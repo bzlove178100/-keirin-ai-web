@@ -196,3 +196,15 @@ jobs:
         # Reuses the owned disposable H2a fixture; real systemd/kernel, no secrets.
         # Only the fixture's global swap precheck is synthetic; per-cgroup swap is real.
         run: sudo -n env H2B_CI_FIXTURE=1 H2C_CI_FIXTURE=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" /usr/bin/python3 -I -B tests/test_secret_custody_h2c_systemd.py
+
+  custody-h2d-systemd:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test bounded process evidence and ownership guards
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_h2d.py
+      - name: Test actual parent and launcher death with resistant child cleanup
+        # Owned disposable H2a fixture; no secrets, AWS or host firewall changes.
+        # The global swap precheck is synthetic only in this CI fixture.
+        run: sudo -n env H2B_CI_FIXTURE=1 H2D_CI_FIXTURE=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" /usr/bin/python3 -I -B tests/test_secret_custody_h2d_systemd.py

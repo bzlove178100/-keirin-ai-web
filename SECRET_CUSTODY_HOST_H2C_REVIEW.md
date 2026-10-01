@@ -3,7 +3,13 @@
 Prepared after H2b live success (IMG_8926, 2026-10-02 00:46 JST, PR #168)
 and the user's continuation at 00:59 JST. This is one temporary no-secret test,
 not a persistent installation, actual credential handoff or runtime activation.
-H2c live execution remains pending until its separate terminal result is observed.
+H2c live execution succeeded: IMG_8927 at 2026-10-02 01:16 JST shows all 21 PASS
+records and `RESULT H2C_SYNTHETIC_MEMORY_OK_NO_RUNTIME`, followed by the shell
+prompt. The command pins commit `3ffb540728f973260e4960e25ba5a1e58caf1b60` and
+script SHA-256 `d9564bc9ea308ad5584e866c3443c09a04829feda8e5bc5d7ca5bf90134cd166`.
+[PR #169](https://github.com/bzlove178100/-keirin-ai-web/pull/169) records the five
+successful CI workflows and separate user-supplied live evidence. Do not repeat
+this completed test; the 01:18 JST continuation proceeds to [H2d](SECRET_CUSTODY_HOST_H2D_REVIEW.md).
 
 Implementation: `review/secret_custody_h2c.py`. Default `inspect` is read-only.
 `run --approve H2_SYNTHETIC_MEMORY_V1` is the fixed bounded action. The token is
@@ -86,9 +92,9 @@ only the disposable runner's global swap precheck is synthetic; real cgroup swap
 and tmpfs noswap remain checked. The fixture temporarily tightens/restores /opt
 parent metadata when necessary. Production trust checks are not relaxed.
 
-Require all exact-head CI workflows to pass, merge/read back, then give one
-immutable hash-checked phone command. Work has no independent live SSH session.
-CI success and the future user-supplied live result must be recorded separately.
+All exact-head CI workflows passed before merge/read-back and the immutable
+hash-checked phone command. Work has no independent live SSH session. The
+subsequent user-supplied live result is recorded separately above.
 
 ## Limits and next work
 
