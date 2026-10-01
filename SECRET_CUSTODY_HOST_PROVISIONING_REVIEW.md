@@ -1,6 +1,6 @@
 # Secret-custody host provisioning review
 
-Reviewed: 2026-09-30 (Asia/Tokyo)
+Reviewed: 2026-10-01 (Asia/Tokyo)
 Status: **review only — no AWS resource creation is authorized by this file**
 
 This review converts the selected Amazon Lightsail Tokyo 1 GB candidate into an exact provisioning contract that can be checked immediately before a separately authorized live create. It does not create an instance, static IP, SSH key, IAM identity, firewall rule, DNS record or billing commitment.
@@ -42,7 +42,7 @@ Required creation properties:
 - Ubuntu LTS family preferred for the first candidate because the existing host qualification assumes systemd, cgroup v2 and nftables-compatible Linux tooling;
 - exact current blueprint ID/version must be read from the live Lightsail control plane at creation time and recorded privately in qualification evidence;
 - 1 GB / 2 vCPU / 40 GB / 2 TB bundle contract;
-- Tokyo zone selected by Lightsail within the Tokyo region; do not move to another AWS region to obtain capacity without a new review;
+- selected Tokyo zone `ap-northeast-1a`, previously observed and explicitly supplied to CloudFormation; no automatic zone or region fallback on capacity failure;
 - no launch script that contains a password, token, provider credential, Supabase key or repository secret;
 - no automatic hosted-worker start on boot;
 - no production prediction or keirin data-fetch activation.
@@ -139,6 +139,27 @@ The default acknowledgement is NOT_AUTHORIZED. Template rules require an explici
 An existing Tokyo Lightsail key-pair name is required with no default. Verify it by metadata only before execution; do not retrieve a private key. This avoids silently depending on an unverified default key. If no usable key exists, stop and review the separate key-creation boundary; do not create an access key or SSH key as a fallback.
 
 The requested platform firewall is TCP 22 only, using AWS's `lightsail-connect` source alias with empty explicit IPv4 and IPv6 CIDR lists. No HTTP, HTTPS or runtime port is requested. This is a temporary administration proposal requiring approval together with the instance creation. It does not prove live firewall state, disable IPv6 on the host, or implement host-side outbound restrictions. CloudFormation operations must not be assumed atomic; inspect the actual IPv4/IPv6 rules before H1 and before treating the host as safe.
+
+## Ready-to-review creation inputs
+
+The 2026-10-01 final offline review rechecked the [AWS public price](https://aws.amazon.com/lightsail/pricing/) and billing FAQ. The USD 7 bundle and attached/unattached static-IP rules remain as described above. This is public-document verification, not a fresh authenticated catalog/account check. The unchanged candidate blob is `4c8913e893ece7ed95e35827af6bf9406783e59e` at source main `16c31f91a4205991c28ac2a33e8c64678a2a4f29`.
+
+| Input | Concrete proposed value |
+| --- | --- |
+| New stack name | `keirin-ai-custody-h1` (absence not yet checked) |
+| Region / zone | `ap-northeast-1` / `ap-northeast-1a` |
+| InstanceName | `keirin-custody-h1` |
+| StaticIpName | `keirin-custody-h1-ip` |
+| Blueprint / bundle | `ubuntu_24_04` / `micro_3_0` |
+| ExistingKeyPairName | `LightsailDefaultKeyPair` (metadata observed at 20:39:38 JST; login untested) |
+| ExpectedAccountId | Privately match the intended Proof of Concept account; never commit it |
+| LiveCreateAcknowledgement | Keep `NOT_AUTHORIZED` until the explicit cost/configuration authorization required by this parameter has been obtained |
+
+After that authorization, the acknowledgement value is `ONE_CANDIDATE_USD7_APPROVED`. This is not consent by itself and does not waive inspection of the actual CREATE change set, account/region guards, exact-two-Add scope or failure-retention verification. Do not remove the rule to make pre-approval preparation succeed.
+
+The proposed initial connection is TCP 22 from `lightsail-connect` only. AWS [documents that alias](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-lightsail-instance-port.html) as the Lightsail console browser RDP/SSH client source range. This validates the meaning of the requested alias, not deployed ingress. On partial failure, successful resources are retained and can continue billing; no automatic delete, replacement, resize or retry is approved.
+
+The [CloudFormation new-stack procedure](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-console-create-stack.html) allows **Create change set** on **Review and create**. This creates a `REVIEW_IN_PROGRESS` stack shell and proposed change set; it is not proof of instance creation. Use a new stack for this proposal, not an update to the completed OIDC stack. Execute only after the actual resolved proposal and execution options pass the existing review sequence below.
 
 ### Execution sequence after approval
 
