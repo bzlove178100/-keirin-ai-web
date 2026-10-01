@@ -15,14 +15,13 @@ Verified from the user's live AWS console and CloudShell session on 2026-10-01:
 - Management-account CloudShell in `ap-southeast-2` eventually opened successfully after an initial session-timeout attempt.
 - `prep.sh` was uploaded and run. It performed read-only Organizations calls, wrote `current_scp.json` and `proposed_scp.json`, and reported `READ-ONLY PREP COMPLETE`. It did not change AWS.
 - `review.sh` was uploaded and run. It reported `REVIEW PASS`, confirmed that all non-RegionFloor statements are unchanged, `Effect / NotAction / Resource` are unchanged, the global RegionFloor keeps the existing region list while excluding only the Proof of Concept account from that statement, and a second `RegionFloorProofOfConcept` statement allows exactly the current regions plus `ap-northeast-1` for Proof of Concept. Proposed compact SCP size was 5814 / 10240 characters.
-- No `organizations update-policy` call has been run. The live SCP is still unchanged.
+- The user explicitly approved the reviewed change. `apply_scp.sh` was uploaded and run in the management-account CloudShell. It re-read the live SCP, verified there was no drift from `prep.sh`, applied exactly `proposed_scp.json`, read the policy back, and reported `SCP UPDATE VERIFIED`. A local rollback copy was saved as `current_scp_before_update.json` in that CloudShell session.
 
-Immediate authorization boundary:
+Immediate next verification boundary:
 
-- The next live mutation is applying the reviewed `proposed_scp.json` to the existing SCP with `organizations update-policy`.
-- Do not run that mutation without the user's explicit approval.
-- If approved, use the existing management-account CloudShell artifacts rather than re-editing the phone JSON editor.
-- After the update, verify that Proof of Concept can read CloudFormation in Tokyo. If that still fails, stop and diagnose the new concrete error; do not repeat the update.
+- The reviewed SCP update has been applied and read-back verified. Do not run `organizations update-policy` again unless a new reviewed change is required.
+- Next, return to the Proof of Concept session and verify that CloudFormation `ListStacks` succeeds in Tokyo `ap-northeast-1`.
+- If Tokyo CloudFormation still fails, stop and diagnose the new concrete error; do not repeat the SCP update.
 - Once Tokyo CloudFormation access is verified, continue the reviewed OIDC bootstrap: create only the reviewed OIDC stack, capture `ReadOnlyRoleArn`, register `AWS_READONLY_ROLE_ARN`, and run the read-only Lightsail observation.
 - Work should take over after the OIDC path is live, because then AWS observation can proceed through GitHub Actions instead of repeating phone-console operations. A Work cloud browser session does not inherit the user's current Safari/CloudShell session, and a prior Work AWS browser attempt returned `Site Unavailable`.
 
