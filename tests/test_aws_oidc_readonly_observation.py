@@ -113,6 +113,8 @@ def run_observation(tmp_path, catalog, region="ap-northeast-1", fail_call=""):
         "assert args[1] in ('get-regions', 'get-blueprints', 'get-bundles')\n"
         "assert args[args.index('--region') + 1] == 'ap-northeast-1'\n"
         "if args[1] == os.environ['FAKE_FAIL_CALL']:\n"
+        "    print('PRIVATE_ERROR_CANARY role/session details', file=sys.stderr)\n"
+        "    print('PRIVATE_RESPONSE_CANARY')\n"
         "    sys.exit(42)\n"
         "print(json.dumps(json.loads(Path(os.environ['FAKE_CATALOG']).read_text())[args[1]]))\n"
     )
@@ -204,8 +206,14 @@ def test_incomplete_entry_does_not_hide_valid_candidate(tmp_path, catalog):
     assert len(json.loads(result.stdout)["matching_bundles"]) == 1
 
 
-def test_aws_failure_stops_without_retry_or_success_report(tmp_path, catalog):
-    result, calls = run_observation(tmp_path, catalog, fail_call="get-blueprints")
+@pytest.mark.parametrize("fail_call,count", [
+    ("get-regions", 1), ("get-blueprints", 2), ("get-bundles", 3),
+])
+def test_aws_failure_stops_without_raw_error_or_success_report(tmp_path, catalog, fail_call, count):
+    result, calls = run_observation(tmp_path, catalog, fail_call=fail_call)
     assert result.returncode == 42
     assert result.stdout == ""
-    assert [call[1] for call in calls] == ["get-regions", "get-blueprints"]
+    assert result.stderr == f"FAIL: Lightsail {fail_call} failed (exit 42); raw AWS error omitted\n"
+    assert "PRIVATE_ERROR_CANARY" not in result.stdout + result.stderr
+    assert "PRIVATE_RESPONSE_CANARY" not in result.stdout + result.stderr
+    assert [call[1] for call in calls] == ["get-regions", "get-blueprints", "get-bundles"][:count]

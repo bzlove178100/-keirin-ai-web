@@ -15,21 +15,29 @@ MAX_PRICE_USD=7.0
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
+# AWS errors can contain account IDs and role ARNs. Never echo raw CLI stderr.
+fail_catalog_request() {
+  local status="$1"
+  local operation="$2"
+  printf 'FAIL: Lightsail %s failed (exit %s); raw AWS error omitted\n' "$operation" "$status" >&2
+  exit "$status"
+}
+
 aws lightsail get-regions \
   --include-availability-zones \
   --region "$REGION" \
   --output json \
-  --no-cli-pager > "$tmp_dir/regions.json"
+  --no-cli-pager > "$tmp_dir/regions.json" 2>/dev/null || fail_catalog_request "$?" "get-regions"
 
 aws lightsail get-blueprints \
   --region "$REGION" \
   --output json \
-  --no-cli-pager > "$tmp_dir/blueprints.json"
+  --no-cli-pager > "$tmp_dir/blueprints.json" 2>/dev/null || fail_catalog_request "$?" "get-blueprints"
 
 aws lightsail get-bundles \
   --region "$REGION" \
   --output json \
-  --no-cli-pager > "$tmp_dir/bundles.json"
+  --no-cli-pager > "$tmp_dir/bundles.json" 2>/dev/null || fail_catalog_request "$?" "get-bundles"
 
 python3 - "$REGION" "$EXPECTED_CPU" "$EXPECTED_RAM" "$EXPECTED_DISK" "$EXPECTED_TRANSFER" "$MAX_PRICE_USD" \
   "$tmp_dir/regions.json" "$tmp_dir/blueprints.json" "$tmp_dir/bundles.json" <<'PY'
