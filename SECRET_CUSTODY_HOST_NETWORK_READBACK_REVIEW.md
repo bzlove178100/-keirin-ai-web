@@ -12,6 +12,42 @@ destination argument, network probe, secret input or service-management action.
 The phone loader downloads the immutable hash-checked script; the observer itself
 does not contact GitHub, AWS, a provider or any remote endpoint.
 
+## Live failure and scoped IPv6 correction — 2026-10-02 01:56 JST
+
+IMG_8929 shows PR #171's pinned observer ending with
+`STOP NETWORK_READBACK_UNAVAILABLE` and
+`RESULT H3_NETWORK_OBSERVATION_INCOMPLETE_NO_MUTATION`. No facts were printed.
+The readback did not succeed; the screenshot alone does not identify the stage.
+
+A parser defect was independently reproduced: `[fe80::1234]%fixture0:546`
+leaves `fe80::1234]` after the original bracket/scope stripping, causing ValueError.
+The [iproute2 v6.1.0 ss source](https://github.com/iproute2/iproute2/blob/v6.1.0/misc/ss.c)
+shows `inet_addr_print` bracketing the address before `sock_addr_print` appends the
+scope. The initial CI tested real unscoped loopback sockets; its synthetic scoped
+sample only placed the scope inside brackets. That coverage missed this format.
+This defect is confirmed; its responsibility for the live failure remains a
+hypothesis until the changed observer completes or supplies a more specific STOP.
+
+The correction parses both `[address]%zone` and `[address%zone]`, as well as
+scoped wildcards, and still rejects malformed brackets/zones and invalid addresses.
+Fixed STAGE records now distinguish command reads from parsing for nft, IPv4/IPv6
+listeners and services, plus host/proc reads. Unexpected exceptions map to fixed
+categories (JSON_SYNTAX, TEXT_ENCODING, OS_READ_ERROR, INVALID_VALUE, INVALID_TYPE,
+UNEXPECTED_EXCEPTION), never raw exception messages. Successful facts remain
+buffered; failure does not skip a read or become empty-policy success.
+
+Mandatory real-kernel CI adds a scope-bearing IPv6 UDP socket on a synthetic
+link-local address assigned only to loopback inside its disposable namespace.
+It requires a zone-bearing actual ss row and the expected redacted classification.
+No host interface, cloud policy or external endpoint is changed. Local regression
+reproduced the old failure and the corrected offline tests pass; exact-head CI and
+the separate corrected live result must be evaluated independently.
+
+The unchanged failed command must not be repeated. The next phone run uses the
+corrected immutable script/hash: success supplies the missing host summary;
+failure supplies the fixed STOP/STAGE pair to resolve the remaining branch.
+This does not claim full firewall qualification or authorize any mutation.
+
 ## Fixed reads and output
 
 The observer requires root read access, systemd as PID 1 and the same network
@@ -85,10 +121,11 @@ not authorize actual application runtime, provider credentials or database use.
 
 ## Validation
 
-Twelve offline tests cover output redaction, empty versus malformed state,
+Sixteen offline tests cover output redaction, empty versus malformed state,
 duplicate JSON keys, IPv4/IPv6 bind parsing, unknown service states, absent legacy
 proc files, fixed command/path allowlists, wrong namespace, partial-read failure,
-real subprocess byte-cap cleanup, timeout and nonzero-exit redaction.
+real subprocess byte-cap cleanup, timeout, nonzero-exit redaction, both scoped
+IPv6 formats, malformed zones and per-stage failure attribution.
 
 Mandatory Ubuntu 24.04 CI also runs a real-kernel fixture inside a disposable
 `unshare --net` namespace. It observes an empty ruleset, adds fixture-only nft

@@ -70,6 +70,65 @@ class NetworkReadbackTests(unittest.TestCase):
             with self.assertRaises(n.Stop):
                 n.listener_summary(raw, 4)
 
+    def test_ipv6_zone_outside_or_inside_brackets_and_scoped_wildcard(self):
+        # The old strip('[]').split('%')[0] raised ValueError for [addr]%zone.
+        for host in ("[fe80::1234]%fixture0", "[fe80::1234%fixture0]",
+                     "fe80::1234%fixture0", "[fe80::1234]%7"):
+            raw = ("udp UNCONN 0 0 " + host + ":546 [::]:*\n").encode()
+            self.assertEqual(n.listener_summary(raw, 6), ["FACT ipv6_listeners=1",
+                             "FACT listener=ipv6,udp,link_local,546,count:1"])
+        self.assertEqual(n.listener_summary(b'udp UNCONN 0 0 *%fixture0:546 *:*\n', 6),
+                         ["FACT ipv6_listeners=1", "FACT listener=ipv6,udp,wildcard,546,count:1"])
+
+    def test_ipv6_invalid_brackets_zones_and_addresses_still_rejected(self):
+        for host in ("[fe80::1234", "fe80::1234]", "[[fe80::1234]]", "[fe80::1234]junk",
+                     "[fe80::1234]%", "[fe80::1234%]", "[fe80::1234%a]%b",
+                     "[fe80::1234]%a%b", "[not-an-address]%private"):
+            with self.assertRaisesRegex(n.Stop, "^LISTENER_ADDRESS_UNRECOGNIZED$"):
+                n.listener_summary(("udp UNCONN 0 0 " + host + ":546 [::]:*\n").encode(), 6)
+
+    def test_failure_has_fixed_stage_and_category_without_raw_values(self):
+        cases = ((json.JSONDecodeError("private", "private", 0), "JSON_SYNTAX"),
+                 (UnicodeDecodeError("ascii", b'\xff', 0, 1, "private"), "TEXT_ENCODING"),
+                 (PermissionError("private"), "OS_READ_ERROR"),
+                 (ValueError("private"), "INVALID_VALUE"),
+                 (TypeError("private"), "INVALID_TYPE"),
+                 (RuntimeError("private"), "UNEXPECTED_EXCEPTION"),
+                 (n.Stop("NFT_JSON_INVALID"), "NFT_JSON_INVALID"))
+        for error, code in cases:
+            def failed_snapshot():
+                return n.checked("NFT_PARSE", lambda: (_ for _ in ()).throw(error))
+            out = io.StringIO()
+            with patch.object(n, "snapshot", side_effect=failed_snapshot), redirect_stdout(out):
+                self.assertEqual(n.main(), 1)
+            self.assertEqual(out.getvalue(), "STOP " + code + "\nSTAGE NFT_PARSE\n"
+                             "RESULT H3_NETWORK_OBSERVATION_INCOMPLETE_NO_MUTATION\n")
+
+    def test_real_snapshot_attributes_read_and_parse_stages_and_buffers_facts(self):
+        valid = {n.NFT: b'{"nftables":[]}', n.SS4: b'', n.SS6: b'',
+                 (*n.SERVICE, "nftables.service"): b'LoadState=loaded\nActiveState=inactive\nUnitFileState=disabled\n',
+                 (*n.SERVICE, "ufw.service"): b'LoadState=loaded\nActiveState=inactive\nUnitFileState=disabled\n'}
+        for target, value, stage, code in (
+                (n.NFT, b'private-not-json', "NFT_PARSE", "JSON_SYNTAX"),
+                (n.SS4, n.Stop("READ_TIMEOUT"), "IPV4_LISTENERS_READ", "READ_TIMEOUT"),
+                (n.SS6, b'udp UNCONN 0 0 [bad]%private:546 [::]:*\n',
+                 "IPV6_LISTENERS_PARSE", "LISTENER_ADDRESS_UNRECOGNIZED"),
+                ((*n.SERVICE, "ufw.service"), b'LoadState=private\n',
+                 "UFW_SERVICE_PARSE", "SERVICE_OUTPUT_INVALID")):
+            def command(args, **kwargs):
+                result = value if args == target else valid[args]
+                if isinstance(result, Exception):
+                    raise result
+                return result
+            out = io.StringIO()
+            with patch.object(n.os, "geteuid", return_value=0), \
+                    patch.object(n.os, "readlink", return_value="net:[1]"), \
+                    patch.object(n, "read_file", side_effect=lambda p, **kw: "systemd" if p == "/proc/1/comm" else None), \
+                    patch.object(n, "command", side_effect=command), redirect_stdout(out):
+                self.assertEqual(n.main(), 1)
+            self.assertEqual(out.getvalue(), "STOP " + code + "\nSTAGE " + stage + "\n"
+                             "RESULT H3_NETWORK_OBSERVATION_INCOMPLETE_NO_MUTATION\n")
+
     def test_service_unknown_or_missing_is_not_silently_normalized(self):
         raw = b'LoadState=not-found\nActiveState=inactive\nUnitFileState=\n'
         self.assertEqual(n.service_summary("ufw", raw), "FACT ufw_service=not-found,inactive,none")
@@ -152,6 +211,10 @@ def namespace_fixture():
     assert lines == ["FACT nft_objects=table:1,chain:2,rule:1,other:0", "FACT nft_base_chains=2",
                      "FACT nft_base=inet,filter,input,0,drop,count:1", "FACT nft_base=inet,filter,output,0,drop,count:1"]
     subprocess.run(["/usr/sbin/ip", "link", "set", "lo", "up"], check=True, timeout=5)
+    # Scope-bearing real socket: previous CI covered only loopback literals.
+    # The address and interface are confined to this disposable net namespace.
+    subprocess.run(["/usr/sbin/ip", "-6", "addr", "add", "fe80::1234/64", "dev", "lo", "nodad"],
+                   check=True, timeout=5)
     sockets = []
     try:
         for family, flag, address in ((4, socket.AF_INET, "127.0.0.1"), (6, socket.AF_INET6, "::1")):
@@ -164,6 +227,15 @@ def namespace_fixture():
                 port = sock.getsockname()[1]
                 lines = n.listener_summary(n.command(n.SS4 if family == 4 else n.SS6), family)
                 assert "FACT listener=ipv" + str(family) + "," + proto + ",loopback," + str(port) + ",count:1" in lines
+        scoped = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        sockets.append(scoped)
+        scoped.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b"lo\x00")
+        scoped.bind(("fe80::1234", 0, 0, socket.if_nametoindex("lo")))
+        port = scoped.getsockname()[1]
+        raw = n.command(n.SS6)
+        assert any(b"%lo" in line and (":" + str(port)).encode() in line for line in raw.splitlines())
+        assert "FACT listener=ipv6,udp,link_local," + str(port) + ",count:1" in n.listener_summary(raw, 6)
+        print("REAL_SCOPED_IPV6_LISTENER_READBACK_OK")
     finally:
         for sock in sockets:
             sock.close()
