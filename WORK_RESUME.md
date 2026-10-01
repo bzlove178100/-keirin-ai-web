@@ -2,19 +2,21 @@
 
 Updated: 2026-10-01 (Asia/Tokyo).
 
-## Current boundary: one candidate authorized; phone-console change-set review pending
+## Current boundary: one candidate created; H1 passed; hardening preparation next
 
-Read this section first when the user says `続けて`. The SCP, OIDC bootstrap and initial catalog observation are complete; do not restart phone-console setup, recreate the stack/secret, or rerun the observation without a new reason.
+Updated: 2026-10-01 23:23 JST (Asia/Tokyo).
 
-- Repository: `bzlove178100/-keirin-ai-web`.
-- Catalog run's historical main: `f08bfbb3ed59478653f9055757b138e7c0141dcf` (PR #157 merged).
-- PR #157 head `e21f161075908fac10e938a56c11ab6440640cc5` passed all five applicable CI workflows.
-- Live workflow: [aws lightsail read-only observation #1](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36842907590).
-- The workflow was dispatched exactly once from main on 2026-10-01, completed successfully, and emitted the sanitized catalog result at 09:28:26 UTC / 18:28:26 JST.
-- Job `observe` (`110305976403`): OIDC credential configuration and catalog observation both succeeded.
-- This validates the deployed OIDC path and the three catalog reads at that time, not resource creation permission or host readiness.
+The user's phone screenshots confirm completion of the approved single Tokyo candidate and attached static IPv4, successful native Termius SSH login, command execution and the read-only H1 result `PREFLIGHT_OK_NO_MUTATION` with zero warnings/failures. See [creation and H1 evidence](SECRET_CUSTODY_HOST_H1_EVIDENCE.md) for the sanitized chronology, immutable script identity and limits.
 
-## Scoped creation authorization — 2026-10-01 20:56:49 JST
+The host remains **untrusted / no-secret**. H2-H7, workload capacity, effective sandbox/default-deny egress, static egress, TLS and reboot/recovery qualification are pending. Prepare a concrete bounded H2 change and rollback offline before a separate live-apply decision. No runtime/provider activation or custody secret use follows from H1.
+
+Do not repeat creation, its cost approval, IAM/bootstrap, inventory, phone browser keyboard attempts, key import or H1 just to resume. The existing phone Termius path works. Work has no independently verified AWS/host session; use existing evidence and connectors within their actual permissions.
+
+The phone administration change added one observed-source IPv4 /32 for SSH while preserving browser SSH IPv4 access. Full post-save firewall read-back remains unverified, and the original CloudFormation template still describes browser-only ingress. Review this manual difference before any stack update; keep IPs/key material private.
+
+The dated sections below are historical observations at their stated stage. Their earlier zero-resource counts and untested-login statements are superseded by the evidence above, not instructions to repeat those operations.
+
+## Scoped creation authorization (historical; operation now complete) — 2026-10-01 20:56:49 JST
 
 The user replied `続けて` directly to the explicit approval request for the presented candidate file, one Tokyo Ubuntu 24.04 / 1 GB / 2 vCPU / 40 GB instance, USD 7/month base bundle (tax/transfer overage separate), one attached static IPv4, browser-SSH-only initial ingress and retention of successfully created resources on failure. In that conversational context, this authorizes proceeding with that exact one-candidate creation. Do not ask the same cost/configuration question again.
 
@@ -32,7 +34,7 @@ The exact candidate remains unchanged from main `16c31f91a4205991c28ac2a33e8c646
 
 At this earlier review point, the cost decision was still pending and the acknowledgement remained NOT_AUTHORIZED. The subsequent 20:56:49 JST authorization is recorded above. The actual CREATE change set and account/stack checks remain pending; do not confuse approval with execution or GitHub authentication with AWS access.
 
-## Corrected inventory verified on 2026-10-01
+## Corrected inventory verified on 2026-10-01 (historical, before creation)
 
 At 20:37:39 JST the user explicitly authorized one additional corrected read-only inventory run. [Inventory run #2](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36856726931) was dispatched exactly once from main `de7cd0b97bb009f5f9394512f94bf5be33d5251b` (PR #161 merged). Job `110350863079` completed successfully, including OIDC authentication and all three inventory reads. The version 2 result was emitted at 11:39:38 UTC / 20:39:38 JST.
 
@@ -77,7 +79,7 @@ At the end of the first run, the original one-run authorization was consumed and
 
 AWS documents the name in [keyPairName output](https://docs.aws.amazon.com/cli/latest/reference/lightsail/get-instance-access-details.html). This is a documentation reference only; GetInstanceAccessDetails was not called or granted.
 
-## Verified catalog facts
+## Verified catalog facts (historical, before creation)
 
 | Item | Observed result |
 | --- | --- |
@@ -96,19 +98,14 @@ AWS public documentation rechecked on 2026-10-01 states that a static IPv4 attac
 
 ## Next action and authorization boundary
 
-The Tokyo inventory IAM update and both separately authorized inventory runs are complete. The corrected classifier observed the existing Tokyo default key. Do not request the completed IAM update again, repeat phone-console setup, or rerun inventory as setup.
+1. Creation, native SSH and read-only H1 are complete. Use `SECRET_CUSTODY_HOST_H1_EVIDENCE.md`; do not recreate or re-run setup without a changed condition.
+2. Prepare the exact H2 administrator/filesystem/service-boundary package and rollback offline from the existing declarative hardening and recovery plans. Explain concrete changes and verification before seeking separate live-apply approval.
+3. Confirm complete relevant current firewall rules before H3/H4; preserve the bounded phone/browser administration path. The manual /32 source differs from the original browser-only template.
+4. Qualify effective sandbox/resource limits, no-secret capacity, default-deny egress, verified static egress, TLS verify-full and reboot/recovery before introducing custody credentials.
+5. Use verified hardened-host egress for separately authorized Supabase network restrictions; verify Data API disabled and SSL enforcement, changing each separately only if required.
+6. Require fresh explicit authorization for C2 live DDL, clearly synthetic material for C3, and a separate availability/cost decision and authorization for C4 real credentials.
 
-The follow-up prepared `review/aws_lightsail_candidate.json` and expanded `SECRET_CUSTODY_HOST_PROVISIONING_REVIEW.md`. The proposal pins Ubuntu 24.04 LTS / micro_3_0 and exactly one attached static IPv4. It requests only TCP 22 from the lightsail-connect source alias, with no launch script or runtime. Default acknowledgement rejects creation; the privately supplied expected account must match and the region must be Tokyo. Both resources use Retain; execution must preserve successful resources on failure, with an explicit subsequent cleanup decision if needed.
-
-Local cfn-lint 1.57.1 completed with no findings and all 10 candidate safety-contract tests passed. The offline CI now repeats both checks. This is offline preparation, not an AWS change set or live validation.
-
-Default-key identity and absent instance/static-IP name collisions are verified at the corrected inventory time. Next, independently verify account identity, stack-name collision and current price/IDs before a concrete provisioning change-set review. Key login and provisioning permissions remain separate checks. The deployed role can perform the three Tokyo inventory reads and three original catalog reads, but cannot provision resources. Work GitHub authentication is not AWS authentication. If access is unavailable, report that precise blocker rather than repeat completed mobile/bootstrap steps.
-
-Prepare and inspect the actual CREATE change set with exactly two Add actions, and confirm its parameters, cost, SSH and failure-retention behavior match the 20:56:49 JST authorization before execution. Do not repeat the already answered cost/configuration approval; resolve any deviation before executing. Resolve current main and follow `AGENTS.md`. Passing observation, lint, CI or an acknowledgement string does not grant live authorization.
-
-The 20:56:49 JST live-provision authorization covers exactly one Tokyo candidate with the selected observed Ubuntu 24.04 LTS blueprint, USD 7/month bundle ceiling and one attached static IPv4. Do not substitute region/size or create multiple paid hosts. Unknown, unavailable, ambiguous or over-budget values remain a hard stop.
-
-After authorized creation, the host is untrusted/no-secret. Run only read-only/no-secret H1 preflight first. Host hardening, verified static egress, Supabase network restrictions, Data API/SSL management changes, C2 DDL, synthetic C3 custody and C4 real credentials are subsequent separate boundaries. Real always-on custody also needs the reviewed availability/cost decision.
+Live hosted execution, long-lived worker, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery remain disabled.
 
 ## Completed AWS bootstrap and root cause
 
@@ -128,7 +125,7 @@ The Work browser initially had no GitHub session. GitHub reported that this acco
 
 ## Fixed safety state
 
-All remain unchanged:
+The runtime and custody restrictions remain unchanged; resource creation and H1 have progressed as recorded above:
 
 - hosted task/provider execution OFF;
 - production prediction OFF;
@@ -139,7 +136,7 @@ All remain unchanged:
 - report delivery OFF;
 - no real provider/OAuth refresh credential connected or held in custody;
 - no C2 live secret-store DDL applied;
-- no paid hardened host or static IPv4 provisioned by this work.
+- one paid candidate and attached static IPv4 exist; H1 passed, full hardening is pending.
 
 The original catalog workflow made its three catalog reads. The later inventory workflow made the three authorized Tokyo inventory reads after short-lived OIDC authentication. The user separately completed the reviewed IAM update. Neither workflow allocated an IP, created a host/key, downloaded key material, or changed IAM/SCP or Supabase.
 

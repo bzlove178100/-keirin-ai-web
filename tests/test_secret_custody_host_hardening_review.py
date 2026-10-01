@@ -10,7 +10,7 @@ def main():
     script = PREFLIGHT.read_text(encoding="utf-8")
 
     required_doc = [
-        "review only — no host exists and nothing in this package is authorized to mutate a live machine",
+        "review only — nothing in this package is authorized to mutate a live machine",
         "untrusted / no-secret",
         "Do not add a swap file",
         "default deny",

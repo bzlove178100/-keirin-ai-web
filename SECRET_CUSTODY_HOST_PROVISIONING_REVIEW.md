@@ -5,7 +5,15 @@ Status: **review only — no AWS resource creation is authorized by this file**
 
 This review converts the selected Amazon Lightsail Tokyo 1 GB candidate into an exact provisioning contract that can be checked immediately before a separately authorized live create. It does not create an instance, static IP, SSH key, IAM identity, firewall rule, DNS record or billing commitment.
 
-## Scoped creation authorization — 2026-10-01 20:56:49 JST
+## Creation completion and H1 update — 2026-10-01 23:23 JST
+
+The original single-candidate creation operation is complete. Phone-console evidence showed CREATE_COMPLETE, a running instance and an attached static IPv4; native Termius SSH and the read-only H1 subsequently passed. See [sanitized evidence](SECRET_CUSTODY_HOST_H1_EVIDENCE.md). Do not repeat creation or the already answered cost approval.
+
+The user completed a separate restricted phone-SSH administration change and imported the existing default key locally. No key material was shared with Work. The manual source /32 is intentionally not copied into this public template/review; review the live/template difference before any future stack update. H2-H7 and separate live-hardening approval remain pending.
+
+The provisioning sequence and dated unverified statements below describe the original review stage, not the current next action. The completed operation does not authorize a second host, reset, resize, automatic cleanup, secret deployment or runtime activation.
+
+## Scoped creation authorization (historical; operation now complete) — 2026-10-01 20:56:49 JST
 
 The user replied `続けて` directly to the explicit approval request for the presented candidate file, one Tokyo Ubuntu 24.04 / 1 GB / 2 vCPU / 40 GB instance, USD 7/month base bundle (tax/transfer overage separate), one attached static IPv4, browser-SSH-only initial ingress and retention of successfully created resources on failure. In that conversational context, this authorizes proceeding with that exact one-candidate creation. Do not ask the same cost/configuration question again.
 
