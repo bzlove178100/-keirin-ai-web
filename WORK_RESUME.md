@@ -1,5 +1,35 @@
 # Work resume handoff
 
+## Latest live AWS state: SCP root cause and reviewed proposal
+
+This section supersedes the earlier unresolved browser/app/session diagnosis for the immediate AWS bootstrap boundary.
+
+Verified from the user's live AWS console and CloudShell session on 2026-10-01:
+
+- The AWS Console mobile app was removed. After returning through Safari, the Proof of Concept session could open IAM in-browser.
+- In Proof of Concept IAM, the dashboard showed 0 identity providers. A search for role `keirin-ai-github-lightsail-readonly` returned no match. Treat these as observations from that account/session, not organization-wide absence.
+- Tokyo `ap-northeast-1` was added to the console's visible-region settings and then appeared in the region selector.
+- CloudFormation in Proof of Concept, Tokyo, failed `ListStacks` with an explicit deny from `AdvancedModeRegionRestrictionSecurityControlPolicy`.
+- The exact SCP referenced by the error was inspected in the management account. It is attached to Root.
+- The `RegionFloor` statement is `Effect: Deny` and its `StringNotEquals/aws:RequestedRegion` list contains exactly `eu-north-1`, `unspecified`, `us-east-1`, and `us-west-2`; Tokyo is not present.
+- Management-account CloudShell in `ap-southeast-2` eventually opened successfully after an initial session-timeout attempt.
+- `prep.sh` was uploaded and run. It performed read-only Organizations calls, wrote `current_scp.json` and `proposed_scp.json`, and reported `READ-ONLY PREP COMPLETE`. It did not change AWS.
+- `review.sh` was uploaded and run. It reported `REVIEW PASS`, confirmed that all non-RegionFloor statements are unchanged, `Effect / NotAction / Resource` are unchanged, the global RegionFloor keeps the existing region list while excluding only the Proof of Concept account from that statement, and a second `RegionFloorProofOfConcept` statement allows exactly the current regions plus `ap-northeast-1` for Proof of Concept. Proposed compact SCP size was 5814 / 10240 characters.
+- The user explicitly approved the reviewed change. `apply_scp.sh` was uploaded and run in the management-account CloudShell. It re-read the live SCP, verified there was no drift from `prep.sh`, applied exactly `proposed_scp.json`, read the policy back, and reported `SCP UPDATE VERIFIED`. A local rollback copy was saved as `current_scp_before_update.json` in that CloudShell session.
+
+Immediate next verification boundary:
+
+- The reviewed SCP update has been applied and read-back verified. Do not run `organizations update-policy` again unless a new reviewed change is required.
+- CloudFormation `ListStacks` in Proof of Concept Tokyo was then re-tested and succeeded: the stack list loaded with no SCP error and showed 0 stacks.
+- Next, return to the Proof of Concept session and verify that CloudFormation `ListStacks` succeeds in Tokyo `ap-northeast-1`.
+- If Tokyo CloudFormation still fails, stop and diagnose the new concrete error; do not repeat the SCP update.
+- Tokyo CloudFormation access was verified.
+- The reviewed CloudFormation stack `keirin-ai-github-oidc-readonly` was created through a reviewed change set containing exactly two additions: `GitHubActionsOidcProvider` and `GitHubLightsailReadOnlyRole`. Both reached `CREATE_COMPLETE`.
+- The stack output `ReadOnlyRoleArn` was copied by the user and registered in GitHub as the repository Actions secret `AWS_READONLY_ROLE_ARN`; GitHub displayed `Repository secret added.`
+- The next step is to run the manual `aws lightsail read-only observation` workflow and verify the sanitized Tokyo catalog output. Do not recreate the stack or secret.
+- The OIDC bootstrap is now live enough for the next read-only GitHub Actions observation. Hand off the next substantial execution/verification to Work. Work should read this file first, then use GitHub rather than restarting phone-console AWS steps. A Work cloud browser session does not inherit the user's Safari session, but GitHub repository state is the shared handoff.
+
+
 Updated: 2026-10-01 (Asia/Tokyo)
 
 Use this file when resuming in ChatGPT Work.
