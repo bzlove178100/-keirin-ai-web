@@ -1,8 +1,26 @@
 # Tokyo Lightsail read-only inventory review and evidence
 
-Updated 2026-10-01. Status: approved IAM update and first inventory completed; version 2 default-key correction awaits separately authorized live revalidation. This document is evidence, not execution authority.
+Updated 2026-10-01. Status: IAM update and both separately authorized inventory runs completed; version 2 observed the existing Tokyo default key. This document is evidence, not execution authority.
 
-## Completed Tokyo IAM update and first inventory
+## Corrected inventory verified on 2026-10-01
+
+At 20:37:39 JST the user explicitly authorized one additional corrected read-only inventory run. [Inventory run #2](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36856726931) was dispatched exactly once from main `de7cd0b97bb009f5f9394512f94bf5be33d5251b` (PR #161 merged). Job `110350863079` completed successfully, including OIDC authentication and all three inventory reads. The version 2 result was emitted at 11:39:38 UTC / 20:39:38 JST.
+
+| Observation | Verified result |
+| --- | --- |
+| Region | ap-northeast-1 |
+| Instances / static IPs / key pairs | 0 / 0 / 1 |
+| Proposed instance / static-IP name collisions | false / false |
+| Tokyo default key present | true |
+| Review reasons | empty |
+| Key login / independent account identity / stack-name inventory | Not verified |
+| Live creation authorized | false |
+
+The corrected default-key classifier is now verified against AWS metadata. This resolves the earlier default-key identity uncertainty; version 1's absence flag remains invalid historical evidence. No key was created or downloaded and no private key material was read. Metadata presence does not verify SSH login.
+
+Both authorized inventory runs are complete. Do not dispatch a third run or repeat the IAM/bootstrap setup automatically. Next, verify the intended account, proposed stack name and current blueprint/bundle/price before preparing the exact two-resource CREATE change set for separate approval. No paid host/IP creation, provisioning permission, runtime activation or Supabase change was authorized by this inventory execution.
+
+## Completed Tokyo IAM update and first inventory (historical)
 
 The user authorized the exact three-action Tokyo inventory IAM addition and one manual run at 19:20:46 JST on 2026-10-01. The resolved change-set JSON was reviewed at 19:49:27 JST: one Modify of GitHubLightsailReadOnlyRole, Replacement=False, with only the GetInstances/GetStaticIps/GetKeyPairs statement conditioned on ap-northeast-1 added. Before/after contexts preserved trust, role identity and every other property. The user's CloudFormation events screenshot confirmed role UPDATE_COMPLETE at 19:52:35 JST and stack UPDATE_COMPLETE at 19:52:49 JST.
 
@@ -23,9 +41,9 @@ Evidence is the resolved change set, completion events and successful OIDC/inven
 
 Version 1 matched `LightsailDefaultKey-ap-northeast-1`, a download filename stem, instead of the documented API default key name `LightsailDefaultKeyPair`. Its `tokyo_default_key_present=false` and `TOKYO_DEFAULT_KEY_NOT_OBSERVED` therefore do not establish default-key absence. The 0/0/1 counts remain valid. Key names were intentionally not exported, so the single key cannot be identified retrospectively from the log. Do not create or download a key on that evidence.
 
-Version 2 uses the documented API name. Regression fixtures use independent literals, including the downloaded filename stem and a custom key, so a wrong production constant cannot make its own tests pass. All 33 local inventory regression tests passed, using synthetic responses only. This is an offline code correction; it has not yet been verified against AWS.
+Version 2 uses the documented API name. Regression fixtures use independent literals, including the downloaded filename stem and a custom key, so a wrong production constant cannot make its own tests pass. All 33 local inventory regression tests passed, using synthetic responses only. PR #161 merged the correction after all five applicable CI workflows passed; the separately authorized version 2 live verification is recorded above.
 
-The original one-run authorization has been consumed. No second live dispatch has occurred. After code review and CI, obtain a narrow decision for one further run of the same three read operations on main; no additional IAM change is needed. The changed condition is the corrected classifier; success means complete version 2 inventory with a trustworthy default-key boolean. If the run fails or the key is not observed, stop and retain the uncertainty; no automatic retry, key creation or key download. Paid host/IP provisioning remains separately unapproved.
+At the end of the first run, the original one-run authorization was consumed and corrected live revalidation remained pending. The user subsequently authorized exactly one additional run at 20:37:39 JST; its successful result is recorded above. Paid host/IP provisioning remains separately unapproved.
 
 AWS documents the name in [keyPairName output](https://docs.aws.amazon.com/cli/latest/reference/lightsail/get-instance-access-details.html). This is a documentation reference only; GetInstanceAccessDetails was not called or granted.
 

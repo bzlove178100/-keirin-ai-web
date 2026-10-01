@@ -1,6 +1,6 @@
 # Work status
 
-## Current boundary: IAM update and first inventory complete; default-key classifier corrected
+## Current boundary: corrected Tokyo inventory complete; default key observed
 
 Updated: 2026-10-01 (Asia/Tokyo).
 
@@ -12,19 +12,37 @@ Static IPv4 allocation was not tested. The [AWS billing FAQ](https://docs.aws.am
 
 The catalog facts are recorded and the concrete single-host CloudFormation proposal is prepared offline. A separate explicit live authorization is still required before creating one paid candidate and one static IPv4. `authorized_for_live_create=false` remains in the observed result. No host or static IP was created. Do not repeat SCP edits, OIDC stack/secret setup, or the observation without new evidence requiring it. `WORK_RESUME.md` records the completed root-cause fix, browser authentication findings and next-step constraints.
 
+## Corrected inventory verified on 2026-10-01
+
+At 20:37:39 JST the user explicitly authorized one additional corrected read-only inventory run. [Inventory run #2](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36856726931) was dispatched exactly once from main `de7cd0b97bb009f5f9394512f94bf5be33d5251b` (PR #161 merged). Job `110350863079` completed successfully, including OIDC authentication and all three inventory reads. The version 2 result was emitted at 11:39:38 UTC / 20:39:38 JST.
+
+| Observation | Verified result |
+| --- | --- |
+| Region | ap-northeast-1 |
+| Instances / static IPs / key pairs | 0 / 0 / 1 |
+| Proposed instance / static-IP name collisions | false / false |
+| Tokyo default key present | true |
+| Review reasons | empty |
+| Key login / independent account identity / stack-name inventory | Not verified |
+| Live creation authorized | false |
+
+The corrected default-key classifier is now verified against AWS metadata. This resolves the earlier default-key identity uncertainty; version 1's absence flag remains invalid historical evidence. No key was created or downloaded and no private key material was read. Metadata presence does not verify SSH login.
+
+Both authorized inventory runs are complete. Do not dispatch a third run or repeat the IAM/bootstrap setup automatically. Next, verify the intended account, proposed stack name and current blueprint/bundle/price before preparing the exact two-resource CREATE change set for separate approval. No paid host/IP creation, provisioning permission, runtime activation or Supabase change was authorized by this inventory execution.
+
 ## Concrete host proposal prepared offline
 
 The user authorized the exact Tokyo GetInstances/GetStaticIps/GetKeyPairs IAM update plus one inventory run on 2026-10-01. The reviewed single-role, non-replacement change set preserved trust and all other role properties. CloudFormation reached UPDATE_COMPLETE at 19:52:49 JST. Separate post-update IAM policy/trust read-back was not performed.
 
-[Inventory run #1](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36852494617) succeeded on main `a713b6d57199975e13c32edd84cee9d2ed2da602` at 19:59:23 JST: Tokyo instances 0, static IPs 0, key pairs 1; both proposed name-collision flags false. This consumed the one-run authorization. No second dispatch has occurred.
+[Inventory run #1](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36852494617) succeeded on main `a713b6d57199975e13c32edd84cee9d2ed2da602` at 19:59:23 JST: Tokyo instances 0, static IPs 0, key pairs 1; both proposed name-collision flags false. This consumed the first one-run authorization; the separately authorized corrected run #2 is recorded above.
 
-Version 1 used a download filename stem for the default-key match. Its false default-key flag/reason is invalid as absence evidence; the counts remain valid and actual default-key identity remains unknown. Version 2 corrects the API name to `LightsailDefaultKeyPair` and adds independent literal regression fixtures. Live revalidation requires a narrow additional one-run decision, with the same three reads and no IAM expansion. Full evidence and retry/stop conditions are in `AWS_LIGHTSAIL_INVENTORY_REVIEW.md` and `WORK_RESUME.md`.
+Version 1 used a download filename stem for the default-key match; its false default-key flag/reason remains invalid as absence evidence. Version 2 corrected the API name to `LightsailDefaultKeyPair` with independent literal regression fixtures, passed 33 local tests and all five applicable CI workflows, and is now verified by run #2. The existing Tokyo default key was observed without an IAM expansion. Full evidence and retry/stop conditions are in `AWS_LIGHTSAIL_INVENTORY_REVIEW.md` and `WORK_RESUME.md`.
 
 `review/aws_lightsail_candidate.json` proposes exactly one Tokyo Ubuntu 24.04 LTS / micro_3_0 candidate and one attached static IPv4. The planned names are keirin-custody-h1 and keirin-custody-h1-ip, not verified existing resources. The USD 7/month figure is the observed bundle price, subject to a fresh pre-execution price check.
 
 The template rejects its default acknowledgement, wrong region or mismatching expected account. It requires an existing Tokyo Lightsail key pair, requests only browser-SSH source alias ingress, embeds no launch script/credentials and retains both resources on stack removal. The review explains failure-retention costs, change-set review, actual firewall verification and separately authorized cleanup. Local cfn-lint 1.57.1 passed with no findings and 10 candidate safety-contract tests passed; the offline CI repeats these checks.
 
-The host proposal remains offline: no host, static IP or key was created. The separate authorized IAM update and first inventory are complete. Default-key identity, account/stack checks and deployment permissions remain unresolved. The role has six read actions (three catalog plus three Tokyo inventory), with no provisioning permission. Read `SECRET_CUSTODY_HOST_PROVISIONING_REVIEW.md` for the subsequent execution sequence.
+The host proposal remains offline: no host, static IP or key was created. The authorized IAM update and both inventory runs are complete. Default-key identity is resolved; independent account/stack checks and deployment permissions remain unresolved. The role has six read actions (three catalog plus three Tokyo inventory), with no provisioning permission. Read `SECRET_CUSTODY_HOST_PROVISIONING_REVIEW.md` for the subsequent execution sequence.
 
 ## Product direction
 
@@ -128,7 +146,7 @@ For the hardened host, start with exactly one USD 7/month candidate only after a
 
 ## Next work / next boundary
 
-1. After the default-key fix passes review and CI, obtain a decision for one corrected manual inventory run. The first run and IAM update are complete; do not repeat them as setup or widen permissions. A complete version 2 result can resolve default-key presence; failure or absence stops the path without automatic retry/key creation. Verify account, stack-name collision, selected IDs and current price separately before any provisioning proposal.
+1. Corrected inventory is complete: Tokyo default key observed, 0 instances, 0 static IPs, no proposed instance/IP name collisions. Do not rerun inventory or repeat IAM/bootstrap setup automatically. Verify the intended account, proposed stack-name collision, selected IDs and current price before a concrete provisioning change-set review; the inventory did not verify these.
 2. Prepare and inspect a CREATE change set containing exactly the candidate and attached IPv4. Obtain explicit approval of the actual change set, USD 7/month bundle, browser-SSH ingress and failure-retention behavior before executing it. Offline checks are not live authorization.
 3. Do not substitute a region/size or allocate an address as a test. Missing or changed facts require diagnosis before mutation.
 4. After authorized creation, run only the read-only/no-secret H1 preflight.
