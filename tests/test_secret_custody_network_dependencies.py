@@ -16,15 +16,21 @@ SPEC.loader.exec_module(d)
 def raw(value):
     return json.dumps(value).encode()
 
+def dns_reply(signature, values):
+    # busctl call Properties.Get -> one typed variant, whose array is unwrapped.
+    # Pinned v255 busctl.c json_transform_message / json_transform_variant.
+    return raw({"type": "v", "data": [{"type": signature, "data": values}]})
+
 
 class Tests(unittest.TestCase):
     def test_typed_resolved_ipv4_ipv6_and_invalid_family(self):
-        self.assertEqual(d.dns(raw({"type": "a(iiay)", "data": [[[2, 2, [192, 0, 2, 53]],
-                          [2, 10, list(bytes.fromhex("20010db8000000000000000000000053"))]]]})),
+        self.assertEqual(d.dns(dns_reply("a(iiay)", [[2, 2, [192, 0, 2, 53]],
+                          [2, 10, list(bytes.fromhex("20010db8000000000000000000000053"))]])),
                          [{"index": 2, "address": "192.0.2.53"}, {"index": 2, "address": "2001:db8::53"}])
-        self.assertEqual(d.dns(raw({"type": "a(iiayqs)", "data": [[[2, 2, [192, 0, 2, 53], 853, "dns.example.invalid"]]]}))[0]["port_zero_means_default"], 853)
+        self.assertEqual(d.dns(dns_reply("a(iiayqs)", [[2, 2, [192, 0, 2, 53], 853, "dns.example.invalid"]]))[0]["port_zero_means_default"], 853)
+        self.assertEqual(d.dns(dns_reply("a(iiayqs)", [])), [])
         with self.assertRaises(d.Stop):
-            d.dns(raw({"type": "a(iiay)", "data": [[[2, 99, [192, 0, 2, 53]]]]}))
+            d.dns(dns_reply("a(iiay)", [[2, 99, [192, 0, 2, 53]]]))
 
     def test_networkd_origin_fields_are_selected_not_raw_config(self):
         value = {"Interfaces": [{"Index": 2, "Name": "eth0", "AdministrativeState": "configured",
@@ -100,6 +106,8 @@ class Tests(unittest.TestCase):
     def test_no_network_fallback_no_autostart_no_arbitrary_command(self):
         self.assertEqual(d.COMMANDS["chrony"], ("/usr/bin/chronyc", "-n", "-c", "-h", "/run/chrony/chronyd.sock", "sources"))
         self.assertIn("--auto-start=no", d.NETWORKD)
+        self.assertIn("call", d.RESOLVED)
+        self.assertNotIn("get-property", d.RESOLVED)
         with patch.object(d.subprocess, "Popen") as start:
             with self.assertRaises(d.Stop):
                 d.command("restart")

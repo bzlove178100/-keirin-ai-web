@@ -21,8 +21,10 @@ ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C", "LC_ALL": "C"}
 BUS = ("/usr/bin/busctl", "--system", "--auto-start=no", "--timeout=4", "--json=short")
 NETWORKD = (*BUS, "call", "org.freedesktop.network1", "/org/freedesktop/network1",
             "org.freedesktop.network1.Manager", "Describe")
-RESOLVED = (*BUS, "get-property", "org.freedesktop.resolve1", "/org/freedesktop/resolve1",
-            "org.freedesktop.resolve1.Manager")
+# Use explicit call: v255 get-property does not apply arg_auto_start, while
+# call sets the message's auto-start flag. Properties.Get returns one variant.
+RESOLVED = (*BUS, "call", "org.freedesktop.resolve1", "/org/freedesktop/resolve1",
+            "org.freedesktop.DBus.Properties", "Get", "ss", "org.freedesktop.resolve1.Manager")
 COMMANDS = {
     "addresses": ("/usr/sbin/ip", "-j", "address", "show"),
     "routes4": ("/usr/sbin/ip", "-j", "-4", "route", "show", "table", "all"),
@@ -163,9 +165,11 @@ def bus_value(raw, signature):
 
 def dns(raw):
     result = []
-    signature = decode(raw).get("type")
+    variant = bus_value(raw, "v")
+    need(type(variant) is dict)
+    signature = variant.get("type")
     need(signature in ("a(iiay)", "a(iiayqs)"))
-    for value in sequence(bus_value(raw, signature)):
+    for value in sequence(variant["data"]):
         need(type(value) is list and len(value) == (5 if signature == "a(iiayqs)" else 3))
         result.append({"index": integer(value[0], 0, 2**31 - 1),
                        "address": binary_address(value[1], value[2])})

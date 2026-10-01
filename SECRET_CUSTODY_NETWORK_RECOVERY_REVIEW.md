@@ -48,6 +48,17 @@ The test proves worker/unit/process cleanup and removes only its private unique
 checks. Local Work lacks namespace privileges, so local unit tests alone are
 not kernel/systemd evidence. Exact-head CI results are recorded in the PR.
 
+Initial head `0396f275d7e14ef7672e9480284e34841685dd4d` passed the actual recovery
+job `110510991785` in run `36904340074`, including all three death/drift cases
+and cleanup. The local dependency job `110510991708` failed its DNS parser
+assertion on actual Ubuntu output. Inspection of pinned v255 `busctl.c` shows
+that a property variant's array is unwrapped, unlike a method reply's argument
+array. It also shows that `get-property` does not apply `arg_auto_start`.
+The correction uses explicit `call ... Properties.Get ss ...`, which applies
+`--auto-start=no`, and parses its typed variant correctly. Fixtures cover that
+wire format, multiple families and empty arrays; no assertion is removed.
+Require fresh CI for the corrected head before merge or a phone command.
+
 `flock` serializes the cooperating fixture controller/worker. It is **not** an
 nft generation compare-and-swap, an exclusion mechanism against other root
 writers, or proof that the watchdog cannot die after readiness. A runtime
@@ -116,5 +127,6 @@ requires its own scoped authorization; H2a's approval does not cover it.
 - [systemd v255 NetworkNamespacePath](https://github.com/systemd/systemd/blob/v255/man/systemd.exec.xml)
 - [systemd v255 networkd Describe JSON builder](https://github.com/systemd/systemd/blob/v255/src/network/networkd-json.c)
 - [systemd v255 resolved D-Bus signatures](https://github.com/systemd/systemd/blob/v255/man/org.freedesktop.resolve1.xml)
+- [systemd v255 busctl method/variant formatting and auto-start flags](https://github.com/systemd/systemd/blob/v255/src/busctl/busctl.c)
 - [Chrony command options and sources](https://chrony-project.org/doc/4.4/chronyc.html)
 - [Chrony 4.5 CSV source renderer](https://github.com/mlichvar/chrony/blob/4.5/client.c)
