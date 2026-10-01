@@ -93,7 +93,7 @@ def listen(stack, address, port, udp=False):
 
     def echo(conn):
         with conn:
-            conn.settimeout(20)
+            conn.settimeout(90)
             try:
                 while True:
                     data = conn.recv(64)
@@ -201,7 +201,7 @@ def rpc(proc, *message):
     return json.loads(read_line(proc))
 
 
-def kernel_rehearsal():
+def kernel_rehearsal(extra_rehearsal=None):
     guard()
     interfaces = json.loads(run(IP, "-j", "link", "show").stdout)
     if {x["ifname"] for x in interfaces} != {"lo"}:
@@ -292,6 +292,9 @@ def kernel_rehearsal():
             assert_administration_and_deny()
             print("PASS ROLLBACK_REVOKES_NEW_AND_ESTABLISHED_QUALIFICATION_FLOWS", flush=True)
             print("PASS ROLLBACK_PRESERVES_ADMIN_AND_UNRELATED_TABLE", flush=True)
+
+            if extra_rehearsal is not None:
+                extra_rehearsal(stack, maintenance, candidate, assert_administration_and_deny)
 
             # A name match is insufficient ownership. Unknown edits stop rollback.
             nft(f'add rule inet {r.TABLE} output tcp dport 9443 drop\n')

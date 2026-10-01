@@ -234,3 +234,25 @@ jobs:
         # Two isolated namespaces and a veth; no external routes or live addresses.
         # Tests refuse PID 1's network namespace, non-CI and nonempty fixtures.
         run: sudo -n env GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_network_transition.py --kernel
+
+  custody-network-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test readiness, expiry and ownership guards
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_network_watchdog.py
+      - name: Test PID 1 recovery after controller death in an isolated network
+        # Transient watchdog units enter ONLY the outer disposable netns.
+        # The test removes those units and /run fixtures; no host firewall edit.
+        run: sudo -n env KC_WATCHDOG_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_network_watchdog.py --systemd
+
+  custody-network-dependencies:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test typed local evidence, bounds and private-output separation
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_network_dependencies.py
+      - name: Test actual Ubuntu local readers with sanitized output
+        run: sudo -n env GITHUB_ACTIONS="$GITHUB_ACTIONS" /usr/bin/python3 -I -B tests/test_secret_custody_network_dependencies.py --ci-host

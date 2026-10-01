@@ -1,5 +1,11 @@
 # Connection-preserving network transition: proposal and isolated rehearsal
 
+Follow-up: PR #173 passed all five workflows and merged at
+`180e590d1cede88f1326642170b73856d40deeea`. See the
+[independent recovery and dependency review](SECRET_CUSTODY_NETWORK_RECOVERY_REVIEW.md)
+for the next CI-only watchdog rehearsal and private local reader. No live
+firewall authorization or qualification follows from either test stage.
+
 Prepared: 2026-10-02 (Asia/Tokyo), after the 02:07–02:16 live observations.
 Scope: synthetic repository/CI work only. No live apply implementation or phone
 firewall command is supplied. The real host remains untrusted / no-secret.
