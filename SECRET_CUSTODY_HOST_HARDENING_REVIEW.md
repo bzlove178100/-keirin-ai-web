@@ -3,7 +3,7 @@
 Reviewed: 2026-09-30 (Asia/Tokyo)
 Status: **declarative review; only the separately specified H2a identity/files scope has live authorization**
 
-Progress update: 2026-10-02 00:25 JST. H1 passed and H2a rollback/apply/verify succeeded at 00:23 JST after PR #167's correction. The user continued to bounded synthetic verification at 00:25 JST; see the [H2b review](SECRET_CUSTODY_HOST_H2B_REVIEW.md). Only the H2a persistent mutation scope is authorized; the new H2b scope is temporary no-secret verification. Full H2-H7 qualification remains pending; this document grants no additional mutation scope.
+Progress update: 2026-10-02 00:59 JST. H1 and H2a succeeded; H2b live basic-sandbox verification passed at 00:46 JST (IMG_8926, PR #168). The continuation at 00:59 JST proceeds to temporary synthetic memory verification; see the [H2c review](SECRET_CUSTODY_HOST_H2C_REVIEW.md). Persistent H2a installation stays unchanged. Full H2-H7 qualification remains pending; this document grants no additional mutation scope or real credential/runtime use.
 
 This review turns the selected Amazon Lightsail Tokyo 1 GB candidate into a staged host-qualification plan without provisioning AWS resources or enabling any agent runtime.
 
@@ -46,7 +46,7 @@ The script emits only non-secret host facts. Missing tooling is a blocker, not a
 
 ## H2 — administrator and filesystem boundary
 
-The bounded [H2a identity/files implementation](SECRET_CUSTODY_HOST_H2A_REVIEW.md) has explicit apply/verify/rollback guards. The user authorized its exact scope; corrected installation and verification now succeeded. The failed first attempt was recovered, and must not be retried. It installs only an inactive placeholder; full effective sandbox, ephemeral storage, network and capacity qualification below remain unproven.
+The bounded [H2a identity/files implementation](SECRET_CUSTODY_HOST_H2A_REVIEW.md) has explicit apply/verify/rollback guards. The user authorized its exact scope; corrected installation and verification now succeeded. The failed first attempt was recovered, and must not be retried. It installs only an inactive placeholder. H2b proved the measured basic controls; H2c now prepares bounded synthetic ephemeral-storage/descriptor checks. Broader sandbox, network, capacity and recovery qualification remains incomplete.
 
 The later mutating hardening package must be reviewed separately before execution. It should:
 
