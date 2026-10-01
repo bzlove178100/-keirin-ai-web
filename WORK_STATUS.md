@@ -1,8 +1,8 @@
 # Work status
 
-## Immediate AWS boundary: create reviewed OIDC stack after Tokyo verification
+## Immediate AWS boundary: OIDC bootstrap complete, hand off to Work
 
-The Root-attached `AdvancedModeRegionRestrictionSecurityControlPolicy` blocker was diagnosed and the reviewed account-scoped change was applied after explicit user approval. `apply_scp.sh` re-read the live policy, refused drift, applied exactly the reviewed proposal, read the policy back, and reported `SCP UPDATE VERIFIED`. Proof of Concept CloudFormation was then re-tested in Tokyo `ap-northeast-1`; `ListStacks` loaded successfully with no SCP error and showed 0 stacks. Do not run the SCP update again. The next live step is to create only the reviewed GitHub OIDC CloudFormation stack, review the concrete change set before execution, then capture `ReadOnlyRoleArn`, register `AWS_READONLY_ROLE_ARN`, and run the read-only Lightsail observation. Hand substantial follow-on execution to Work after OIDC is live; Work does not inherit the current Safari/CloudShell session.
+The Root-attached SCP blocker was diagnosed and the reviewed Proof-of-Concept-only Tokyo exception was applied and read-back verified. Proof of Concept CloudFormation in Tokyo then loaded successfully. The reviewed stack `keirin-ai-github-oidc-readonly` was created through a change set containing exactly two additions (`GitHubActionsOidcProvider`, `GitHubLightsailReadOnlyRole`), and both reached `CREATE_COMPLETE`. The stack output `ReadOnlyRoleArn` was registered by the user as the GitHub repository Actions secret `AWS_READONLY_ROLE_ARN`, with GitHub confirming `Repository secret added.` Do not recreate the SCP change, stack, provider, role, or secret. The next action is the manual GitHub Actions workflow `aws lightsail read-only observation`; validate only the sanitized Tokyo catalog facts and stop on any unknown/mismatch. This is the planned handoff point to Work.
 
 
 Updated: 2026-10-01 (Asia/Tokyo).
