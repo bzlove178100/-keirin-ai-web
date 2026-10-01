@@ -40,18 +40,16 @@ Keep all of these unchanged unless the user separately authorizes the specific l
 
 Read `AWS_GITHUB_OIDC_READONLY_OBSERVATION.md` first.
 
-Do not resume screenshot-by-screenshot AWS console navigation and do not retry public CloudShell.
+Do not resume screenshot-by-screenshot AWS console navigation and do not retry public CloudShell or repeat the regional SCP phone-editing flow.
 
-### Current bootstrap blocker (2026-10-01)
+### Current bootstrap state (2026-10-01)
 
-- The Work Cloud Browser returned `Site Unavailable` for AWS. The cause is not established; stop rather than repeating that browser attempt. The user's phone session cannot be controlled through that browser.
-- The user's phone reached the Proof of Concept console. Tokyo is enabled at the account level, but the observed Root-attached regional SCP restricts it. Account region activation and effective SCP permission are separate checks.
-- A private, account-specific draft limits the proposed Tokyo exception to Proof of Concept. The user approved that exact draft; saving it in AWS has **not** been verified. Do not publish the draft/account identifiers or treat approval as proof of application.
-- The AWS editor flagged the existing `builderid:*` entry, also present in AWS's published policy. Do not silently delete that exception, detach the Root policy, or disable SCPs to clear the finding.
-- Full-text replacement in the phone editor was unsuccessful. No PC or external keyboard was available. Do not repeat the failed selection instructions or request the same screenshots again. Cancellation was advised but is not verified.
-- The OIDC stack, its output ARN, the repository secret, and a live observation run remain unverified. Do not dispatch the live workflow as a bootstrap probe.
+- The Work Cloud Browser returned `Site Unavailable` for AWS. The cause is not established; do not repeat that browser attempt. The user's phone session cannot be controlled through that browser.
+- The user later confirmed that the regional SCP/policy step is complete. Treat that step as completed unless AWS returns a new, concrete permission failure that directly contradicts it. This completion is user-reported; it has not been independently read back from AWS by ChatGPT.
+- The earlier phone-editor difficulty and `builderid:*` validation finding are historical troubleshooting context only. Do not ask the user to repeat that editing flow or remove existing policy exceptions solely to clear the old finding.
+- The OIDC CloudFormation stack, its `ReadOnlyRoleArn` output, the repository secret, and a live observation run remain unverified.
 
-Continue safe repository work while this blocker remains. On a usable authorized AWS path, read back the effective policy before any mutation and check for an existing stack/provider/role before creating duplicates. Stack execution remains a separate important-operation confirmation after reviewing the concrete change set.
+The next live action is CloudFormation, not Organizations/SCP editing. Before stack creation, check for an existing stack/provider/role so a partial prior attempt is not duplicated. Stack execution remains a separate important-operation confirmation after reviewing the concrete change set.
 
 The next bounded bootstrap is:
 
@@ -100,4 +98,4 @@ Local shell syntax validation and 58 offline tests passed, including synthetic p
 
 Verified base: PR #153 merged, main `c3fd6d1488f1b4c8113ca652ca7dd109c15413d4`; its five exact-head CI workflows succeeded. The unchanged OIDC CloudFormation template passed local `cfn-lint==1.57.1` for Tokyo with no findings and no AWS credentials in the validation process environment. The offline CI now repeats that template check alongside the existing catalog tests. This is local schema validation, not AWS account/change-set validation or deployment.
 
-The next live dependency is still an available authorized AWS path and read-back of the pending policy state. Do not repeat the blocked browser/CloudShell attempts or failed phone editing instructions. No stack, role secret, or live observation was verified by this offline work.
+The regional SCP/policy step is now treated as complete based on the user's later confirmation. Do not repeat the blocked browser/CloudShell attempts or failed phone editing instructions. The next live dependency is creating the reviewed OIDC CloudFormation stack in the Proof of Concept account. No stack, role secret, or live observation has yet been verified.
