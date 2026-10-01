@@ -61,7 +61,7 @@ def test_paginated_inventory_finds_late_collision_and_excludes_identifiers(monke
         page(token=PRIVATE), page(item(inventory.INSTANCE_NAME, "Instance")),
         page(item(inventory.STATIC_IP_NAME, "StaticIp")),
         page(item(PRIVATE, "KeyPair"), token="second-key-page"),
-        page(item(inventory.DEFAULT_KEY_NAME, "KeyPair")),
+        page(item("LightsailDefaultKeyPair", "KeyPair")),
     ])
     assert inventory.main() == 0
     output = capsys.readouterr()
@@ -88,7 +88,7 @@ def test_paginated_inventory_finds_late_collision_and_excludes_identifiers(monke
 
 @pytest.mark.parametrize("has_default", [False, True])
 def test_empty_inventory_is_not_live_creation_authority(monkeypatch, capsys, has_default):
-    keys = page(item(inventory.DEFAULT_KEY_NAME, "KeyPair")) if has_default else page()
+    keys = page(item("LightsailDefaultKeyPair", "KeyPair")) if has_default else page()
     install_responses(monkeypatch, [page(), page(), keys])
     assert inventory.main() == 0
     result = json.loads(capsys.readouterr().out)
@@ -96,6 +96,29 @@ def test_empty_inventory_is_not_live_creation_authority(monkeypatch, capsys, has
     assert result["tokyo_default_key_present"] is has_default
     assert result["authorized_for_live_create"] is False
     assert ("TOKYO_DEFAULT_KEY_NOT_OBSERVED" in result["review_reasons"]) is (not has_default)
+
+
+@pytest.mark.parametrize("key_name,expected", [
+    ("LightsailDefaultKeyPair", True),
+    ("LightsailDefaultKey-ap-northeast-1", False),
+    ("lightsaildefaultkeypair", False),
+    ("custom-key", False),
+])
+def test_default_key_uses_documented_api_name_not_download_filename(
+        monkeypatch, capsys, key_name, expected):
+    # Independent literals are intentional: importing DEFAULT_KEY_NAME into
+    # fixtures previously let a wrong constant and its tests agree.
+    install_responses(monkeypatch, [page(), page(), page(item(key_name, "KeyPair"))])
+    assert inventory.main() == 0
+    output = capsys.readouterr()
+    result = json.loads(output.out)
+    assert result["inventory_version"] == 2
+    assert result["key_pair_count"] == 1
+    assert result["tokyo_default_key_present"] is expected
+    assert ("TOKYO_DEFAULT_KEY_NOT_OBSERVED" in result["review_reasons"]) is (not expected)
+    assert result["key_login_verified"] is False
+    assert result["authorized_for_live_create"] is False
+    assert key_name not in output.out + output.err
 
 
 @pytest.mark.parametrize("stage", [0, 1, 2])
