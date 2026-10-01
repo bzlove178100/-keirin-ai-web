@@ -3,7 +3,7 @@
 Reviewed: 2026-09-30 (Asia/Tokyo)
 Status: **declarative review; only the separately specified H2a identity/files scope has live authorization**
 
-Progress update: 2026-10-02 00:06 JST. H1 passed; see [sanitized evidence](SECRET_CUSTODY_HOST_H1_EVIDENCE.md). H2a was authorized at 23:56:43 JST, but its first apply failed at user creation and requires the bounded correction in the [H2a review](SECRET_CUSTODY_HOST_H2A_REVIEW.md). H2-H7 effective qualification remains pending; this document grants no additional mutation scope.
+Progress update: 2026-10-02 00:25 JST. H1 passed and H2a rollback/apply/verify succeeded at 00:23 JST after PR #167's correction. The user continued to bounded synthetic verification at 00:25 JST; see the [H2b review](SECRET_CUSTODY_HOST_H2B_REVIEW.md). Only the H2a persistent mutation scope is authorized; the new H2b scope is temporary no-secret verification. Full H2-H7 qualification remains pending; this document grants no additional mutation scope.
 
 This review turns the selected Amazon Lightsail Tokyo 1 GB candidate into a staged host-qualification plan without provisioning AWS resources or enabling any agent runtime.
 
@@ -46,7 +46,7 @@ The script emits only non-secret host facts. Missing tooling is a blocker, not a
 
 ## H2 — administrator and filesystem boundary
 
-The bounded [H2a identity/files implementation](SECRET_CUSTODY_HOST_H2A_REVIEW.md) has explicit apply/verify/rollback guards. The user authorized its exact scope; the first apply failed and successful corrected installation remains pending. It installs only an inactive placeholder; full effective sandbox, ephemeral storage, network and capacity qualification below remain unproven.
+The bounded [H2a identity/files implementation](SECRET_CUSTODY_HOST_H2A_REVIEW.md) has explicit apply/verify/rollback guards. The user authorized its exact scope; corrected installation and verification now succeeded. The failed first attempt was recovered, and must not be retried. It installs only an inactive placeholder; full effective sandbox, ephemeral storage, network and capacity qualification below remain unproven.
 
 The later mutating hardening package must be reviewed separately before execution. It should:
 
