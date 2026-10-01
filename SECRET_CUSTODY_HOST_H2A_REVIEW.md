@@ -1,7 +1,11 @@
 # H2a identity and inactive service preparation
 
-Status: **live H2a apply authorized at 2026-10-01 23:56:43 JST; first attempt failed**.
-The correction and recovery tests below are pending their exact-commit CI gate.
+Status: **H2a bounded recovery, apply and verify succeeded at 2026-10-02 00:23 JST**.
+User screenshot IMG_8925 shows `ROLLED_BACK_NO_RUNTIME`, then
+`INSTALLED_DISABLED_NOT_QUALIFIED` twice, using PR #167's pinned correction.
+All five correction workflows passed before merge. The user continued to
+[bounded H2b verification](SECRET_CUSTODY_HOST_H2B_REVIEW.md) at 00:25 JST.
+The failure/recovery account below is historical; do not repeat the completed apply.
 The candidate remains **untrusted / no-secret**. This is a small part of H2,
 not completion of H2-H7 and not approval to activate an agent.
 

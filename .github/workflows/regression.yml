@@ -172,3 +172,15 @@ jobs:
         # Real shadow executables, disposable account databases; systemd is synthetic.
         # Never changes runner accounts or accesses AWS. No skipped CLI tests.
         run: sudo -n /usr/bin/python3 -I -B tests/test_secret_custody_h2_cli.py
+
+  custody-h2b-systemd:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test H2b output and bounded cleanup contracts
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_h2b.py
+      - name: Test actual systemd sandbox, failed child and manager deadline
+        # This disposable runner gets a temporary H2a fixture, removed by its rollback.
+        # No cloud session, secret, production payload, network request or host swap change.
+        run: sudo -n env H2B_CI_FIXTURE=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" /usr/bin/python3 -I -B tests/test_secret_custody_h2b_systemd.py

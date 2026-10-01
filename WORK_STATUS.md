@@ -1,6 +1,20 @@
 # Work status
 
-## Current boundary: H2a authorized; first apply failed; correction under validation
+## Current boundary: H2a live success; bounded H2b verification prepared
+
+Updated: 2026-10-02 00:25 JST evidence (Asia/Tokyo).
+
+The user's IMG_8925 screenshot at 00:23 JST confirms the corrected immutable H2a script (`e7b9b9906ddb5e7848cfaaa4992833402f6ce5c1`, SHA-256 `8e4ff9838829ce466b9913ea2dd39e2b5adf1854eacec96925fe9ac5e594a0f1`) completed bounded rollback, apply and read-only verify. Output was `ROLLED_BACK_NO_RUNTIME`, then `INSTALLED_DISABLED_NOT_QUALIFIED` twice, with the shell prompt returned. H2a preparation is complete. This is user terminal evidence, not an independently established Work SSH session. Do not repeat recovery, apply, account creation or H1.
+
+PR #167 merged the invalid useradd override correction after all five workflows passed. Its body retains exact CI and live-success evidence. The prior failure and incomplete-installation notes below are historical and superseded by this success. The dedicated identity and fixed files are installed; the static placeholder stays inactive and refuses manual start. All activation/credential gates remain OFF, and the host remains **untrusted / no-secret** pending H2-H7 qualification.
+
+The user said `次` at 00:25 JST immediately after the proposed next step of verifying installed restrictions. [H2b review](SECRET_CUSTODY_HOST_H2B_REVIEW.md) specifies that bounded no-secret verification: one unique transient synthetic service under the same restrictions, independent manager deadline, actual child/kernel observations, own-unit cleanup and H2a read-back. This is authorization to proceed with this verification, not runtime activation, stress/reboot, packages, persistent changes, firewall/cloud or credential expansion. The CLI acknowledgement is an accident guard; do not ask the same continuation permission again.
+
+`review/secret_custody_h2b.py` is default read-only and consumes the exact hash-pinned H2a validator over stdin. Its run action uses a fixed Python probe through systemd, never starts the installed H2a unit, and accepts only fixed PASS evidence. Eleven offline tests plus mandatory real systemd CI cover the success path, child failure and manager deadline/cleanup. CI global host swap preflight is synthetic; actual probe cgroup swap prohibition is tested, while production retains the full H2a no-swap precondition. Local Work is not systemd PID 1, so it cannot substitute for that gate.
+
+Complete exact-head CI and merge before giving a hash-checked immutable phone command. Use the existing Termius session once. Expect `RESULT H2B_BASIC_SANDBOX_OK_NO_RUNTIME`; any STOP or missing completion needs diagnosis, not an unchanged retry. Live H2b success has not yet been observed. Even success establishes only the measured basic controls, not resource stress/capacity, secret handoff, all local socket/syscall boundaries, host firewall/egress, TLS or reboot/recovery qualification.
+
+## Historical failed H2a attempt and correction: H2a authorized; first apply failed; correction under validation
 
 Updated: 2026-10-02 00:06 JST evidence (Asia/Tokyo).
 
@@ -22,7 +36,7 @@ Updated: 2026-10-01 23:23 JST (Asia/Tokyo).
 
 The user's phone screenshots confirm completion of the approved single Tokyo candidate and attached static IPv4, successful native Termius SSH login, command execution and the read-only H1 result `PREFLIGHT_OK_NO_MUTATION` with zero warnings/failures. See [creation and H1 evidence](SECRET_CUSTODY_HOST_H1_EVIDENCE.md) for the sanitized chronology, immutable script identity and limits.
 
-The host remains **untrusted / no-secret**. H2-H7, workload capacity, effective sandbox/default-deny egress, static egress, TLS and reboot/recovery qualification are pending. H2a authorization and the failed first attempt are recorded above; successful installation remains pending. No runtime/provider activation or custody secret use follows from H1.
+The host remains **untrusted / no-secret**. H2-H7, workload capacity, effective sandbox/default-deny egress, static egress, TLS and reboot/recovery qualification are pending. H2a authorization, correction and successful installation are recorded above; effective qualification remains pending. No runtime/provider activation or custody secret use follows from H1.
 
 Do not repeat creation, its cost approval, IAM/bootstrap, inventory, phone browser keyboard attempts, key import or H1 just to resume. The existing phone Termius path works. Work has no independently verified AWS/host session; use existing evidence and connectors within their actual permissions.
 
