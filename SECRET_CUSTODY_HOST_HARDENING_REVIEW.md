@@ -1,13 +1,15 @@
 # Secret-custody host hardening review
 
 Reviewed: 2026-09-30 (Asia/Tokyo)
-Status: **review only — no host exists and nothing in this package is authorized to mutate a live machine**
+Status: **review only — nothing in this package is authorized to mutate a live machine**
+
+Progress update: 2026-10-01 23:23 JST. One candidate now exists and H1 passed; see [sanitized evidence](SECRET_CUSTODY_HOST_H1_EVIDENCE.md). H2-H7 and live hardening approval remain pending.
 
 This review turns the selected Amazon Lightsail Tokyo 1 GB candidate into a staged host-qualification plan without provisioning AWS resources or enabling any agent runtime.
 
 ## Boundary
 
-The first paid host, if separately authorized later, starts as **untrusted / no-secret**. It may not receive:
+The separately authorized first paid candidate remains **untrusted / no-secret**. It may not receive:
 
 - a custody database password;
 - a Vault secret or provider credential;
@@ -33,7 +35,7 @@ Required local shape before hardening work continues:
 - Linux kernel;
 - systemd available;
 - cgroup v2 mounted;
-- at least 1 GiB physical memory for the reviewed candidate class;
+- the existing script's reviewed 1 GB-class floor of at least 900000 kB usable MemTotal (not a claim of 1 GiB usable RAM or workload headroom);
 - no active swap before secret-host qualification;
 - `nft` available before any egress policy can be qualified;
 - `systemctl`, `ss`, `ip`, `findmnt` and `stat` available;
@@ -140,7 +142,7 @@ Real provider credentials remain a later C4 boundary with a separate availabilit
 
 The repository includes `review/lightsail_host_preflight.sh` only to make H1 repeatable. It is deliberately incapable of applying firewall or OS changes.
 
-Expected invocation on a future candidate:
+Local-file invocation (the completed run used the equivalent hash-checked in-memory loader):
 
 ```text
 sudo -n /bin/sh review/lightsail_host_preflight.sh

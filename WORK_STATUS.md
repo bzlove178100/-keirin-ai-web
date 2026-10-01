@@ -1,18 +1,20 @@
 # Work status
 
-## Current boundary: one candidate authorized; phone-console change-set review pending
+## Current boundary: one candidate created; H1 passed; hardening preparation next
 
-Updated: 2026-10-01 (Asia/Tokyo).
+Updated: 2026-10-01 23:23 JST (Asia/Tokyo).
 
-The SCP fix and reviewed OIDC bootstrap are complete. The user registered `AWS_READONLY_ROLE_ARN`. Work dispatched [aws lightsail read-only observation #1](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36842907590) exactly once from main `f08bfbb3ed59478653f9055757b138e7c0141dcf`. It succeeded; sanitized output was emitted at 18:28:26 JST.
+The user's phone screenshots confirm completion of the approved single Tokyo candidate and attached static IPv4, successful native Termius SSH login, command execution and the read-only H1 result `PREFLIGHT_OK_NO_MUTATION` with zero warnings/failures. See [creation and H1 evidence](SECRET_CUSTODY_HOST_H1_EVIDENCE.md) for the sanitized chronology, immutable script identity and limits.
 
-Verified: Tokyo `ap-northeast-1`; active `ubuntu_24_04` and `ubuntu_22_04` LTS blueprints; matching `micro_3_0` bundle, 2 vCPU / 1 GiB RAM / 40 GiB disk / 2048 GiB transfer / one public IPv4 / USD 7 per month. OIDC credential configuration and the three catalog reads succeeded.
+The host remains **untrusted / no-secret**. H2-H7, workload capacity, effective sandbox/default-deny egress, static egress, TLS and reboot/recovery qualification are pending. Prepare a concrete bounded H2 change and rollback offline before a separate live-apply decision. No runtime/provider activation or custody secret use follows from H1.
 
-Static IPv4 allocation was not tested. The [AWS billing FAQ](https://docs.aws.amazon.com/en_en/lightsail/latest/userguide/amazon-lightsail-frequently-asked-questions-faq-billing-and-account-management.html), rechecked 2026-10-01, states no extra charge when attached and USD 0.005/hour when unattached for more than one hour. Published pricing does not prove live allocation availability.
+Do not repeat creation, its cost approval, IAM/bootstrap, inventory, phone browser keyboard attempts, key import or H1 just to resume. The existing phone Termius path works. Work has no independently verified AWS/host session; use existing evidence and connectors within their actual permissions.
 
-The catalog facts are recorded and the concrete single-host CloudFormation proposal is prepared offline. The exact one-candidate creation was subsequently authorized at 20:56:49 JST as recorded below; authenticated change-set review remains required before execution. `authorized_for_live_create=false` remains in the observed result. No host or static IP was created. Do not repeat SCP edits, OIDC stack/secret setup, or the observation without new evidence requiring it. `WORK_RESUME.md` records the completed root-cause fix, browser authentication findings and next-step constraints.
+The phone administration change added one observed-source IPv4 /32 for SSH while preserving browser SSH IPv4 access. Full post-save firewall read-back remains unverified, and the original CloudFormation template still describes browser-only ingress. Review this manual difference before any stack update; keep IPs/key material private.
 
-## Scoped creation authorization — 2026-10-01 20:56:49 JST
+The dated sections below are historical observations at their stated stage. Their earlier zero-resource counts and untested-login statements are superseded by the evidence above, not instructions to repeat those operations.
+
+## Scoped creation authorization (historical; operation now complete) — 2026-10-01 20:56:49 JST
 
 The user replied `続けて` directly to the explicit approval request for the presented candidate file, one Tokyo Ubuntu 24.04 / 1 GB / 2 vCPU / 40 GB instance, USD 7/month base bundle (tax/transfer overage separate), one attached static IPv4, browser-SSH-only initial ingress and retention of successfully created resources on failure. In that conversational context, this authorizes proceeding with that exact one-candidate creation. Do not ask the same cost/configuration question again.
 
@@ -30,7 +32,7 @@ The exact candidate remains unchanged from main `16c31f91a4205991c28ac2a33e8c646
 
 At this earlier review point, the cost decision was still pending and the acknowledgement remained NOT_AUTHORIZED. The subsequent 20:56:49 JST authorization is recorded above. The actual CREATE change set and account/stack checks remain pending; do not confuse approval with execution or GitHub authentication with AWS access.
 
-## Corrected inventory verified on 2026-10-01
+## Corrected inventory verified on 2026-10-01 (historical, before creation)
 
 At 20:37:39 JST the user explicitly authorized one additional corrected read-only inventory run. [Inventory run #2](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36856726931) was dispatched exactly once from main `de7cd0b97bb009f5f9394512f94bf5be33d5251b` (PR #161 merged). Job `110350863079` completed successfully, including OIDC authentication and all three inventory reads. The version 2 result was emitted at 11:39:38 UTC / 20:39:38 JST.
 
@@ -48,7 +50,7 @@ The corrected default-key classifier is now verified against AWS metadata. This 
 
 Both authorized inventory runs are complete. Do not dispatch a third run or repeat the IAM/bootstrap setup automatically. Next, verify the intended account, proposed stack name and current blueprint/bundle/price before preparing the exact two-resource CREATE change set for separate approval. No paid host/IP creation, provisioning permission, runtime activation or Supabase change was authorized by this inventory execution.
 
-## Concrete host proposal prepared offline
+## Concrete host proposal prepared offline (historical)
 
 The user authorized the exact Tokyo GetInstances/GetStaticIps/GetKeyPairs IAM update plus one inventory run on 2026-10-01. The reviewed single-role, non-replacement change set preserved trust and all other role properties. CloudFormation reached UPDATE_COMPLETE at 19:52:49 JST. Separate post-update IAM policy/trust read-back was not performed.
 
@@ -80,7 +82,7 @@ Unless a new, specific boundary is explicitly authorized:
 - no real provider/OAuth refresh exchange is connected;
 - no real provider credential or refresh secret is stored in the custody project;
 - no live secret-store schema has been applied to the custody project;
-- no paid hardened host has been provisioned.
+- one paid candidate and attached static IPv4 exist; H1 passed, full hardening is pending.
 
 Agent-only checkpoint/activity persistence and queue coordination in `keirin-ai-staging` were separately authorized. Exact-task lease acquisition is deployed. No always-on worker is active.
 
@@ -132,13 +134,13 @@ PR #140 selected Amazon Lightsail Linux/Unix Micro 1 GB in Tokyo (`ap-northeast-
 
 The provider boundary was re-checked on 2026-10-01. Lightsail remains the first candidate: current public documentation still shows Tokyo support and the USD 7 Micro 1 GB public-IPv4 bundle shape. Railway and Render do not currently provide a lower-friction equivalent for this design's Tokyo + stable-egress requirement, and DigitalOcean has no Tokyo region.
 
-AWS account bootstrap is now complete. The user created the Proof of Concept account, upgraded it to the paid usage model, activated advanced features, and created the `ai-agent-team` management boundary. A USD 10 monthly AWS Budget exists and its charge-type filter excludes Credit and Refund so AWS usage remains visible while promotional credits are available. No Lightsail host or static IP has been provisioned. If 1 GB proves insufficient, do not weaken safeguards to preserve the USD 7 target.
+AWS account bootstrap is now complete. The user created the Proof of Concept account, upgraded it to the paid usage model, activated advanced features, and created the `ai-agent-team` management boundary. A USD 10 monthly AWS Budget exists and its charge-type filter excludes Credit and Refund so AWS usage remains visible while promotional credits are available. The single candidate and attached static IPv4 have now been created; H1 passed. If 1 GB proves insufficient, do not weaken safeguards to preserve the USD 7 target.
 
 ## Host safety reviews complete
 
 PR #141 added the read-only H0-H7 hardening qualification review and offline `review/lightsail_host_preflight.sh`. PR #142 added the fail-closed provisioning review and `review/lightsail_provisioning_manifest.template.json` with `authorized_for_live_create=false`. PR #144 added the declarative hardening package review, offline validator and regression guards with `authorized_for_live_apply=false`. PR #145 added fail-closed recovery/rollback review artifacts with `authorized_for_live_recovery=false`. PR #146 added the read-only AWS control-plane observation review and sanitized observation template with `authorized_for_live_create=false`.
 
-The future host begins **untrusted / no-secret**. Passing repository review or host hardening by itself does not authorize C2 DDL or credential use.
+The created candidate remains **untrusted / no-secret** after H1. Passing repository review or host hardening by itself does not authorize C2 DDL or credential use.
 
 The hardening package is declarative data, not an executable host mutation script. The recovery plan keeps the runtime disabled and host no-secret on preflight, hardening, network/TLS, capacity or reboot/recovery failure. Automatic AWS destruction/resize/reboot/snapshot/replacement, automatic firewall relaxation/egress widening, protected Supabase/Vault/provider/prediction/race-data mutations, insecure TLS/plaintext fallback and credential introduction during recovery are forbidden by the reviewed contracts.
 
@@ -154,24 +156,22 @@ CloudFormation/SCP and browser/app troubleshooting are completed history for thi
 
 `SECRET_CUSTODY_AWS_CONTROL_PLANE_OBSERVATION_REVIEW.md` and `review/lightsail_control_plane_observation.template.json` define the reviewed observation boundary. The template fixes the expected region/host shape/price ceiling while leaving every live observation value unset. It keeps `authorized_for_live_create=false`, rejects automatic size/region substitution, forbids sensitive account/key/IP/credential material and keeps every runtime/provider/prediction gate disabled.
 
-The initial authenticated catalog observation passed; see the verified values above. Static IPv4 allocation remains untested. Unknown, ambiguous or mismatching future values fail closed. Passing observation still requires a separate explicit live-provision instruction before any Lightsail instance or static IP is created.
+The initial authenticated catalog observation passed; see the verified values above. Static IPv4 creation/attachment was subsequently observed through the phone console; see the H1 evidence. Unknown, ambiguous or mismatching future values fail closed. Passing observation still requires a separate explicit live-provision instruction before any Lightsail instance or static IP is created.
 
 ## Cost / availability boundary
 
 Keep the Supabase Free project for architecture, review and no-secret qualification while it remains operationally suitable. Free is not approved for real always-on credential custody because low-activity Free projects can be paused. Before C4 real credential activation, require either a paid-plan availability boundary or an equivalent separately reviewed solution.
 
-For the hardened host, start with exactly one USD 7/month candidate only after a specific live-provision authorization, qualify it with synthetic/no-secret inputs, and destroy it promptly if rejected after a separately authorized live cleanup. Do not keep multiple paid hosts running for convenience.
+Exactly one USD 7/month candidate has been created under the scoped approval. Continue qualification with synthetic/no-secret inputs; a rejection requires a separately reviewed and authorized cleanup decision. Do not keep multiple paid hosts running for convenience.
 
 ## Next work / next boundary
 
-1. Corrected inventory is complete: Tokyo default key observed, 0 instances, 0 static IPs, no proposed instance/IP name collisions. Do not rerun inventory or repeat IAM/bootstrap setup automatically. Verify the intended account, proposed stack-name collision, selected IDs and current price before a concrete provisioning change-set review; the inventory did not verify these.
-2. Prepare and inspect a CREATE change set containing exactly the candidate and attached IPv4. Obtain explicit approval of the actual change set, USD 7/month bundle, browser-SSH ingress and failure-retention behavior before executing it. Offline checks are not live authorization.
-3. Do not substitute a region/size or allocate an address as a test. Missing or changed facts require diagnosis before mutation.
-4. After authorized creation, run only the read-only/no-secret H1 preflight.
-5. Compare actual host facts to the reviewed hardening/recovery plans; obtain separate authorization before mutating hardening.
-6. Verify static egress, OS-level default-deny egress, TLS verify-full, reboot/recovery and memory headroom before any credential exists.
-7. Use verified egress for separately authorized Supabase network restrictions; verify Data API disabled and SSL enforcement, changing each separately only if required.
-8. Require fresh explicit authorization for C2 live DDL; only clearly synthetic material for C3; a separate availability/cost decision and authorization for C4 real credentials.
+1. Creation, native SSH and read-only H1 are complete. Use `SECRET_CUSTODY_HOST_H1_EVIDENCE.md`; do not recreate or re-run setup without a changed condition.
+2. Prepare the exact H2 administrator/filesystem/service-boundary package and rollback offline from the existing declarative hardening and recovery plans. Explain concrete changes and verification before seeking separate live-apply approval.
+3. Confirm complete relevant current firewall rules before H3/H4; preserve the bounded phone/browser administration path. The manual /32 source differs from the original browser-only template.
+4. Qualify effective sandbox/resource limits, no-secret capacity, default-deny egress, verified static egress, TLS verify-full and reboot/recovery before introducing custody credentials.
+5. Use verified hardened-host egress for separately authorized Supabase network restrictions; verify Data API disabled and SSL enforcement, changing each separately only if required.
+6. Require fresh explicit authorization for C2 live DDL, clearly synthetic material for C3, and a separate availability/cost decision and authorization for C4 real credentials.
 
 Live hosted execution, long-lived worker, scheduler/recurrence, provider generation/write, production prediction, prediction DB writes, race-data auto-fetch and report delivery remain disabled.
 
