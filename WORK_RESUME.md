@@ -20,6 +20,7 @@ Verified from the user's live AWS console and CloudShell session on 2026-10-01:
 Immediate next verification boundary:
 
 - The reviewed SCP update has been applied and read-back verified. Do not run `organizations update-policy` again unless a new reviewed change is required.
+- CloudFormation `ListStacks` in Proof of Concept Tokyo was then re-tested and succeeded: the stack list loaded with no SCP error and showed 0 stacks.
 - Next, return to the Proof of Concept session and verify that CloudFormation `ListStacks` succeeds in Tokyo `ap-northeast-1`.
 - If Tokyo CloudFormation still fails, stop and diagnose the new concrete error; do not repeat the SCP update.
 - Once Tokyo CloudFormation access is verified, continue the reviewed OIDC bootstrap: create only the reviewed OIDC stack, capture `ReadOnlyRoleArn`, register `AWS_READONLY_ROLE_ARN`, and run the read-only Lightsail observation.
