@@ -1,12 +1,24 @@
 # Work status
 
-## Current boundary: one candidate created; H1 passed; hardening preparation next
+## Current boundary: H1 passed; H2a implementation prepared; live apply pending
+
+Updated: 2026-10-01 (Asia/Tokyo), after the user's `次` following H1.
+
+[H2a identity/files review](SECRET_CUSTODY_HOST_H2A_REVIEW.md) now specifies the exact next change and its apply/verify/rollback implementation in `review/secret_custody_h2.py`. It proposes one non-login identity, root-owned fixed directories, all-false non-secret gates, a root-only ownership receipt, and an inactive static service whose only executable is `/usr/bin/false`. It performs no service start, SSH/firewall edit, package install, reboot, cloud operation or secret access. Candidate resource/sandbox settings are not effective qualification evidence.
+
+The existing hardening review requires a separate live-apply decision. Complete the H2a offline CI and present this concrete scope before asking for that decision; preparation approval is not live mutation approval. No H2a command has been run on the candidate. The host remains **untrusted / no-secret**; H2-H7 and all activation/credential gates remain pending/OFF. Stop on any apply error and diagnose before a repeat or the separately acknowledged bounded rollback.
+
+Use the existing working Termius session after approval. Resolve the reviewed immutable script commit and exact SHA-256 for the phone command; never execute a mutable branch URL. Work has no independently verified AWS/SSH session. Do not repeat paid creation, bootstrap, inventory, key import, phone keyboard setup or H1.
+
+The dedicated offline CI job uses real temporary-file ownership with synthetic account/systemd adapters. Local Work maps only UID/GID 0, so five boundary/syntax tests passed locally and 23 transaction tests require the no-skips CI gate. No offline success proves live enforcement or full qualification.
+
+## Previous milestone: creation and H1 completed
 
 Updated: 2026-10-01 23:23 JST (Asia/Tokyo).
 
 The user's phone screenshots confirm completion of the approved single Tokyo candidate and attached static IPv4, successful native Termius SSH login, command execution and the read-only H1 result `PREFLIGHT_OK_NO_MUTATION` with zero warnings/failures. See [creation and H1 evidence](SECRET_CUSTODY_HOST_H1_EVIDENCE.md) for the sanitized chronology, immutable script identity and limits.
 
-The host remains **untrusted / no-secret**. H2-H7, workload capacity, effective sandbox/default-deny egress, static egress, TLS and reboot/recovery qualification are pending. Prepare a concrete bounded H2 change and rollback offline before a separate live-apply decision. No runtime/provider activation or custody secret use follows from H1.
+The host remains **untrusted / no-secret**. H2-H7, workload capacity, effective sandbox/default-deny egress, static egress, TLS and reboot/recovery qualification are pending. The bounded H2a implementation and rollback are now prepared; live apply awaits a separate decision as recorded above. No runtime/provider activation or custody secret use follows from H1.
 
 Do not repeat creation, its cost approval, IAM/bootstrap, inventory, phone browser keyboard attempts, key import or H1 just to resume. The existing phone Termius path works. Work has no independently verified AWS/host session; use existing evidence and connectors within their actual permissions.
 

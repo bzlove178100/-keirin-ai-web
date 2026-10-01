@@ -46,6 +46,8 @@ The script emits only non-secret host facts. Missing tooling is a blocker, not a
 
 ## H2 — administrator and filesystem boundary
 
+The bounded [H2a identity/files implementation](SECRET_CUSTODY_HOST_H2A_REVIEW.md) is now prepared offline with explicit apply/verify/rollback guards. Live apply remains pending. It installs only an inactive placeholder; full effective sandbox, ephemeral storage, network and capacity qualification below remain unproven.
+
 The later mutating hardening package must be reviewed separately before execution. It should:
 
 - create a dedicated non-login service identity for the secret-host process;
