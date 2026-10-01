@@ -52,12 +52,24 @@ class RealMemoryTests(fixture.RealSystemdTests):
         original = self.controller.properties
         def shorter(h2):
             return ["RuntimeMaxSec=1s" if p.startswith("RuntimeMaxSec=") else p for p in original(h2)]
+        hung_child = self.controller.PROBE.replace("CHILD = " + repr(base.h2c.CHILD),
+                                                  "CHILD = " + repr("import time; time.sleep(60)"))
+        self.assertNotEqual(hung_child, self.controller.PROBE)
+        captured = []
+        command = r.command
+        def observe(args, timeout=20):
+            result = command(args, timeout=timeout)
+            if args[0] == "/usr/bin/systemd-run":
+                captured.append(result.stdout)
+            return result
         started = time.monotonic()
-        with patch.object(self.controller, "PROBE", "import time; time.sleep(60)"), \
+        with patch.object(self.controller, "PROBE", hung_child), patch.object(r, "command", observe), \
                 patch.object(self.controller, "properties", shorter):
             with self.assertRaisesRegex(self.controller.Stop, "^PROBE_EXECUTION_FAILED$"):
                 r.run(base.h2c.APPROVE)
         self.assertLess(time.monotonic() - started, 15)
+        self.assertEqual(len(captured), 1)
+        self.assertIn(b"PASS MEMFD_SEALED\n", captured[0])
         self.assert_clean(r)
 
     def test_corrupted_memory_record_is_rejected_without_leak(self):

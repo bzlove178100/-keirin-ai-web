@@ -20,6 +20,8 @@ Require exact-head CI success and merge/read-back before delivering the immutabl
 
 ## Historical failed H2a attempt and correction: H2a authorized; first apply failed; correction under validation
 
+H2c development note (2026-10-02): the first H2c systemd CI job passed all five cases, but the regression workflow failed because the updated hardening review omitted the existing exact phrase `this document grants no additional mutation scope`. Restore that accurate boundary wording without weakening the assertion or production guards. The follow-up also makes the deadline test retain the sealed synthetic record and executable child until systemd terminates them, and requires evidence that sealing had completed before timeout. Fresh CI on that changed head is required; do not rerun an unchanged failing head or claim live H2c success.
+
 Updated: 2026-10-02 00:06 JST evidence (Asia/Tokyo).
 
 The user explicitly said `適用して` at 2026-10-01 23:56:43 JST after the exact H2a identity/files/inactive-unit scope was presented. That authorization remains valid for diagnosis, bounded recovery and corrected application within the same scope; **do not ask for the same permission again**. It does not activate runtime, provider, credentials, networking changes or any other gate.
@@ -177,4 +179,3 @@ The original catalog workflow made its three catalog reads. The later inventory 
 PR #152's catalog script suppresses raw AWS CLI stderr and stops on command failure. Its 58 synthetic tests and PR #153's `cfn-lint==1.57.1` validation are historical offline evidence, separate from the successful live run above. Do not copy raw authentication logs into repository evidence; they may contain non-secret but account-specific role identifiers.
 
 The successful run reported an actions/checkout@v4 Node.js 20 deprecation warning and an ubuntu-latest migration notice. These did not fail the run and are maintenance follow-ups, not justification for repeating live observation.
-

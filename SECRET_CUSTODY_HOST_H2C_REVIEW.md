@@ -77,7 +77,8 @@ host operations, host-mount drift, inherited error handling, strict extended
 evidence, output redaction and default read-only behavior.
 
 Five mandatory real systemd Ubuntu 24.04 CI cases cover actual success, generic
-child failure, a stricter one-second manager deadline, corrupted record rejection
+child failure, a stricter one-second manager deadline while the sealed record
+and hung executable child exist, corrupted record rejection
 and missing-seal rejection by the actual executable child. The latter deliberately
 fault-injects only the CI parent seal gate to exercise independent child validation.
 The fixture reuses H2b's owned H2a installation and bounded rollback. As before,

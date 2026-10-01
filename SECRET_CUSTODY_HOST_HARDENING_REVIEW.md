@@ -3,7 +3,7 @@
 Reviewed: 2026-09-30 (Asia/Tokyo)
 Status: **declarative review; only the separately specified H2a identity/files scope has live authorization**
 
-Progress update: 2026-10-02 00:59 JST. H1 and H2a succeeded; H2b live basic-sandbox verification passed at 00:46 JST (IMG_8926, PR #168). The continuation at 00:59 JST proceeds to temporary synthetic memory verification; see the [H2c review](SECRET_CUSTODY_HOST_H2C_REVIEW.md). Persistent H2a installation stays unchanged. Full H2-H7 qualification remains pending; this document grants no additional persistent mutation or real credential/runtime scope.
+Progress update: 2026-10-02 00:59 JST. H1 and H2a succeeded; H2b live basic-sandbox verification passed at 00:46 JST (IMG_8926, PR #168). The continuation at 00:59 JST proceeds to temporary synthetic memory verification; see the [H2c review](SECRET_CUSTODY_HOST_H2C_REVIEW.md). Persistent H2a installation stays unchanged. Full H2-H7 qualification remains pending; this document grants no additional mutation scope or real credential/runtime use.
 
 This review turns the selected Amazon Lightsail Tokyo 1 GB candidate into a staged host-qualification plan without provisioning AWS resources or enabling any agent runtime.
 
@@ -155,4 +155,3 @@ The script must fail if it cannot prove the expected local shape. Its output may
 ## Non-authorization
 
 This review does not authorize AWS provisioning or charges, static-IP allocation, SSH/IAM creation, package installation, firewall mutation, Supabase management-plane changes, C2 DDL, database passwords, Vault/binding creation, provider refresh/write, hosted task execution, scheduler/recurrence, report delivery, production prediction, prediction DB writes, or external race-data fetching.
-
