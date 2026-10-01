@@ -14,6 +14,14 @@ Read this section first when the user says `続けて`. The SCP, OIDC bootstrap 
 - Job `observe` (`110305976403`): OIDC credential configuration and catalog observation both succeeded.
 - This validates the deployed OIDC path and the three catalog reads at that time, not resource creation permission or host readiness.
 
+## Creation configuration and public-price review — 2026-10-01
+
+The next paid scope is fully specified offline, but not yet authorized or executed. AWS's [current public pricing](https://aws.amazon.com/lightsail/pricing/) was rechecked on 2026-10-01: Linux/Unix with public IPv4, 1 GB memory, 2 vCPU, 40 GB disk and 2 TB transfer is USD 7/month. The [billing FAQ](https://docs.aws.amazon.com/en_en/lightsail/latest/userguide/amazon-lightsail-frequently-asked-questions-faq-billing-and-account-management.html) confirms no additional static-IP charge while attached, and USD 0.005/hour when unattached for more than one hour. Taxes, currency conversion and transfer overage are outside the bundle ceiling; no free-trial credit is assumed.
+
+The exact candidate remains unchanged from main `16c31f91a4205991c28ac2a33e8c64678a2a4f29`, blob `4c8913e893ece7ed95e35827af6bf9406783e59e`. Its two resources are CustodyCandidate and CustodyStaticIp. The proposed new stack name is `keirin-ai-custody-h1`; stack-name absence and independent account identity are still unverified. The selected zone is `ap-northeast-1a` and the existing key parameter is `LightsailDefaultKeyPair`, observed by inventory run #2. Blueprint/bundle availability evidence remains the 18:28 catalog run; public-price verification is not a new AWS API observation.
+
+The template's LiveCreateAcknowledgement parameter explicitly requires fresh user authorization of this exact paid creation. The user's latest `続けて` advanced preparation only. Do not set its approved value or remove/weaken that guard to bypass the missing cost decision. Present the exact one-host cost, browser-only SSH proposal and failure-retention behavior for approval, then use the authenticated phone console for the remaining account/stack checks and CREATE change-set review. An actual CREATE change set has not been prepared. Review it before execution under the existing execution sequence. Do not retry the previously failed Work AWS browser, add deploy permission, repeat inventory, or claim live access from GitHub authentication.
+
 ## Corrected inventory verified on 2026-10-01
 
 At 20:37:39 JST the user explicitly authorized one additional corrected read-only inventory run. [Inventory run #2](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36856726931) was dispatched exactly once from main `de7cd0b97bb009f5f9394512f94bf5be33d5251b` (PR #161 merged). Job `110350863079` completed successfully, including OIDC authentication and all three inventory reads. The version 2 result was emitted at 11:39:38 UTC / 20:39:38 JST.
