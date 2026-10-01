@@ -1,5 +1,10 @@
 # Work status
 
+## Immediate AWS boundary: reviewed SCP proposal awaiting approval
+
+The live blocker is now diagnosed, not unknown. Proof of Concept Tokyo CloudFormation is denied by the Root-attached `AdvancedModeRegionRestrictionSecurityControlPolicy` `RegionFloor` statement. A management-account CloudShell read-only preparation and local review produced `current_scp.json` and `proposed_scp.json`; `review.sh` returned `REVIEW PASS`. The proposal preserves all other statements and the existing `Effect / NotAction / Resource`, keeps the current region list for other accounts, and gives only Proof of Concept the additional Tokyo region. AWS has not been changed. The next live step is an explicit-approval boundary for `organizations update-policy`. Do not reopen phone JSON editing or repeat earlier browser/app diagnosis. After a successful, verified SCP update, verify Proof of Concept CloudFormation in Tokyo, then complete the reviewed OIDC bootstrap. Hand substantial follow-on execution to Work after OIDC is live; Work does not inherit the current Safari/CloudShell session.
+
+
 Updated: 2026-10-01 (Asia/Tokyo).
 
 This file is the current resumption snapshot. Detailed historical implementation notes remain in Git history and merged PRs.
