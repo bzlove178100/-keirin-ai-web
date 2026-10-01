@@ -12,7 +12,22 @@ destination argument, network probe, secret input or service-management action.
 The phone loader downloads the immutable hash-checked script; the observer itself
 does not contact GitHub, AWS, a provider or any remote endpoint.
 
-## Live failure and scoped IPv6 correction — 2026-10-02 01:56 JST
+## Completed live observation — 2026-10-02 02:07–02:16 JST
+
+The corrected PR #172 observer succeeded at 02:07 with
+`H3_HOST_NETWORK_OBSERVED_NO_MUTATION`. Saved cloud rule/source/browser options
+were observed at 02:12–02:13. UFW's own status was `inactive` at 02:16.
+The [transition review](SECRET_CUSTODY_NETWORK_TRANSITION_REVIEW.md) records the
+sanitized facts, immutable script identity, remaining dependencies and next work.
+These completed observations supersede the pre-run instructions below. Do not
+rerun the completed observer, UFW status or H2 probes merely to resume.
+
+The original generic STOP did not capture its exact failed stage/input. The
+corrected success and scoped IPv6 listener are consistent with the independently
+reproduced parsing defect; no original exception input is invented. Full firewall
+qualification, independent recovery and live apply remain incomplete.
+
+## Historical live failure and scoped IPv6 correction — 2026-10-02 01:56 JST
 
 IMG_8929 shows PR #171's pinned observer ending with
 `STOP NETWORK_READBACK_UNAVAILABLE` and
@@ -102,7 +117,7 @@ read back separately from the instance's Networking view. Work still has no
 independent AWS/SSH session, and this change does not expand IAM or dispatch an
 additional previously bounded inventory workflow.
 
-The concrete sequence after this preparation is:
+The original pre-execution sequence below is historical; steps 1 and 2 are now observed in the limited scopes above. Step 3 continues in the transition review:
 
 1. Obtain one successful phone host-readback result. Retain sanitized facts only
    in public evidence. On STOP, diagnose the fixed code; do not retry unchanged.
@@ -135,8 +150,10 @@ its rules and sockets; no host firewall is edited and no external packet is sent
 Finally the exact production observer runs read-only against the disposable CI
 host to cover command paths, full snapshot composition and service output formats.
 Exact-head CI must pass before merge/read-back and the phone command. Live host
-observation is separately pending and must not be inferred from CI success.
+observation subsequently succeeded at 02:07, separately from CI. The remaining
+policy/recovery qualification must not be inferred from either observation.
 
 Primary references: [Lightsail firewall scope](https://docs.aws.amazon.com/lightsail/latest/userguide/understanding-firewall-and-port-mappings-in-amazon-lightsail.html),
 [nftables command reference](https://netfilter.org/projects/nftables/manpage.html),
 [Ubuntu 24.04 libnftables JSON schema](https://manpages.ubuntu.com/manpages/noble/man5/libnftables-json.5.html).
+
