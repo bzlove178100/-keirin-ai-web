@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REGION="${AWS_REGION:-ap-northeast-1}"
+REGION="${AWS_REGION-ap-northeast-1}"
+if [[ "$REGION" != "ap-northeast-1" ]]; then
+  echo "FAIL: observation requires Tokyo ap-northeast-1" >&2
+  exit 1
+fi
 EXPECTED_CPU=2
 EXPECTED_RAM=1.0
 EXPECTED_DISK=40
@@ -30,6 +34,8 @@ aws lightsail get-bundles \
 python3 - "$REGION" "$EXPECTED_CPU" "$EXPECTED_RAM" "$EXPECTED_DISK" "$EXPECTED_TRANSFER" "$MAX_PRICE_USD" \
   "$tmp_dir/regions.json" "$tmp_dir/blueprints.json" "$tmp_dir/bundles.json" <<'PY'
 import json
+import math
+import re
 import sys
 
 (
@@ -51,6 +57,27 @@ expected_disk = int(expected_disk)
 expected_transfer = int(expected_transfer)
 max_price = float(max_price)
 
+
+def catalog_items(document, key):
+    if not isinstance(document, dict) or not isinstance(document.get(key), list):
+        raise SystemExit("FAIL: malformed catalog response")
+    items = document[key]
+    if any(not isinstance(item, dict) for item in items):
+        raise SystemExit("FAIL: malformed catalog entry")
+    return items
+
+
+def number(value):
+    if type(value) not in (int, float):
+        return None
+    if not math.isfinite(value) or value < 0:
+        return None
+    return value
+
+
+def identifier(value):
+    return isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", value) is not None
+
 with open(regions_path, encoding="utf-8") as fh:
     regions_doc = json.load(fh)
 with open(blueprints_path, encoding="utf-8") as fh:
@@ -59,21 +86,25 @@ with open(bundles_path, encoding="utf-8") as fh:
     bundles_doc = json.load(fh)
 
 regions = [
-    item for item in regions_doc.get("regions", [])
+    item for item in catalog_items(regions_doc, "regions")
     if item.get("name") == region
 ]
 if not regions:
     raise SystemExit(f"FAIL: Lightsail region {region} was not returned")
 
 ubuntu = []
-for item in blueprints_doc.get("blueprints", []):
+for item in catalog_items(blueprints_doc, "blueprints"):
     if item.get("platform") != "LINUX_UNIX":
         continue
-    if item.get("isActive") is False:
+    if item.get("isActive") is not True:
+        continue
+    if item.get("type") != "os" or not identifier(item.get("blueprintId")):
         continue
     name = str(item.get("name", ""))
     description = str(item.get("description", ""))
     if "ubuntu" not in (name + " " + description).lower():
+        continue
+    if not re.search(r"\bLTS\b", name + " " + description + " " + str(item.get("version", "")), re.IGNORECASE):
         continue
     ubuntu.append({
         "blueprintId": item.get("blueprintId"),
@@ -86,22 +117,24 @@ if not ubuntu:
     raise SystemExit("FAIL: no active Ubuntu Linux/Unix blueprint was returned")
 
 candidates = []
-for item in bundles_doc.get("bundles", []):
-    if item.get("isActive") is False:
+for item in catalog_items(bundles_doc, "bundles"):
+    if item.get("isActive") is not True or not identifier(item.get("bundleId")):
         continue
-    platforms = item.get("supportedPlatforms") or []
-    if "LINUX_UNIX" not in platforms:
+    platforms = item.get("supportedPlatforms")
+    if not isinstance(platforms, list) or "LINUX_UNIX" not in platforms:
         continue
-    if item.get("cpuCount") != expected_cpu:
+    if number(item.get("cpuCount")) != expected_cpu:
         continue
-    if float(item.get("ramSizeInGb", -1)) != expected_ram:
+    if number(item.get("ramSizeInGb")) != expected_ram:
         continue
-    if item.get("diskSizeInGb") != expected_disk:
+    if number(item.get("diskSizeInGb")) != expected_disk:
         continue
-    if item.get("transferPerMonthInGb") != expected_transfer:
+    if number(item.get("transferPerMonthInGb")) != expected_transfer:
         continue
-    price = float(item.get("price", 1e9))
-    if price > max_price:
+    if number(item.get("publicIpv4AddressCount")) != 1:
+        continue
+    price = number(item.get("price"))
+    if price is None or price > max_price:
         continue
     candidates.append({
         "bundleId": item.get("bundleId"),

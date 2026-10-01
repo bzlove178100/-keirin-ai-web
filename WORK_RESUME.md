@@ -11,8 +11,8 @@ If the user says only `続けて` in Work, resume from this exact boundary witho
 ## Verified repository state
 
 - Repository: `bzlove178100/-keirin-ai-web`
-- Verified base before this account-boundary update: `8997da514255d8d9dcad2a0c252f92b4c1253814`.
-- PR #146 through PR #149 are merged.
+- Verified base before this offline observation update: `b03ee168390ef2d98e432cbae80638d11572875c`.
+- PR #151 (GitHub OIDC read-only observation) is merged.
 - PR #149 exact-head CI passed: collection progress UI regression, agent runtime read-only smoke, keirin-ai regression, and agent checkpoint PostgreSQL contract all succeeded.
 - Resolve the current `main` from GitHub when resuming; do not treat an embedded SHA as permanently current.
 - AWS account bootstrap is complete: Proof of Concept account available, paid usage enabled, advanced features activated, and USD 10 AWS Budget configured with Credit/Refund excluded.
@@ -41,6 +41,17 @@ Keep all of these unchanged unless the user separately authorizes the specific l
 Read `AWS_GITHUB_OIDC_READONLY_OBSERVATION.md` first.
 
 Do not resume screenshot-by-screenshot AWS console navigation and do not retry public CloudShell.
+
+### Current bootstrap blocker (2026-10-01)
+
+- The Work Cloud Browser returned `Site Unavailable` for AWS. The cause is not established; stop rather than repeating that browser attempt. The user's phone session cannot be controlled through that browser.
+- The user's phone reached the Proof of Concept console. Tokyo is enabled at the account level, but the observed Root-attached regional SCP restricts it. Account region activation and effective SCP permission are separate checks.
+- A private, account-specific draft limits the proposed Tokyo exception to Proof of Concept. The user approved that exact draft; saving it in AWS has **not** been verified. Do not publish the draft/account identifiers or treat approval as proof of application.
+- The AWS editor flagged the existing `builderid:*` entry, also present in AWS's published policy. Do not silently delete that exception, detach the Root policy, or disable SCPs to clear the finding.
+- Full-text replacement in the phone editor was unsuccessful. No PC or external keyboard was available. Do not repeat the failed selection instructions or request the same screenshots again. Cancellation was advised but is not verified.
+- The OIDC stack, its output ARN, the repository secret, and a live observation run remain unverified. Do not dispatch the live workflow as a bootstrap probe.
+
+Continue safe repository work while this blocker remains. On a usable authorized AWS path, read back the effective policy before any mutation and check for an existing stack/provider/role before creating duplicates. Stack execution remains a separate important-operation confirmation after reviewing the concrete change set.
 
 The next bounded bootstrap is:
 
