@@ -1,7 +1,13 @@
 # H2d: bounded synthetic process-failure verification
 
 Prepared after the user's H2c success screenshot at 2026-10-02 01:16 JST
-and continuation at 01:18 JST. H2d live execution is pending. This closes a
+and continuation at 01:18 JST. H2d live execution succeeded at 01:38 JST: IMG_8928
+shows all ten PASS records and `RESULT H2D_SYNTHETIC_PROCESS_FAILURE_OK_NO_RUNTIME`,
+followed by the shell prompt. [PR #170](https://github.com/bzlove178100/-keirin-ai-web/pull/170)
+records this separate user-supplied evidence at immutable commit
+`d27a9db571b6496642fae7046b6220406cac0ee3`, script SHA-256
+`fb7745501818a395af1beaea04145e6abc34a43e2d08a0871be3116b767932e5`.
+Do not repeat this completed test. This closes a
 specific gap: previous H2c tested a hung child while its launcher remained alive;
 it did not inject service-parent death or launcher death on this host profile.
 Existing application parent-death and Docker recovery fixtures are separate
@@ -100,7 +106,7 @@ The existing owned disposable H2a CI fixture supplies real accounts/files/system
 and rolls them back. Only its global swap precheck is synthetic; production's
 no-active-swap guard remains intact. CI parent-directory metadata is tightened
 and restored by that fixture. Local offline success does not substitute for CI
-or the separate future user-supplied live result.
+or the separate user-supplied live result recorded above.
 
 This qualifies only these process-failure scenarios and this fixed transient
 profile. The verification controller itself stays alive: launcher death is not

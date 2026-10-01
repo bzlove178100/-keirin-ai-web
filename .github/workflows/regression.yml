@@ -208,3 +208,17 @@ jobs:
         # Owned disposable H2a fixture; no secrets, AWS or host firewall changes.
         # The global swap precheck is synthetic only in this CI fixture.
         run: sudo -n env H2B_CI_FIXTURE=1 H2D_CI_FIXTURE=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" /usr/bin/python3 -I -B tests/test_secret_custody_h2d_systemd.py
+
+  custody-network-readback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test read-only network parsing, bounds and redaction
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_network_readback.py
+      - name: Test actual nft JSON and IPv4/IPv6 socket output in a disposable namespace
+        # Fixture rules/sockets exist only inside this unshare network namespace.
+        # No host firewall edit, external packet, AWS session or credential.
+        run: sudo -n env GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_network_readback.py --namespace-fixture
+      - name: Run exact read-only observer against disposable CI host
+        run: sudo -n /usr/bin/python3 -I -B review/secret_custody_network_readback.py

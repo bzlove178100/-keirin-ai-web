@@ -3,7 +3,7 @@
 Reviewed: 2026-09-30 (Asia/Tokyo)
 Status: **declarative review; only the separately specified H2a identity/files scope has live authorization**
 
-Progress update: 2026-10-02 01:18 JST. H1 and H2a succeeded; H2b passed at 00:46 JST (IMG_8926, PR #168) and H2c synthetic memory verification passed at 01:16 JST (IMG_8927, PR #169). The continuation proceeds to [H2d synthetic process-failure verification](SECRET_CUSTODY_HOST_H2D_REVIEW.md); its live result is pending. Persistent H2a installation stays unchanged. Full H2-H7 qualification remains pending; this document grants no additional mutation scope or real credential/runtime use.
+Progress update: 2026-10-02 01:39 JST. H1 and H2a succeeded; H2b passed at 00:46 JST (PR #168), H2c at 01:16 JST (PR #169), and H2d's two synthetic process-failure scenarios at 01:38 JST (IMG_8928, PR #170). Next is the [read-only host/cloud network baseline](SECRET_CUSTODY_HOST_NETWORK_READBACK_REVIEW.md); live network readback remains pending. Persistent H2a installation stays unchanged. Full H2-H7 qualification remains pending; this document grants no additional mutation scope or real credential/runtime use.
 
 This review turns the selected Amazon Lightsail Tokyo 1 GB candidate into a staged host-qualification plan without provisioning AWS resources or enabling any agent runtime.
 
@@ -46,7 +46,7 @@ The script emits only non-secret host facts. Missing tooling is a blocker, not a
 
 ## H2 — administrator and filesystem boundary
 
-The bounded [H2a identity/files implementation](SECRET_CUSTODY_HOST_H2A_REVIEW.md) has explicit apply/verify/rollback guards. The user authorized its exact scope; corrected installation and verification now succeeded. The failed first attempt was recovered, and must not be retried. It installs only an inactive placeholder. H2b proved the measured basic controls; H2c proved its bounded synthetic ephemeral-storage/descriptor checks. H2d now prepares service-parent and launcher failure tests under that transient profile. Broader sandbox, network, capacity and recovery qualification remains incomplete.
+The bounded [H2a identity/files implementation](SECRET_CUSTODY_HOST_H2A_REVIEW.md) has explicit apply/verify/rollback guards. The user authorized its exact scope; corrected installation and verification now succeeded. The failed first attempt was recovered, and must not be retried. It installs only an inactive placeholder. H2b proved the measured basic controls; H2c proved its bounded synthetic ephemeral-storage/descriptor checks. H2d proved its service-parent and launcher failure tests under that transient profile. Broader sandbox, network, capacity and full controller/reboot recovery qualification remains incomplete.
 
 The later mutating hardening package must be reviewed separately before execution. It should:
 
