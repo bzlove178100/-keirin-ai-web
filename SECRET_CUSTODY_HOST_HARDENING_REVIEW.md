@@ -3,7 +3,7 @@
 Reviewed: 2026-09-30 (Asia/Tokyo)
 Status: **declarative review; only the separately specified H2a identity/files scope has live authorization**
 
-Progress update: 2026-10-02 01:39 JST. H1 and H2a succeeded; H2b passed at 00:46 JST (PR #168), H2c at 01:16 JST (PR #169), and H2d's two synthetic process-failure scenarios at 01:38 JST (IMG_8928, PR #170). Next is the [read-only host/cloud network baseline](SECRET_CUSTODY_HOST_NETWORK_READBACK_REVIEW.md); live network readback remains pending. Persistent H2a installation stays unchanged. Full H2-H7 qualification remains pending; this document grants no additional mutation scope or real credential/runtime use.
+Progress update: 2026-10-02 02:16 JST evidence. H1 and corrected H2a succeeded; measured H2b/H2c/H2d probes completed. PR #172 corrected host readback succeeded at 02:07; saved Lightsail source/browser options were observed at 02:12–02:13; UFW reported inactive at 02:16. See the [network transition proposal](SECRET_CUSTODY_NETWORK_TRANSITION_REVIEW.md) for completed baseline, isolated packet rehearsal and remaining private dependencies/recovery work. Persistent H2a installation stays unchanged. Full H2-H7 qualification remains pending; this document grants no additional mutation scope or real credential/runtime use.
 
 This review turns the selected Amazon Lightsail Tokyo 1 GB candidate into a staged host-qualification plan without provisioning AWS resources or enabling any agent runtime.
 
@@ -155,3 +155,4 @@ The script must fail if it cannot prove the expected local shape. Its output may
 ## Non-authorization
 
 This review does not authorize AWS provisioning or charges, static-IP allocation, SSH/IAM creation, package installation, firewall mutation, Supabase management-plane changes, C2 DDL, database passwords, Vault/binding creation, provider refresh/write, hosted task execution, scheduler/recurrence, report delivery, production prediction, prediction DB writes, or external race-data fetching.
+

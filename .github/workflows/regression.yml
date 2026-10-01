@@ -222,3 +222,15 @@ jobs:
         run: sudo -n env GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_network_readback.py --namespace-fixture
       - name: Run exact read-only observer against disposable CI host
         run: sudo -n /usr/bin/python3 -I -B review/secret_custody_network_readback.py
+
+  custody-network-transition:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test CI namespace guard and ownership rejection
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_network_transition.py
+      - name: Rehearse actual IPv4 and IPv6 firewall transition and restricted rollback
+        # Two isolated namespaces and a veth; no external routes or live addresses.
+        # Tests refuse PID 1's network namespace, non-CI and nonempty fixtures.
+        run: sudo -n env GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_network_transition.py --kernel
