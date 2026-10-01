@@ -1,9 +1,9 @@
 # Secret-custody host hardening review
 
 Reviewed: 2026-09-30 (Asia/Tokyo)
-Status: **review only — nothing in this package is authorized to mutate a live machine**
+Status: **declarative review; only the separately specified H2a identity/files scope has live authorization**
 
-Progress update: 2026-10-01 23:23 JST. One candidate now exists and H1 passed; see [sanitized evidence](SECRET_CUSTODY_HOST_H1_EVIDENCE.md). H2-H7 and live hardening approval remain pending.
+Progress update: 2026-10-02 00:06 JST. H1 passed; see [sanitized evidence](SECRET_CUSTODY_HOST_H1_EVIDENCE.md). H2a was authorized at 23:56:43 JST, but its first apply failed at user creation and requires the bounded correction in the [H2a review](SECRET_CUSTODY_HOST_H2A_REVIEW.md). H2-H7 effective qualification remains pending; this document grants no additional mutation scope.
 
 This review turns the selected Amazon Lightsail Tokyo 1 GB candidate into a staged host-qualification plan without provisioning AWS resources or enabling any agent runtime.
 
@@ -46,7 +46,7 @@ The script emits only non-secret host facts. Missing tooling is a blocker, not a
 
 ## H2 — administrator and filesystem boundary
 
-The bounded [H2a identity/files implementation](SECRET_CUSTODY_HOST_H2A_REVIEW.md) is now prepared offline with explicit apply/verify/rollback guards. Live apply remains pending. It installs only an inactive placeholder; full effective sandbox, ephemeral storage, network and capacity qualification below remain unproven.
+The bounded [H2a identity/files implementation](SECRET_CUSTODY_HOST_H2A_REVIEW.md) has explicit apply/verify/rollback guards. The user authorized its exact scope; the first apply failed and successful corrected installation remains pending. It installs only an inactive placeholder; full effective sandbox, ephemeral storage, network and capacity qualification below remain unproven.
 
 The later mutating hardening package must be reviewed separately before execution. It should:
 

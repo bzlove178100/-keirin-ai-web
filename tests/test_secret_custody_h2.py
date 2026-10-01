@@ -304,6 +304,16 @@ class BoundaryTests(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs["env"], h2.ENV)
         self.assertFalse(run.call_args.kwargs.get("shell", False))
 
+    def test_failed_useradd_reports_stage_without_command_output(self):
+        result = subprocess.CompletedProcess([], 3, b"private-stdout", b"private-stderr")
+        out = io.StringIO()
+        with patch.object(h2.subprocess, "run", return_value=result), \
+                patch.object(h2.Package, "fresh", side_effect=lambda: h2.Host().create_user("private-tag")), \
+                redirect_stdout(out):
+            self.assertEqual(h2.main([]), 1)
+        self.assertEqual(out.getvalue(), "STOP USER_CREATE_FAILED\n"
+                         "RESULT NO_RUNTIME_AUTHORIZED_DO_NOT_RETRY_APPLY\n")
+
     def test_user_creation_is_nonlogin_nohome_locked(self):
         with patch.object(h2.Host, "run", return_value="") as run:
             h2.Host().create_user("unique-tag")

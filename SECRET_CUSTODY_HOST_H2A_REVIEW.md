@@ -1,6 +1,7 @@
 # H2a identity and inactive service preparation
 
-Status: implementation prepared offline; **live apply not yet authorized or performed**.
+Status: **live H2a apply authorized at 2026-10-01 23:56:43 JST; first attempt failed**.
+The correction and recovery tests below are pending their exact-commit CI gate.
 The candidate remains **untrusted / no-secret**. This is a small part of H2,
 not completion of H2-H7 and not approval to activate an agent.
 
@@ -66,8 +67,10 @@ Use `/usr/bin/python3 -I -B` with source from a reviewed immutable commit and
 verify its exact SHA-256 before execution. The future phone command must pin
 both values and abort on download/hash mismatch. Never copy a branch URL into
 a root execution pipeline. The acknowledgement values prevent accidents;
-they do not grant authorization. Present this exact scope to the user before
-any live apply. Existing creation/H1 approval does not cover host hardening.
+they do not grant authorization. Present the exact scope to the user before
+any initially unapproved live apply. The user subsequently approved this exact
+H2a scope at 23:56:43 JST; that approval also covers its bounded correction and
+recovery. Do not request it again. Creation/H1 alone would not have covered it.
 
 ## Failure and rollback
 
@@ -79,8 +82,9 @@ printed. Subprocesses have a fixed environment, no shell and a 20-second timeout
 
 On any `STOP`, preserve the exact fixed error/result lines and **do not retry
 apply**. No automatic rollback, service start, forced user removal or process
-kill follows an error. Review the failed stage before proposing the bounded
-rollback under its own acknowledgement. Rollback checks all remaining artifacts
+kill follows an error. Review the failed stage before using the bounded
+rollback under its own CLI acknowledgement. The current H2a recovery is within
+the existing user authorization; the token is not a request for new approval. Rollback checks all remaining artifacts
 before deletion, including contents, modes/ownership, absence of extra directory
 entries, no symlinks/hardlinks, matching account ownership tag/UID/GID, locked
 non-login identity, no shared groups/processes, and inactive/unmodified unit state.
@@ -99,26 +103,60 @@ corruption. Receipt updates are durable, but this stage makes no power-loss or
 reboot-recovery qualification claim. `daemon-reload` does not start this unit;
 unrelated administrator changes in the manager remain outside this review.
 
+## First live failure and bounded correction
+
+The first attempt used commit `5cc75aa40523e405ccd0a6515386d3a41eeb886d`,
+SHA-256 `50a92a2b0c4585cc965a91faf737d81d337408573cf2668dd26dc49a825473e1`.
+Screenshot IMG_8923 at 2026-10-02 00:00 JST shows `STOP HOST_COMMAND_FAILED`;
+no completed installation or runtime qualification follows from that attempt.
+
+IMG_8924 at 00:06 JST confirms the receipt directory is present, user/group
+are absent (getent exit 2), reserved code/config directories and unit are absent,
+and systemd reports not-found/inactive with show exit 0. The existing receipt
+contents are not independently confirmed; rollback must validate them first.
+
+The implementation incorrectly passed `--key CREATE_MAIL_SPOOL=no` to useradd.
+That option only accepts login.defs keys, while CREATE_MAIL_SPOOL belongs to
+useradd defaults. Shadow 4.13's [useradd source](https://github.com/shadow-maint/shadow/blob/4.13/src/useradd.c)
+rejects unknown `-K` keys and already skips `create_mail()` when `--system` is
+used; its [login.defs registry](https://github.com/shadow-maint/shadow/blob/4.13/lib/getdef.c)
+has no CREATE_MAIL_SPOOL key. The observed partial state matches this failure.
+Remove this invalid override, retaining system/non-login/locked/no-home options.
+Command failure codes now identify fixed stages (e.g. USER_CREATE_FAILED) without
+printing subprocess diagnostics, account fields or secrets.
+
+Keep schema `keirin-custody-h2a-v1`: the original receipt remains recognizable.
+After exact-head CI and merge, download the corrected script by immutable SHA,
+check its SHA-256, run `rollback --approve H2_REMOVE_OWNED_FILES_V1`, and proceed
+to `apply --approve H2_IDENTITY_FILES_V1` only if rollback exits zero. The existing
+rollback validates ownership, metadata, receipt, remaining files, identities
+and inactive unit before removing anything. Do not delete the directory manually
+or retry the old apply. Follow with read-only verify and retain phone results.
+This is recovery under the existing approval, not additional runtime authority.
+
 ## Validation and remaining boundary
 
-`tests/test_secret_custody_h2.py` uses actual temporary-file metadata and fully
-synthetic account/process/systemd adapters. Its 28 tests cover refusal before
-mutation, file/identity collisions, partial failure recovery, exact read-back,
-repeat-apply refusal, rollback drift/process protections, locking, sanitized
-errors and systemd unit syntax. The required `custody-h2-offline` job runs on
-Ubuntu 24.04 with real UID/GID mappings and forbids skipped ownership tests.
-No test creates a real host account or activates a service.
+`tests/test_secret_custody_h2.py` has 29 tests: real temporary-file metadata,
+synthetic account/process/systemd behavior, collision/drift/process/locking and
+partial-failure recovery, sanitized stage errors, and systemd unit syntax.
+Local Work passes six boundary/syntax tests; 23 ownership tests require the
+no-skips Ubuntu 24.04 CI job because Work maps only UID/GID 0.
 
-The local Work sandbox maps only UID/GID 0. Five boundary/syntax tests passed
-there; 23 filesystem transaction tests are explicitly skipped locally and must
-pass in CI before merge. Its non-systemd PID 1 was correctly rejected by the
-read-only CLI. CI is offline evidence, not an observation of the Lightsail host.
+`tests/test_secret_custody_h2_cli.py` adds two mandatory integration cases using
+the actual Ubuntu 24.04 useradd/userdel/groupdel/passwd executables. A test-only
+adapter injects `--root` pointing to a disposable chroot with synthetic account
+databases; production gets no configurable root option. No runner account or
+live AWS machine is changed. Manager/process behavior remains synthetic.
+The tests reproduce the old invalid argument, verify receipt-only partial state,
+perform ownership-checked recovery, then corrected apply/verify/removal. They
+check locked system identity, non-login shell, absent home/mail even with mail
+creation enabled in fixture defaults. They do not bypass audit restrictions;
+local Work cannot run this CLI boundary, so CI success is required.
 
-After separate approval and one successful apply, retain sanitized live result
-lines and run the read-only verify. Only then plan the next bounded effective
-sandbox/resource/network tests. C2 schema, real credential use and runtime
-activation still need their existing independent gates/authorization. The H1
-evidence, original declarative hardening plan and recovery review remain valid.
+No offline success proves live installation, service enforcement or full H2-H7
+qualification. Await successful phone apply and verify before planning effective
+sandbox/resource/network tests. C2 schema, real credentials and runtime activation
+retain their independent gates. H1 and the original recovery review remain valid.
 
 Primary references: [Ubuntu 24.04 useradd](https://manpages.ubuntu.com/manpages/noble/man8/useradd.8.html),
 [systemd unit](https://www.freedesktop.org/software/systemd/man/systemd.unit.html),
