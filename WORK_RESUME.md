@@ -1,5 +1,32 @@
 # Work resume handoff
 
+## Latest live AWS state: SCP root cause and reviewed proposal
+
+This section supersedes the earlier unresolved browser/app/session diagnosis for the immediate AWS bootstrap boundary.
+
+Verified from the user's live AWS console and CloudShell session on 2026-10-01:
+
+- The AWS Console mobile app was removed. After returning through Safari, the Proof of Concept session could open IAM in-browser.
+- In Proof of Concept IAM, the dashboard showed 0 identity providers. A search for role `keirin-ai-github-lightsail-readonly` returned no match. Treat these as observations from that account/session, not organization-wide absence.
+- Tokyo `ap-northeast-1` was added to the console's visible-region settings and then appeared in the region selector.
+- CloudFormation in Proof of Concept, Tokyo, failed `ListStacks` with an explicit deny from `AdvancedModeRegionRestrictionSecurityControlPolicy`.
+- The exact SCP referenced by the error was inspected in the management account. It is attached to Root.
+- The `RegionFloor` statement is `Effect: Deny` and its `StringNotEquals/aws:RequestedRegion` list contains exactly `eu-north-1`, `unspecified`, `us-east-1`, and `us-west-2`; Tokyo is not present.
+- Management-account CloudShell in `ap-southeast-2` eventually opened successfully after an initial session-timeout attempt.
+- `prep.sh` was uploaded and run. It performed read-only Organizations calls, wrote `current_scp.json` and `proposed_scp.json`, and reported `READ-ONLY PREP COMPLETE`. It did not change AWS.
+- `review.sh` was uploaded and run. It reported `REVIEW PASS`, confirmed that all non-RegionFloor statements are unchanged, `Effect / NotAction / Resource` are unchanged, the global RegionFloor keeps the existing region list while excluding only the Proof of Concept account from that statement, and a second `RegionFloorProofOfConcept` statement allows exactly the current regions plus `ap-northeast-1` for Proof of Concept. Proposed compact SCP size was 5814 / 10240 characters.
+- No `organizations update-policy` call has been run. The live SCP is still unchanged.
+
+Immediate authorization boundary:
+
+- The next live mutation is applying the reviewed `proposed_scp.json` to the existing SCP with `organizations update-policy`.
+- Do not run that mutation without the user's explicit approval.
+- If approved, use the existing management-account CloudShell artifacts rather than re-editing the phone JSON editor.
+- After the update, verify that Proof of Concept can read CloudFormation in Tokyo. If that still fails, stop and diagnose the new concrete error; do not repeat the update.
+- Once Tokyo CloudFormation access is verified, continue the reviewed OIDC bootstrap: create only the reviewed OIDC stack, capture `ReadOnlyRoleArn`, register `AWS_READONLY_ROLE_ARN`, and run the read-only Lightsail observation.
+- Work should take over after the OIDC path is live, because then AWS observation can proceed through GitHub Actions instead of repeating phone-console operations. A Work cloud browser session does not inherit the user's current Safari/CloudShell session, and a prior Work AWS browser attempt returned `Site Unavailable`.
+
+
 Updated: 2026-10-01 (Asia/Tokyo)
 
 Use this file when resuming in ChatGPT Work.
