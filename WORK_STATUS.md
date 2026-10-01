@@ -1,8 +1,8 @@
 # Work status
 
-## Immediate AWS boundary: verify Tokyo CloudFormation after SCP update
+## Immediate AWS boundary: create reviewed OIDC stack after Tokyo verification
 
-The Root-attached `AdvancedModeRegionRestrictionSecurityControlPolicy` blocker was diagnosed and the reviewed account-scoped change was applied after explicit user approval. `apply_scp.sh` re-read the live policy, refused drift, applied exactly the reviewed proposal, read the policy back, and reported `SCP UPDATE VERIFIED`. The change keeps the existing region list and enforcement surface for other accounts while giving only Proof of Concept the additional Tokyo `ap-northeast-1` exception. Do not run the SCP update again. The next live step is to verify that Proof of Concept can read CloudFormation in Tokyo. If that succeeds, complete the reviewed GitHub OIDC bootstrap; if it fails, stop on the new concrete error. Hand substantial follow-on execution to Work after OIDC is live; Work does not inherit the current Safari/CloudShell session.
+The Root-attached `AdvancedModeRegionRestrictionSecurityControlPolicy` blocker was diagnosed and the reviewed account-scoped change was applied after explicit user approval. `apply_scp.sh` re-read the live policy, refused drift, applied exactly the reviewed proposal, read the policy back, and reported `SCP UPDATE VERIFIED`. Proof of Concept CloudFormation was then re-tested in Tokyo `ap-northeast-1`; `ListStacks` loaded successfully with no SCP error and showed 0 stacks. Do not run the SCP update again. The next live step is to create only the reviewed GitHub OIDC CloudFormation stack, review the concrete change set before execution, then capture `ReadOnlyRoleArn`, register `AWS_READONLY_ROLE_ARN`, and run the read-only Lightsail observation. Hand substantial follow-on execution to Work after OIDC is live; Work does not inherit the current Safari/CloudShell session.
 
 
 Updated: 2026-10-01 (Asia/Tokyo).
