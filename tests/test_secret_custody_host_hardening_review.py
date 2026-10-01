@@ -10,7 +10,8 @@ def main():
     script = PREFLIGHT.read_text(encoding="utf-8")
 
     required_doc = [
-        "review only — nothing in this package is authorized to mutate a live machine",
+        "only the separately specified H2a identity/files scope has live authorization",
+        "this document grants no additional mutation scope",
         "untrusted / no-secret",
         "Do not add a swap file",
         "default deny",
