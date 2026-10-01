@@ -40,6 +40,10 @@ Use the **Proof of Concept** AWS account, not the organization management/delega
 
 The workflow uses GitHub OIDC and short-lived AWS credentials. Do not create an AWS access key for this path.
 
+Before executing the stack, check for an existing GitHub OIDC provider, role or stack so a partial prior attempt is not duplicated. Prefer uploading the reviewed YAML file rather than retyping its contents. Review the actual change set and obtain the separate stack-execution confirmation before creating IAM resources. A prepared template is not proof of an AWS-validated or deployed stack.
+
+The current browser, regional SCP and phone-editor blockers are recorded in `WORK_RESUME.md`. Region activation alone does not prove SCP authorization. Keep account-specific policy drafts private and verify their actual saved state before live observation; do not remove existing policy exceptions or disable organizational controls to clear editor findings.
+
 ## Trust boundary
 
 The trust policy is restricted to the immutable GitHub OIDC subject for:
@@ -61,14 +65,21 @@ If GitHub changes the emitted subject or the repository/owner identity changes, 
 - `lightsail:GetBlueprints`;
 - `lightsail:GetBundles`.
 
-It fails unless Tokyo `ap-northeast-1` exists, at least one active Ubuntu Linux/Unix blueprint exists, and an active bundle matches:
+It rejects any region other than Tokyo `ap-northeast-1` before an AWS call. It fails unless the catalog returns Tokyo, at least one explicitly active Ubuntu Linux/Unix OS blueprint with a nonempty identifier and explicit LTS text, and an explicitly active, identifiable bundle matching:
 
 - 2 vCPU;
 - 1 GiB RAM;
 - 40 GiB disk;
 - 2048 GiB monthly transfer;
 - Linux/Unix support;
-- price no greater than USD 7/month.
+- exactly one included public IPv4 address;
+- a finite nonnegative numeric price no greater than USD 7/month.
+
+Missing activity state, malformed numeric values (including booleans, numeric strings and NaN), or absent LTS evidence are not success. An entry with incomplete facts cannot become a candidate. No alternative region/size is selected. API errors stop execution without retry or a success report.
+
+Run `python3 -m pytest -q tests/test_aws_oidc_readonly_observation.py` for the offline synthetic contract. The test substitutes a local AWS CLI stub and does not use AWS credentials. Passing it does not validate AWS IAM/SCP policy, establish actual blueprint availability, or authorize provisioning.
+
+Field references: [Blueprint](https://docs.aws.amazon.com/lightsail/2016-11-28/api-reference/API_Blueprint.html) and [Bundle](https://docs.aws.amazon.com/lightsail/2016-11-28/api-reference/API_Bundle.html).
 
 The output deliberately omits account identity and does not query existing static IP resources, because those results can disclose account-specific network identifiers.
 
