@@ -317,6 +317,9 @@ class Package:
         else:
             need(unit.get("LoadState") in ("loaded", "not-found")
                  and unit.get("UnitFileState", "") in ("", "static"), "UNIT_STATE_DRIFT")
+            if unit.get("LoadState") == "loaded":
+                need(unit.get("FragmentPath") == UNIT_PATH
+                     and unit.get("RefuseManualStart") == "yes", "UNIT_STATE_DRIFT")
 
     def verify(self):
         self.h.platform()

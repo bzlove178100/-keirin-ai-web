@@ -259,7 +259,9 @@ class TransactionTests(unittest.TestCase):
         self.install()
         original = self.host.unit_state.copy()
         for change in ({"ActiveState": "active"}, {"UnitFileState": "enabled"},
-                       {"DropInPaths": "/etc/systemd/system/service.d/foreign.conf"}):
+                       {"DropInPaths": "/etc/systemd/system/service.d/foreign.conf"},
+                       {"FragmentPath": "/run/systemd/system/foreign.service"},
+                       {"RefuseManualStart": "no"}):
             self.host.unit_state = original | change
             self.assert_rollback_denied_without_deleting()
 
