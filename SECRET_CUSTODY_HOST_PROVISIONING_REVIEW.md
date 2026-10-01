@@ -5,6 +5,16 @@ Status: **review only — no AWS resource creation is authorized by this file**
 
 This review converts the selected Amazon Lightsail Tokyo 1 GB candidate into an exact provisioning contract that can be checked immediately before a separately authorized live create. It does not create an instance, static IP, SSH key, IAM identity, firewall rule, DNS record or billing commitment.
 
+## Scoped creation authorization — 2026-10-01 20:56:49 JST
+
+The user replied `続けて` directly to the explicit approval request for the presented candidate file, one Tokyo Ubuntu 24.04 / 1 GB / 2 vCPU / 40 GB instance, USD 7/month base bundle (tax/transfer overage separate), one attached static IPv4, browser-SSH-only initial ingress and retention of successfully created resources on failure. In that conversational context, this authorizes proceeding with that exact one-candidate creation. Do not ask the same cost/configuration question again.
+
+The approved template remains blob `4c8913e893ece7ed95e35827af6bf9406783e59e`. Its default and repository metadata remain non-authorizing; the live parameter may now be set to `ONE_CANDIDATE_USD7_APPROVED` for this approved operation. Proposed inputs remain stack `keirin-ai-custody-h1`, instance `keirin-custody-h1`, static IP `keirin-custody-h1-ip`, zone `ap-northeast-1a`, blueprint `ubuntu_24_04`, bundle `micro_3_0`, and existing default key `LightsailDefaultKeyPair`.
+
+Authorization is not completion. No CREATE change set, instance, static IP or SSH login has been performed by this turn. The next required evidence is the authenticated intended-account/Tokyo context, absent proposed stack name, current selected blueprint/bundle and the actual resolved change set with exactly two Add actions. Verify preserve-successful-resources and deletion-policy behavior before Execute. A matching actual proposal can proceed under the existing approval; a different scope, cost, account, ingress or failure behavior requires resolving that difference before execution.
+
+The usable AWS session is on the user's phone; Work has no verified AWS control-plane session and the existing GitHub role cannot provision. Guide the existing phone session without retrying the known Work login failure. Do not repeat inventory/bootstrap, expand IAM, create/download keys or introduce extra resources. Hosted execution, real credentials, hardening, Supabase changes and production prediction remain outside this authorization.
+
 ## Verified cost boundary
 
 Immediately before this review was prepared, current AWS documentation still listed the Linux/Unix Micro 1 GB bundle with public IPv4 at USD 7/month maximum, 2 vCPU, 1 GB RAM, 40 GB SSD and 2 TB transfer. AWS documentation also states that a Lightsail static IPv4 has no additional charge while attached to an instance; an unattached static IPv4 can incur hourly cost.
@@ -153,7 +163,7 @@ The 2026-10-01 final offline review rechecked the [AWS public price](https://aws
 | Blueprint / bundle | `ubuntu_24_04` / `micro_3_0` |
 | ExistingKeyPairName | `LightsailDefaultKeyPair` (metadata observed at 20:39:38 JST; login untested) |
 | ExpectedAccountId | Privately match the intended Proof of Concept account; never commit it |
-| LiveCreateAcknowledgement | Keep `NOT_AUTHORIZED` until the explicit cost/configuration authorization required by this parameter has been obtained |
+| LiveCreateAcknowledgement | `ONE_CANDIDATE_USD7_APPROVED` for the scoped 20:56:49 JST authorization; the template default remains `NOT_AUTHORIZED` |
 
 After that authorization, the acknowledgement value is `ONE_CANDIDATE_USD7_APPROVED`. This is not consent by itself and does not waive inspection of the actual CREATE change set, account/region guards, exact-two-Add scope or failure-retention verification. Do not remove the rule to make pre-approval preparation succeed.
 
@@ -165,16 +175,16 @@ The [CloudFormation new-stack procedure](https://docs.aws.amazon.com/AWSCloudFor
 
 1. Use the intended Proof of Concept account's authenticated AWS control plane, in Tokyo. The existing GitHub OIDC role cannot deploy this template. Its Tokyo inventory-read update is complete; additional live inventory runs require their scoped authorization; do not add provisioning permissions, a provisioning workflow or IAM access keys.
 2. Verify account, region, the proposed stack/instance/static-IP names are absent, the required existing key pair is available, and the selected blueprint/bundle/price remain correct. Any denied or incomplete inventory leaves the result unknown and stops creation.
-3. Upload the template for a CREATE change set; leave OnStackFailure unset so DisableRollback can be selected at execution. Privately supply ExpectedAccountId and the verified ExistingKeyPairName, and inspect the resolved parameters. Use one zone from the observed set; no automatic capacity fallback.
+3. Upload the template for a CREATE change set. In the console's Configure stack options, select Preserve successfully provisioned resources, and verify that behavior again before execution. Do not assume the execution dialog can change an option already fixed during change-set creation. For an API path, use OnStackFailure=DO_NOTHING at creation, or leave it unset and use DisableRollback=true at execution; never supply both. Privately supply ExpectedAccountId and the verified ExistingKeyPairName, and inspect the resolved parameters. Use one zone from the observed set; no automatic capacity fallback.
 4. The change set must contain exactly two Add actions: CustodyCandidate (AWS::Lightsail::Instance) and CustodyStaticIp (AWS::Lightsail::StaticIp). No modify/remove/import/nested stack/IAM/key/add-on action is acceptable. Review any service-managed key or service-role side effect instead of treating it as implicitly authorized.
-5. Obtain explicit approval of the actual change set, cost and bootstrap SSH rule before Execute. Offline lint/tests are not AWS validation or live authorization. Do not create from an unresolved login session or use workflow dispatch as a permission probe.
-6. At execution, use the preserve-successful-resources / disable-rollback option (`DisableRollback=true`), not automatic delete or rollback. Keep RetainExceptOnCreate=false; do not combine DisableRollback with a previously supplied OnStackFailure. Verify these options in the live execution surface. If they cannot be selected or confirmed, stop.
+5. Before Execute, compare the actual resolved change set, cost, bootstrap SSH rule and failure behavior with the user's scoped 20:56:49 JST authorization. Proceed only on an exact match; any deviation needs resolution and authorization for the changed scope. Do not repeat the same cost/configuration approval. Offline lint/tests are not AWS validation or live authorization. Do not create from an unresolved login session or use workflow dispatch as a permission probe.
+6. At execution, verify Preserve successfully provisioned resources is effective, not automatic delete or rollback. The API equivalent is OnStackFailure=DO_NOTHING already fixed on creation or DisableRollback=true supplied at execution, never both. Keep RetainExceptOnCreate=false (the console's Use deletion policy choice). Verify these options in the live execution surface. If they cannot be selected or confirmed, stop.
 7. After execution, verify the instance is running with exact blueprint/bundle/region and the sole static IP is attached to it. Read back the actual platform port rules for both IP families. No second host/IP or automatic re-execution is allowed on timeout or uncertain response; inventory first.
 8. If all checks pass, continue only to read-only/no-secret H1 using the reviewed script and browser SSH. Any missing tooling, failed capacity or listener check blocks qualification; do not install packages or alter the host during H1.
 
 ### Retention and failure handling
 
-Both resources explicitly use DeletionPolicy=Retain and UpdateReplacePolicy=Retain. This prevents stack removal from being treated as an authorized resource cleanup; it also means retained resources can continue costing money. DisableRollback must be confirmed separately at execution. Neither retention nor a timeout is permission to leave resources unattended.
+Both resources explicitly use DeletionPolicy=Retain and UpdateReplacePolicy=Retain. This prevents stack removal from being treated as an authorized resource cleanup; it also means retained resources can continue costing money. The preserve-successful-resources behavior must be confirmed at execution, whether it was fixed on change-set creation or chosen at execution. Neither retention nor a timeout is permission to leave resources unattended.
 
 On partial creation or failed IP attachment: stop, inventory once, record the private resource state, and seek a narrowly scoped attach/release/delete decision for only the candidate resources. A static IP left unattached beyond one hour can incur the published USD 0.005/hour charge. Do not blindly retry the CREATE change set, create a replacement or trigger stack rollback/delete. If the user later authorizes cleanup, verify both the instance and static IP are actually removed; deleting only the CloudFormation stack is insufficient with Retain.
 
@@ -186,6 +196,8 @@ Run `cfn-lint -r ap-northeast-1 -t review/aws_lightsail_candidate.json` and `pyt
 
 Official references:
 
+- [Console stack failure options](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-console-create-stack.html)
+- [CreateChangeSet failure options](https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_CreateChangeSet.html)
 - [ExecuteChangeSet failure options](https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_ExecuteChangeSet.html)
 - [Lightsail instance resource](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-lightsail-instance.html)
 - [Port and lightsail-connect alias](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-lightsail-instance-port.html)

@@ -2,7 +2,7 @@
 
 Updated: 2026-10-01 (Asia/Tokyo).
 
-## Current boundary: corrected Tokyo inventory complete; default key observed
+## Current boundary: one candidate authorized; phone-console change-set review pending
 
 Read this section first when the user says `続けて`. The SCP, OIDC bootstrap and initial catalog observation are complete; do not restart phone-console setup, recreate the stack/secret, or rerun the observation without a new reason.
 
@@ -14,13 +14,23 @@ Read this section first when the user says `続けて`. The SCP, OIDC bootstrap 
 - Job `observe` (`110305976403`): OIDC credential configuration and catalog observation both succeeded.
 - This validates the deployed OIDC path and the three catalog reads at that time, not resource creation permission or host readiness.
 
-## Creation configuration and public-price review — 2026-10-01
+## Scoped creation authorization — 2026-10-01 20:56:49 JST
 
-The next paid scope is fully specified offline, but not yet authorized or executed. AWS's [current public pricing](https://aws.amazon.com/lightsail/pricing/) was rechecked on 2026-10-01: Linux/Unix with public IPv4, 1 GB memory, 2 vCPU, 40 GB disk and 2 TB transfer is USD 7/month. The [billing FAQ](https://docs.aws.amazon.com/en_en/lightsail/latest/userguide/amazon-lightsail-frequently-asked-questions-faq-billing-and-account-management.html) confirms no additional static-IP charge while attached, and USD 0.005/hour when unattached for more than one hour. Taxes, currency conversion and transfer overage are outside the bundle ceiling; no free-trial credit is assumed.
+The user replied `続けて` directly to the explicit approval request for the presented candidate file, one Tokyo Ubuntu 24.04 / 1 GB / 2 vCPU / 40 GB instance, USD 7/month base bundle (tax/transfer overage separate), one attached static IPv4, browser-SSH-only initial ingress and retention of successfully created resources on failure. In that conversational context, this authorizes proceeding with that exact one-candidate creation. Do not ask the same cost/configuration question again.
+
+The approved template remains blob `4c8913e893ece7ed95e35827af6bf9406783e59e`. Its default and repository metadata remain non-authorizing; the live parameter may now be set to `ONE_CANDIDATE_USD7_APPROVED` for this approved operation. Proposed inputs remain stack `keirin-ai-custody-h1`, instance `keirin-custody-h1`, static IP `keirin-custody-h1-ip`, zone `ap-northeast-1a`, blueprint `ubuntu_24_04`, bundle `micro_3_0`, and existing default key `LightsailDefaultKeyPair`.
+
+Authorization is not completion. No CREATE change set, instance, static IP or SSH login has been performed by this turn. The next required evidence is the authenticated intended-account/Tokyo context, absent proposed stack name, current selected blueprint/bundle and the actual resolved change set with exactly two Add actions. Verify preserve-successful-resources and deletion-policy behavior before Execute. A matching actual proposal can proceed under the existing approval; a different scope, cost, account, ingress or failure behavior requires resolving that difference before execution.
+
+The usable AWS session is on the user's phone; Work has no verified AWS control-plane session and the existing GitHub role cannot provision. Guide the existing phone session without retrying the known Work login failure. Do not repeat inventory/bootstrap, expand IAM, create/download keys or introduce extra resources. Hosted execution, real credentials, hardening, Supabase changes and production prediction remain outside this authorization.
+
+## Creation configuration and public-price review — 2026-10-01 (before approval)
+
+At the earlier offline review, the paid scope was fully specified but not yet authorized or executed; subsequent authorization is recorded above. AWS's [current public pricing](https://aws.amazon.com/lightsail/pricing/) was rechecked on 2026-10-01: Linux/Unix with public IPv4, 1 GB memory, 2 vCPU, 40 GB disk and 2 TB transfer is USD 7/month. The [billing FAQ](https://docs.aws.amazon.com/en_en/lightsail/latest/userguide/amazon-lightsail-frequently-asked-questions-faq-billing-and-account-management.html) confirms no additional static-IP charge while attached, and USD 0.005/hour when unattached for more than one hour. Taxes, currency conversion and transfer overage are outside the bundle ceiling; no free-trial credit is assumed.
 
 The exact candidate remains unchanged from main `16c31f91a4205991c28ac2a33e8c64678a2a4f29`, blob `4c8913e893ece7ed95e35827af6bf9406783e59e`. Its two resources are CustodyCandidate and CustodyStaticIp. The proposed new stack name is `keirin-ai-custody-h1`; stack-name absence and independent account identity are still unverified. The selected zone is `ap-northeast-1a` and the existing key parameter is `LightsailDefaultKeyPair`, observed by inventory run #2. Blueprint/bundle availability evidence remains the 18:28 catalog run; public-price verification is not a new AWS API observation.
 
-The template's LiveCreateAcknowledgement parameter explicitly requires fresh user authorization of this exact paid creation. The user's latest `続けて` advanced preparation only. Do not set its approved value or remove/weaken that guard to bypass the missing cost decision. Present the exact one-host cost, browser-only SSH proposal and failure-retention behavior for approval, then use the authenticated phone console for the remaining account/stack checks and CREATE change-set review. An actual CREATE change set has not been prepared. Review it before execution under the existing execution sequence. Do not retry the previously failed Work AWS browser, add deploy permission, repeat inventory, or claim live access from GitHub authentication.
+At this earlier review point, the cost decision was still pending and the acknowledgement remained NOT_AUTHORIZED. The subsequent 20:56:49 JST authorization is recorded above. The actual CREATE change set and account/stack checks remain pending; do not confuse approval with execution or GitHub authentication with AWS access.
 
 ## Corrected inventory verified on 2026-10-01
 
@@ -94,9 +104,9 @@ Local cfn-lint 1.57.1 completed with no findings and all 10 candidate safety-con
 
 Default-key identity and absent instance/static-IP name collisions are verified at the corrected inventory time. Next, independently verify account identity, stack-name collision and current price/IDs before a concrete provisioning change-set review. Key login and provisioning permissions remain separate checks. The deployed role can perform the three Tokyo inventory reads and three original catalog reads, but cannot provision resources. Work GitHub authentication is not AWS authentication. If access is unavailable, report that precise blocker rather than repeat completed mobile/bootstrap steps.
 
-Prepare and inspect a CREATE change set with exactly two Add actions, then obtain specific approval of the actual change set, cost, SSH and failure-retention behavior before execution. Resolve current main and follow `AGENTS.md`. Passing observation, lint, CI or an acknowledgement string does not grant live authorization.
+Prepare and inspect the actual CREATE change set with exactly two Add actions, and confirm its parameters, cost, SSH and failure-retention behavior match the 20:56:49 JST authorization before execution. Do not repeat the already answered cost/configuration approval; resolve any deviation before executing. Resolve current main and follow `AGENTS.md`. Passing observation, lint, CI or an acknowledgement string does not grant live authorization.
 
-A later explicit live-provision authorization must identify exactly one Tokyo candidate, its selected observed Ubuntu LTS blueprint, the USD 7/month bundle ceiling and one attached static IPv4. Do not substitute region/size or create multiple paid hosts. Unknown, unavailable, ambiguous or over-budget values remain a hard stop.
+The 20:56:49 JST live-provision authorization covers exactly one Tokyo candidate with the selected observed Ubuntu 24.04 LTS blueprint, USD 7/month bundle ceiling and one attached static IPv4. Do not substitute region/size or create multiple paid hosts. Unknown, unavailable, ambiguous or over-budget values remain a hard stop.
 
 After authorized creation, the host is untrusted/no-secret. Run only read-only/no-secret H1 preflight first. Host hardening, verified static egress, Supabase network restrictions, Data API/SSL management changes, C2 DDL, synthetic C3 custody and C4 real credentials are subsequent separate boundaries. Real always-on custody also needs the reviewed availability/cost decision.
 
