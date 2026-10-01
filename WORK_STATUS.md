@@ -1,6 +1,6 @@
 # Work status
 
-## Current boundary: AWS read-only observation passed
+## Current boundary: offline single-host proposal prepared; live creation pending
 
 Updated: 2026-10-01 (Asia/Tokyo).
 
@@ -10,7 +10,15 @@ Verified: Tokyo `ap-northeast-1`; active `ubuntu_24_04` and `ubuntu_22_04` LTS b
 
 Static IPv4 allocation was not tested. The [AWS billing FAQ](https://docs.aws.amazon.com/en_en/lightsail/latest/userguide/amazon-lightsail-frequently-asked-questions-faq-billing-and-account-management.html), rechecked 2026-10-01, states no extra charge when attached and USD 0.005/hour when unattached for more than one hour. Published pricing does not prove live allocation availability.
 
-The current boundary is to report these facts and obtain a separate explicit authorization before creating one paid candidate and one static IPv4. `authorized_for_live_create=false` remains in the observed result. No host or static IP was created. Do not repeat SCP edits, OIDC stack/secret setup, or the observation without new evidence requiring it. `WORK_RESUME.md` records the completed root-cause fix, browser authentication findings and next-step constraints.
+The catalog facts are recorded and the concrete single-host CloudFormation proposal is prepared offline. A separate explicit live authorization is still required before creating one paid candidate and one static IPv4. `authorized_for_live_create=false` remains in the observed result. No host or static IP was created. Do not repeat SCP edits, OIDC stack/secret setup, or the observation without new evidence requiring it. `WORK_RESUME.md` records the completed root-cause fix, browser authentication findings and next-step constraints.
+
+## Concrete host proposal prepared offline
+
+`review/aws_lightsail_candidate.json` proposes exactly one Tokyo Ubuntu 24.04 LTS / micro_3_0 candidate and one attached static IPv4. The planned names are keirin-custody-h1 and keirin-custody-h1-ip, not verified existing resources. The USD 7/month figure is the observed bundle price, subject to a fresh pre-execution price check.
+
+The template rejects its default acknowledgement, wrong region or mismatching expected account. It requires an existing Tokyo Lightsail key pair, requests only browser-SSH source alias ingress, embeds no launch script/credentials and retains both resources on stack removal. The review explains failure-retention costs, change-set review, actual firewall verification and separately authorized cleanup. Local cfn-lint 1.57.1 passed with no findings and 10 candidate safety-contract tests passed; the offline CI repeats these checks.
+
+No AWS inventory, change set, host, static IP, key or IAM change was made by this preparation. Account/resource-name/key availability and deployment permissions remain unknown. The existing OIDC role remains restricted to the three catalog reads. Read `SECRET_CUSTODY_HOST_PROVISIONING_REVIEW.md` for the concrete execution sequence.
 
 ## Product direction
 
@@ -114,8 +122,8 @@ For the hardened host, start with exactly one USD 7/month candidate only after a
 
 ## Next work / next boundary
 
-1. Report the successful catalog observation and published static-IPv4 pricing; stop before live creation.
-2. Read the existing provisioning review and manifest, select one observed Ubuntu LTS blueprint, and obtain explicit authorization for exactly one Tokyo USD 7/month candidate and one attached static IPv4.
+1. Use the prepared template/review; do not repeat completed catalog observation or bootstrap. Verify the intended AWS account, absent resource names, existing Tokyo key metadata, selected IDs and current price through an authenticated AWS control plane.
+2. Prepare and inspect a CREATE change set containing exactly the candidate and attached IPv4. Obtain explicit approval of the actual change set, USD 7/month bundle, browser-SSH ingress and failure-retention behavior before executing it. Offline checks are not live authorization.
 3. Do not substitute a region/size or allocate an address as a test. Missing or changed facts require diagnosis before mutation.
 4. After authorized creation, run only the read-only/no-secret H1 preflight.
 5. Compare actual host facts to the reviewed hardening/recovery plans; obtain separate authorization before mutating hardening.

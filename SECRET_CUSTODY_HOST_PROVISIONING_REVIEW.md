@@ -115,8 +115,58 @@ The manifest's `authorized_for_live_create` field stays `false` in Git. A live a
 
 ## Current tool boundary
 
-The connected tools in this chat can maintain the repository and inspect public provider documentation, but no AWS account control-plane action is currently connected. Therefore this review can be completed and tested here, while actual Lightsail creation requires an authenticated AWS-capable browser/tool session.
+GitHub OIDC catalog observation succeeded on 2026-10-01. The connected role permits only GetRegions, GetBlueprints and GetBundles; it cannot create resources or inspect existing instances/key pairs. Actual provisioning still requires an authenticated AWS-capable control-plane session with the separately reviewed scope. Work GitHub login is not an AWS session.
 
 ## Non-authorization
 
 This review does not authorize or perform AWS provisioning, charges, IAM/SSH-key creation, firewall mutation, Supabase management-plane changes, C2 DDL, database-password creation, Vault/binding creation, provider credential use, hosted execution, scheduling, report delivery, production prediction, prediction DB writes or external race-data fetching.
+
+## Concrete CloudFormation proposal after live catalog observation
+
+Prepared 2026-10-01 after successful read-only run [36842907590](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/36842907590).
+
+`review/aws_lightsail_candidate.json` is a locally reviewable CloudFormation proposal, not a deployed stack. Its exact desired resources are:
+
+| Logical resource | Proposed configuration |
+| --- | --- |
+| CustodyCandidate | One Ubuntu 24.04 LTS `ubuntu_24_04`, `micro_3_0`, in one observed Tokyo zone |
+| CustodyStaticIp | One static IPv4, explicitly attached to that candidate after its creation |
+
+The observed bundle is 2 vCPU / 1 GiB / 40 GiB / 2048 GiB transfer at USD 7/month. The template pins the observed IDs but cannot enforce future AWS prices; the live P0 price check remains mandatory. Taxes, exchange conversion, transfer overage and separately approved extras are not a guaranteed all-in USD 7 bill. The initial planned resource names are `keirin-custody-h1` and `keirin-custody-h1-ip`; these are proposed names, not existing resources.
+
+The default acknowledgement is NOT_AUTHORIZED. Template rules require an explicit acknowledgement, Tokyo, and a privately supplied expected account matching the deployment account. An acknowledgement string is an execution interlock, not proof of user consent or an IAM access control. Keep the Git manifest's `authorized_for_live_create=false`.
+
+An existing Tokyo Lightsail key-pair name is required with no default. Verify it by metadata only before execution; do not retrieve a private key. This avoids silently depending on an unverified default key. If no usable key exists, stop and review the separate key-creation boundary; do not create an access key or SSH key as a fallback.
+
+The requested platform firewall is TCP 22 only, using AWS's `lightsail-connect` source alias with empty explicit IPv4 and IPv6 CIDR lists. No HTTP, HTTPS or runtime port is requested. This is a temporary administration proposal requiring approval together with the instance creation. It does not prove live firewall state, disable IPv6 on the host, or implement host-side outbound restrictions. CloudFormation operations must not be assumed atomic; inspect the actual IPv4/IPv6 rules before H1 and before treating the host as safe.
+
+### Execution sequence after approval
+
+1. Use the intended Proof of Concept account's authenticated AWS control plane, in Tokyo. The existing GitHub OIDC role remains catalog-read-only and cannot deploy this template. Do not widen that role, add a provisioning workflow or create IAM access keys.
+2. Verify account, region, the proposed stack/instance/static-IP names are absent, the required existing key pair is available, and the selected blueprint/bundle/price remain correct. Any denied or incomplete inventory leaves the result unknown and stops creation.
+3. Upload the template for a CREATE change set; leave OnStackFailure unset so DisableRollback can be selected at execution. Privately supply ExpectedAccountId and the verified ExistingKeyPairName, and inspect the resolved parameters. Use one zone from the observed set; no automatic capacity fallback.
+4. The change set must contain exactly two Add actions: CustodyCandidate (AWS::Lightsail::Instance) and CustodyStaticIp (AWS::Lightsail::StaticIp). No modify/remove/import/nested stack/IAM/key/add-on action is acceptable. Review any service-managed key or service-role side effect instead of treating it as implicitly authorized.
+5. Obtain explicit approval of the actual change set, cost and bootstrap SSH rule before Execute. Offline lint/tests are not AWS validation or live authorization. Do not create from an unresolved login session or use workflow dispatch as a permission probe.
+6. At execution, use the preserve-successful-resources / disable-rollback option (`DisableRollback=true`), not automatic delete or rollback. Keep RetainExceptOnCreate=false; do not combine DisableRollback with a previously supplied OnStackFailure. Verify these options in the live execution surface. If they cannot be selected or confirmed, stop.
+7. After execution, verify the instance is running with exact blueprint/bundle/region and the sole static IP is attached to it. Read back the actual platform port rules for both IP families. No second host/IP or automatic re-execution is allowed on timeout or uncertain response; inventory first.
+8. If all checks pass, continue only to read-only/no-secret H1 using the reviewed script and browser SSH. Any missing tooling, failed capacity or listener check blocks qualification; do not install packages or alter the host during H1.
+
+### Retention and failure handling
+
+Both resources explicitly use DeletionPolicy=Retain and UpdateReplacePolicy=Retain. This prevents stack removal from being treated as an authorized resource cleanup; it also means retained resources can continue costing money. DisableRollback must be confirmed separately at execution. Neither retention nor a timeout is permission to leave resources unattended.
+
+On partial creation or failed IP attachment: stop, inventory once, record the private resource state, and seek a narrowly scoped attach/release/delete decision for only the candidate resources. A static IP left unattached beyond one hour can incur the published USD 0.005/hour charge. Do not blindly retry the CREATE change set, create a replacement or trigger stack rollback/delete. If the user later authorizes cleanup, verify both the instance and static IP are actually removed; deleting only the CloudFormation stack is insufficient with Retain.
+
+No launch script, runtime activation, real provider credential, account ID or IP is embedded in the template. Outputs include only the no-secret qualification label and region. Private live account/key/resource details remain outside Git.
+
+### Validation and limits
+
+Run `cfn-lint -r ap-northeast-1 -t review/aws_lightsail_candidate.json` and `python -m pytest -q tests/test_aws_lightsail_candidate_template.py`. These are offline schema and safety-contract checks only. The live account inventory, current price, key existence, AWS change-set validation, permissions, firewall read-back, attachment and host qualification are still unverified.
+
+Official references:
+
+- [ExecuteChangeSet failure options](https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_ExecuteChangeSet.html)
+- [Lightsail instance resource](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-lightsail-instance.html)
+- [Port and lightsail-connect alias](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-lightsail-instance-port.html)
+- [Static IP attachment](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-lightsail-staticip.html)
+- [Lightsail billing](https://docs.aws.amazon.com/en_en/lightsail/latest/userguide/amazon-lightsail-frequently-asked-questions-faq-billing-and-account-management.html)
