@@ -32,8 +32,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install pinned test runner
-        run: python -m pip install pytest==8.3.5
+      - name: Install pinned offline validators
+        run: python -m pip install pytest==8.3.5 cfn-lint==1.57.1
+      - name: Validate OIDC CloudFormation template offline
+        run: cfn-lint -r ap-northeast-1 -t review/aws_github_oidc_readonly_role.yaml
       - name: Check shell syntax
         run: bash -n review/aws_lightsail_readonly_observation.sh
       - name: Verify synthetic catalog rejection without AWS credentials
