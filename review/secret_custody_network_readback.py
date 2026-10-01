@@ -32,6 +32,25 @@ class Stop(Exception):
     pass
 
 
+def checked(stage, operation):
+    """Attribute failures without exposing exception text or command output."""
+    try:
+        return operation()
+    except Exception as error:
+        if isinstance(error, Stop):
+            failure = error
+        else:
+            category = ("JSON_SYNTAX" if isinstance(error, json.JSONDecodeError)
+                        else "TEXT_ENCODING" if isinstance(error, UnicodeError)
+                        else "OS_READ_ERROR" if isinstance(error, OSError)
+                        else "INVALID_VALUE" if isinstance(error, ValueError)
+                        else "INVALID_TYPE" if isinstance(error, TypeError)
+                        else "UNEXPECTED_EXCEPTION")
+            failure = Stop(category)
+        failure.stage = stage
+        raise failure from None
+
+
 def need(ok, code):
     if not ok:
         raise Stop(code)
@@ -119,6 +138,32 @@ def nft_summary(raw):
     return lines
 
 
+def listener_address(host):
+    # ss versions emit either [IPv6]%zone or [IPv6%zone]. Parse the
+    # brackets before discarding the zone; strip('[]') leaves a stray ']'
+    # with the first (Ubuntu 24.04 iproute2) representation.
+    zone = None
+    if host.startswith("["):
+        inside, closing, suffix = host[1:].partition("]")
+        need(closing and not any(c in inside + suffix for c in "[]"),
+             "LISTENER_ADDRESS_UNRECOGNIZED")
+        if suffix:
+            need(suffix.startswith("%") and "%" not in inside,
+                 "LISTENER_ADDRESS_UNRECOGNIZED")
+            zone = suffix[1:]
+        host = inside
+    if "%" in host:
+        host, zone = host.split("%", 1)
+    need(zone is None or bool(zone) and not any(c in zone for c in "[]%")
+         and not any(c.isspace() for c in zone), "LISTENER_ADDRESS_UNRECOGNIZED")
+    if host == "*":
+        return None
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        raise Stop("LISTENER_ADDRESS_UNRECOGNIZED") from None
+
+
 def listener_summary(raw, family):
     need(family in (4, 6) and len(raw) <= 131072, "LISTENER_OUTPUT_INVALID")
     found = Counter()
@@ -129,11 +174,10 @@ def listener_summary(raw, family):
              "LISTENER_FORMAT_UNRECOGNIZED")
         host, port = fields[4].rsplit(":", 1)
         need(port.isdigit() and 0 < int(port) <= 65535, "LISTENER_PORT_UNRECOGNIZED")
-        host = host.strip("[]").split("%", 1)[0]
-        if host == "*":
+        address = listener_address(host)
+        if address is None:
             scope = "wildcard"
         else:
-            address = ipaddress.ip_address(host)
             need(address.version == family, "LISTENER_FAMILY_MISMATCH")
             scope = ("wildcard" if address.is_unspecified else "loopback" if address.is_loopback
                      else "link_local" if address.is_link_local else "specific")
@@ -160,26 +204,29 @@ def service_summary(name, raw):
 
 def snapshot():
     need(os.geteuid() == 0, "ROOT_READ_REQUIRED")
-    need(read_file("/proc/1/comm") == "systemd", "SYSTEMD_HOST_REQUIRED")
-    need(os.readlink("/proc/self/ns/net") == os.readlink("/proc/1/ns/net"), "HOST_NETWORK_NAMESPACE_REQUIRED")
-    lines = nft_summary(command(NFT))
+    need(checked("PID1_READ", lambda: read_file("/proc/1/comm")) == "systemd", "SYSTEMD_HOST_REQUIRED")
+    need(checked("NAMESPACE_READ", lambda: os.readlink("/proc/self/ns/net") == os.readlink("/proc/1/ns/net")), "HOST_NETWORK_NAMESPACE_REQUIRED")
+    raw = checked("NFT_READ", lambda: command(NFT))
+    lines = checked("NFT_PARSE", lambda: nft_summary(raw))
     for family in (4, 6):
         path = "/proc/net/" + ("ip" if family == 4 else "ip6") + "_tables_names"
-        names = read_file(path, optional=True)
+        names = checked("LEGACY_IPV" + str(family) + "_READ", lambda: read_file(path, optional=True))
         # Nonempty legacy tables require separate inspection; never infer accept
         # or deny from table count, absent proc entry, or an nft-only snapshot.
         lines.append("FACT legacy_ipv" + str(family) + "_tables="
                      + ("not_exposed" if names is None else str(len(names.splitlines()))))
-    lines += listener_summary(command(SS4, limit=131072), 4)
-    lines += listener_summary(command(SS6, limit=131072), 6)
+    for family, args in ((4, SS4), (6, SS6)):
+        raw = checked("IPV" + str(family) + "_LISTENERS_READ", lambda: command(args, limit=131072))
+        lines += checked("IPV" + str(family) + "_LISTENERS_PARSE", lambda: listener_summary(raw, family))
     for key, path in (("ipv4_forwarding", "/proc/sys/net/ipv4/ip_forward"),
                       ("ipv6_forwarding", "/proc/sys/net/ipv6/conf/all/forwarding"),
                       ("ipv6_disabled_all", "/proc/sys/net/ipv6/conf/all/disable_ipv6")):
-        value = read_file(path, optional=True)
+        value = checked(key.upper() + "_READ", lambda: read_file(path, optional=True))
         need(value in (None, "0", "1"), "FORWARDING_VALUE_UNRECOGNIZED")
         lines.append("FACT " + key + "=" + ("not_exposed" if value is None else value))
     for name in ("nftables", "ufw"):
-        lines.append(service_summary(name, command((*SERVICE, name + ".service"), limit=4096)))
+        raw = checked(name.upper() + "_SERVICE_READ", lambda: command((*SERVICE, name + ".service"), limit=4096))
+        lines.append(checked(name.upper() + "_SERVICE_PARSE", lambda: service_summary(name, raw)))
     lines += ["FACT cloud_firewall=not_observed", "FACT effective_packet_policy=not_qualified"]
     return lines
 
@@ -192,6 +239,8 @@ def main():
         return 0
     except Exception as error:
         print("STOP " + (str(error) if isinstance(error, Stop) else "NETWORK_READBACK_UNAVAILABLE"))
+        if isinstance(error, Stop) and hasattr(error, "stage"):
+            print("STAGE " + error.stage)
         print("RESULT H3_NETWORK_OBSERVATION_INCOMPLETE_NO_MUTATION")
         return 1
 
