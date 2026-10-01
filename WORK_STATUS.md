@@ -1,8 +1,8 @@
 # Work status
 
-## Immediate AWS boundary: reviewed SCP proposal awaiting approval
+## Immediate AWS boundary: verify Tokyo CloudFormation after SCP update
 
-The live blocker is now diagnosed, not unknown. Proof of Concept Tokyo CloudFormation is denied by the Root-attached `AdvancedModeRegionRestrictionSecurityControlPolicy` `RegionFloor` statement. A management-account CloudShell read-only preparation and local review produced `current_scp.json` and `proposed_scp.json`; `review.sh` returned `REVIEW PASS`. The proposal preserves all other statements and the existing `Effect / NotAction / Resource`, keeps the current region list for other accounts, and gives only Proof of Concept the additional Tokyo region. AWS has not been changed. The next live step is an explicit-approval boundary for `organizations update-policy`. Do not reopen phone JSON editing or repeat earlier browser/app diagnosis. After a successful, verified SCP update, verify Proof of Concept CloudFormation in Tokyo, then complete the reviewed OIDC bootstrap. Hand substantial follow-on execution to Work after OIDC is live; Work does not inherit the current Safari/CloudShell session.
+The Root-attached `AdvancedModeRegionRestrictionSecurityControlPolicy` blocker was diagnosed and the reviewed account-scoped change was applied after explicit user approval. `apply_scp.sh` re-read the live policy, refused drift, applied exactly the reviewed proposal, read the policy back, and reported `SCP UPDATE VERIFIED`. The change keeps the existing region list and enforcement surface for other accounts while giving only Proof of Concept the additional Tokyo `ap-northeast-1` exception. Do not run the SCP update again. The next live step is to verify that Proof of Concept can read CloudFormation in Tokyo. If that succeeds, complete the reviewed GitHub OIDC bootstrap; if it fails, stop on the new concrete error. Hand substantial follow-on execution to Work after OIDC is live; Work does not inherit the current Safari/CloudShell session.
 
 
 Updated: 2026-10-01 (Asia/Tokyo).
