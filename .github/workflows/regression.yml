@@ -184,3 +184,15 @@ jobs:
         # This disposable runner gets a temporary H2a fixture, removed by its rollback.
         # No cloud session, secret, production payload, network request or host swap change.
         run: sudo -n env H2B_CI_FIXTURE=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" /usr/bin/python3 -I -B tests/test_secret_custody_h2b_systemd.py
+
+  custody-h2c-systemd:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test pinned validators and memory-probe failure contracts
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_h2c.py
+      - name: Test real private tmpfs, sealed handoff, rejection and cleanup
+        # Reuses the owned disposable H2a fixture; real systemd/kernel, no secrets.
+        # Only the fixture's global swap precheck is synthetic; per-cgroup swap is real.
+        run: sudo -n env H2B_CI_FIXTURE=1 H2C_CI_FIXTURE=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" /usr/bin/python3 -I -B tests/test_secret_custody_h2c_systemd.py

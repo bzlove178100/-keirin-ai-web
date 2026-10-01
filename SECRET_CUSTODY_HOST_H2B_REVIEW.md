@@ -1,5 +1,13 @@
 # H2b: bounded synthetic sandbox verification
 
+Live result: **passed** in user screenshot IMG_8926 at 2026-10-02 00:46 JST.
+The command pins commit `2e6f415c757a5ec87b43a24988ac4e3999fe1d59` and script
+SHA-256 `b3c6513d382623f732fc9634ffe414b34c0da93048ce351df17cd2429a70d0bf`.
+All 14 PASS records and `RESULT H2B_BASIC_SANDBOX_OK_NO_RUNTIME` appear before
+the shell prompt. PR #168 records CI and this user-supplied host evidence.
+Do not repeat this completed probe just to resume. The next temporary step is
+[H2c synthetic memory verification](SECRET_CUSTODY_HOST_H2C_REVIEW.md), not activation.
+
 H2a recovery, apply and read-only verify succeeded in the user's Termius screenshot
 IMG_8925 at 2026-10-02 00:23 JST. The user said `次` at 00:25 JST immediately after
 the proposed next step of checking the installed restrictions. This authorizes
@@ -106,3 +114,4 @@ Primary sources reviewed at systemd v255:
 [service deadlines](https://github.com/systemd/systemd/blob/v255/man/systemd.service.xml),
 [execution isolation](https://github.com/systemd/systemd/blob/v255/man/systemd.exec.xml),
 [resource controls](https://github.com/systemd/systemd/blob/v255/man/systemd.resource-control.xml).
+
