@@ -288,14 +288,16 @@ UseRoutes=yes
 
 def networkd_child():
     guard()
-    # A fresh sysfs belongs to the fixture netns, and its superblock is read-only.
+    # A fresh sysfs view belongs to the fixture netns. Set per-mount read-only
+    # after mounting: an existing sysfs superblock may already be read-write.
     # Refuse to mount anything in PID 1's mount namespace.
     if os.readlink("/proc/self/ns/mnt") == os.readlink("/proc/1/ns/mnt"):
         raise RuntimeError("PRIVATE_MOUNT_NAMESPACE_REQUIRED")
-    t.run("mount", "-t", "sysfs", "-o", "ro,nosuid,nodev,noexec", "sysfs", "/sys")
+    t.run("mount", "-t", "sysfs", "-o", "nosuid,nodev,noexec", "sysfs", "/sys")
+    t.run("mount", "-o", "remount,bind,ro", "/sys")
     assert os.statvfs("/sys").f_flag & os.ST_RDONLY
     print("PASS NETWORKD_FRESH_READONLY_SYSFS", flush=True)
-    t.run("/usr/lib/systemd/systemd-networkd", "--version")
+    print(t.run("/usr/lib/systemd/systemd-networkd", "--version").stdout.decode(), flush=True)
     os.execv("/usr/lib/systemd/systemd-networkd", ["systemd-networkd"])
 
 
@@ -408,6 +410,12 @@ def lifecycle():
 
 
 class Tests(unittest.TestCase):
+    def test_host_mount_namespace_refused_before_mount(self):
+        with patch(__name__ + ".guard"), patch.object(os, "readlink", return_value="same"), patch.object(t, "run") as mutate:
+            with self.assertRaises(RuntimeError):
+                networkd_child()
+            mutate.assert_not_called()
+
     def test_host_namespace_refused_before_mutation(self):
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "KC_DHCP_CI": "1"}), patch.object(os, "geteuid", return_value=0), patch.object(os, "readlink", return_value="same"), patch.object(t, "run") as mutate:
             with self.assertRaises(RuntimeError):
