@@ -293,7 +293,9 @@ def networkd_child():
     # Refuse to mount anything in PID 1's mount namespace.
     if os.readlink("/proc/self/ns/mnt") == os.readlink("/proc/1/ns/mnt"):
         raise RuntimeError("PRIVATE_MOUNT_NAMESPACE_REQUIRED")
-    t.run("mount", "-t", "sysfs", "-o", "nosuid,nodev,noexec", "sysfs", "/sys")
+    Path("/run/kc-sys").mkdir()
+    t.run("mount", "-t", "sysfs", "-o", "nosuid,nodev,noexec", "sysfs", "/run/kc-sys")
+    t.run("mount", "--bind", "/run/kc-sys", "/sys")
     t.run("mount", "-o", "remount,bind,ro", "/sys")
     assert os.statvfs("/sys").f_flag & os.ST_RDONLY
     print("PASS NETWORKD_FRESH_READONLY_SYSFS", flush=True)
