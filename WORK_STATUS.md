@@ -1,6 +1,18 @@
 # Work status
 
-## Current boundary: live dependencies observed; maintenance policy design
+## Current implementation: isolated DHCPv4 lifecycle qualification
+
+Updated: 2026-10-02 (Asia/Tokyo).
+
+PR #175 merged at `06646c9b40726517e71da98bcd9509ebc1395b43` after all five workflows succeeded on head `59246821baf89b7bac3a7284e729ba29b52526f1`. The complete user dependency report is accepted below; no identical phone retry is needed.
+
+The next implementation adds `tests/test_secret_custody_network_dhcp.py` and a mandatory Ubuntu CI job. It uses the actual networkd client in private network/mount/runtime/config namespaces and a synthetic DHCP server to test unicast renewal, broadcast rebinding to an alternate server, TCP transport continuity and lease expiry. See [scope and limitations](SECRET_CUSTODY_NETWORK_DHCP_REVIEW.md). Three local parser/host-namespace refusal tests pass; actual lifecycle success must be read from exact-head CI before merge.
+
+Source review identified a material enforcement distinction: DHCP discovery/rebinding use raw packet sockets; bound renewal uses UDP. Only renewal asserts inet firewall counter passage. Passing this fixture must not be described as raw-frame filtering, DHCP authentication, address renumbering or complete maintenance qualification. The existing static transition/watchdog tests remain intact.
+
+Next after this slice: address raw-socket/control-packet enforcement, then DHCPv6/RA/ND/PMTU and composition with fallback. Initial restricted maintenance installation and recovery from a wrong shared allowlist remain unresolved. No live firewall command, independent AWS/SSH access, new resource/IAM/inventory or credential is introduced. H2a and every runtime/provider/prediction/DB-write/data-fetch/scheduler/report gate remain inactive/OFF.
+
+## Accepted live evidence and maintenance design: live dependencies observed; maintenance policy design
 
 Updated: 2026-10-02 08:40 JST (Asia/Tokyo).
 
@@ -276,4 +288,5 @@ Local shell syntax validation and 58 offline tests passed, including synthetic p
 Verified base: PR #153 merged, main `c3fd6d1488f1b4c8113ca652ca7dd109c15413d4`; its five exact-head CI workflows succeeded. The unchanged OIDC CloudFormation template passed local `cfn-lint==1.57.1` for Tokyo with no findings and no AWS credentials in the validation process environment. The offline CI now repeats that template check alongside the existing catalog tests. This is local schema validation, not AWS account/change-set validation or deployment.
 
 The SCP change and OIDC bootstrap were subsequently completed, and live run #1 succeeded. Those later observations supersede the old browser/session blocker. Offline work itself did not verify live AWS state. The successful live run also reported checkout Node.js deprecation and ubuntu-latest migration notices; these remain nonblocking maintenance follow-ups.
+
 

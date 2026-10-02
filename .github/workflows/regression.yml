@@ -256,3 +256,15 @@ jobs:
         run: /usr/bin/python3 -I -B tests/test_secret_custody_network_dependencies.py
       - name: Test actual Ubuntu local readers with sanitized output
         run: sudo -n env GITHUB_ACTIONS="$GITHUB_ACTIONS" /usr/bin/python3 -I -B tests/test_secret_custody_network_dependencies.py --ci-host
+
+  custody-network-dhcpv4:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test DHCP fixture parser and host-namespace guard
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_network_dhcp.py
+      - name: Test actual networkd renewal, rebinding and lease expiry
+        # Private net/mount namespaces and runtime/config; never host networkd.
+        # Fixed local DHCP server only; no external route from the peer namespace.
+        run: sudo -n env KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_network_dhcp.py --systemd
