@@ -7,7 +7,7 @@ cannot establish that address renewal or rebinding works. This change runs the
 installed Ubuntu 24.04 systemd-networkd client against a minimal local synthetic
 DHCP server inside two disposable namespaces. No additional package is needed.
 
-## Executed acceptance cases (require successful CI)
+## Executed acceptance cases
 
 - Acquire a real lease and DHCP default route; read networkd's private lease.
 - Observe unicast DHCPREQUEST with ciaddr, without requested-address/server-ID
@@ -102,4 +102,15 @@ runtime and checks actual detection before/after it. It preserves sysfs,
 network/runtime/config isolation, all original lifecycle deadlines, and every
 acceptance assertion. Startup/version and bounded journal context remain
 available if another stage fails. Five offline refusal/parser tests pass.
-Actual Ubuntu lifecycle CI is still required before claiming the repair worked.
+Actual Ubuntu lifecycle CI now passes: code head
+`c7b040e515f72291168ffc42c2ac0bc9d8f9c22f`, regression run
+`37029254624`, DHCP job `110911645738`, networkd `255.4-1ubuntu8.17`.
+The five acceptance PASS records and final
+`SYNTHETIC_NETWORKD_DHCPV4_LIFECYCLE_OK_NO_LIVE_APPLY` were read from
+that job's log. The real client progressed past initialization without exposing
+host runtime or relaxing lease/route/transport assertions. This confirms the
+fixture correction; it does not qualify live host networking.
+
+All ten regression jobs passed, including unchanged IPv4/IPv6 transition and
+independent recovery. Final-head results for all five workflows and the merge
+receipt belong in PR #176. Integration still requires those workflows green.
