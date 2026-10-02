@@ -262,7 +262,8 @@ UseRoutes=yes
               "--property=BindReadOnlyPaths=" + str(path / "network") + ":/etc/systemd/network " + str(path / "empty") + ":/usr/lib/systemd/network",
               "--property=InaccessiblePaths=-/etc/systemd/networkd.conf -/etc/systemd/networkd.conf.d -/usr/lib/systemd/networkd.conf.d",
               "--property=NetworkNamespacePath=/proc/" + str(os.getpid()) + "/ns/net",
-              "--setenv=SYSTEMD_LOG_LEVEL=debug", "/usr/lib/systemd/systemd-networkd")
+              "--setenv=SYSTEMD_LOG_LEVEL=debug", "--setenv=SYSTEMD_LOG_TARGET=console",
+              "/usr/lib/systemd/systemd-networkd")
         pid = int(t.run("/usr/bin/systemctl", "show", unit, "--property=MainPID", "--value").stdout)
         assert pid > 1 and os.readlink(f"/proc/{pid}/ns/net") == os.readlink("/proc/self/ns/net")
         assert os.readlink(f"/proc/{pid}/ns/mnt") != os.readlink("/proc/1/ns/mnt")
@@ -339,7 +340,14 @@ def lifecycle():
             t.listen(stack, "0.0.0.0", 22)
             t.listen(stack, "0.0.0.0", 80)
             root, _ = stack.enter_context(networkd())
-            wait_for(lambda: address_present() and default_route_present() and lease_server(root) == PRIMARY, 20)
+            try:
+                wait_for(lambda: address_present() and default_route_present() and lease_server(root) == PRIMARY, 20)
+            except RuntimeError:
+                # Fixed synthetic state only; never a live diagnostic path.
+                print("FIXTURE_ACQUIRE_STATE", json.dumps({"address": address_present(),
+                      "route": default_route_present(), "lease_server": lease_server(root),
+                      "events": t.rpc(proc, "events")}), file=sys.stderr)
+                raise
             assert t.rpc(proc, "open")
 
             def check():
