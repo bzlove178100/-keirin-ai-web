@@ -230,8 +230,9 @@ def policy():
 @contextmanager
 def networkd():
     guard()
-    # Private /run hides host D-Bus, netif leases and network configs. Read-only
-    # /sys makes networkd use its no-udev path, matching container semantics.
+    # Private /run hides host D-Bus, netif leases and network configs. Ubuntu
+    # patches link initialization to use detect_container(), not udev_available().
+    print(t.run("/usr/lib/systemd/systemd-networkd", "--version").stdout.decode(), flush=True)
     path = Path(tempfile.mkdtemp(prefix="kc-dhcp-ci-", dir="/tmp"))
     unit = path.name + ".service"
     try:
@@ -269,14 +270,19 @@ UseRoutes=yes
         assert os.readlink(f"/proc/{pid}/ns/mnt") != os.readlink("/proc/1/ns/mnt")
         # Verify isolation, not merely the requested unit options.
         root = Path(f"/proc/{pid}/root")
-        wait_for(lambda: bool(os.statvfs(root / "sys").f_flag & os.ST_RDONLY), 3)
+        wait_for(lambda: (root / "run/systemd/container").exists(), 3)
+        assert os.statvfs(root / "sys").f_flag & os.ST_RDONLY
+        assert (root / "run").stat().st_dev != Path("/run").stat().st_dev
+        assert (root / "run/systemd/container").read_text() == "container-other\n"
         assert not (root / "run/dbus/system_bus_socket").exists()
         assert not (root / "run/systemd/network").exists()
         assert [x.name for x in (root / "etc/systemd/network").iterdir()] == ["10-fixture.network"]
         yield root, unit
     except BaseException:
         # This unit sees only synthetic namespaces and private /run/config.
-        log = t.run("/usr/bin/journalctl", "--no-pager", "-u", unit, "-n", "60", success=False)
+        log = t.run("/usr/bin/journalctl", "--no-pager", "-u", unit, "-n", "250", success=False)
+        # Keep startup/detection evidence as well as the last failure context.
+        print(log.stdout[:4500].decode("utf-8", "replace"), file=sys.stderr)
         print(log.stdout[-12000:].decode("utf-8", "replace"), file=sys.stderr)
         raise
     finally:
@@ -293,13 +299,23 @@ def networkd_child():
     # Refuse to mount anything in PID 1's mount namespace.
     if os.readlink("/proc/self/ns/mnt") == os.readlink("/proc/1/ns/mnt"):
         raise RuntimeError("PRIVATE_MOUNT_NAMESPACE_REQUIRED")
+    if Path("/run").stat().st_dev == Path("/proc/1/root/run").stat().st_dev:
+        raise RuntimeError("PRIVATE_RUNTIME_FILESYSTEM_REQUIRED")
     Path("/run/kc-sys").mkdir()
     t.run("mount", "-t", "sysfs", "-o", "nosuid,nodev,noexec", "sysfs", "/run/kc-sys")
     t.run("mount", "--bind", "/run/kc-sys", "/sys")
     t.run("mount", "-o", "remount,bind,ro", "/sys")
     assert os.statvfs("/sys").f_flag & os.ST_RDONLY
     print("PASS NETWORKD_FRESH_READONLY_SYSFS", flush=True)
-    print(t.run("/usr/lib/systemd/systemd-networkd", "--version").stdout.decode(), flush=True)
+    # Real negative control: a read-only sysfs alone does not identify this
+    # mount/net namespace as a container on the Ubuntu VM runner.
+    detection = t.run("/usr/bin/systemd-detect-virt", "--container", success=False)
+    assert detection.returncode == 1 and detection.stdout == b"none\n"
+    Path("/run/systemd").mkdir(exist_ok=True)
+    with Path("/run/systemd/container").open("x") as marker:
+        marker.write("container-other\n")
+    assert t.run("/usr/bin/systemd-detect-virt", "--container").stdout == b"container-other\n"
+    print("PASS PRIVATE_CONTAINER_DETECTION_NEGATIVE_AND_POSITIVE", flush=True)
     os.execv("/usr/lib/systemd/systemd-networkd", ["systemd-networkd"])
 
 
@@ -412,6 +428,14 @@ def lifecycle():
 
 
 class Tests(unittest.TestCase):
+    def test_host_runtime_refused_before_mount_or_marker(self):
+        with patch(__name__ + ".guard"), patch.object(os, "readlink", side_effect=["private", "host"]), patch.object(Path, "stat") as stat, patch.object(t, "run") as mutate, patch.object(Path, "mkdir") as mkdir:
+            stat.return_value.st_dev = 10
+            with self.assertRaisesRegex(RuntimeError, "PRIVATE_RUNTIME_FILESYSTEM_REQUIRED"):
+                networkd_child()
+            mutate.assert_not_called()
+            mkdir.assert_not_called()
+
     def test_host_mount_namespace_refused_before_mount(self):
         with patch(__name__ + ".guard"), patch.object(os, "readlink", return_value="same"), patch.object(t, "run") as mutate:
             with self.assertRaises(RuntimeError):

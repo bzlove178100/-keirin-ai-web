@@ -1,6 +1,6 @@
 # Isolated networkd DHCPv4 lifecycle test
 
-Prepared 2026-10-02. CI only; no live host command or firewall installer.
+Updated 2026-10-03. CI only; no live host command or firewall installer.
 
 The accepted private report shows DHCPv4 configuration. Fixed-address tests
 cannot establish that address renewal or rebinding works. This change runs the
@@ -32,8 +32,13 @@ an empty disposable network namespace and an empty ruleset. The client service
 joins only this namespace. Its private mount namespace has a fresh /run (no
 host D-Bus, networkd leases or runtime network configuration), a dedicated
 read-only network configuration and masked vendor/host config directories.
-Read-only /sys selects networkd's no-udev/container path. The test verifies
-the actual namespace identities, hidden bus and mounted configuration.
+The child refuses the host mount namespace and a shared host /run filesystem
+before any mount or runtime write. It uses a fresh read-only sysfs plus a
+container marker confined to its private /run. The installed detection helper
+must report no container before the marker and container-other afterwards.
+The test verifies namespace identities, distinct runtime storage, hidden bus
+and mounted configuration. This is a fixture launch prerequisite, not a
+substitute for any lease, route, packet or expiry assertion.
 The existing host networkd unit is never stopped, restarted or reconfigured.
 
 The peer has documentation addresses and a directly connected route only.
@@ -67,11 +72,34 @@ credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
   runtime-directory creation and privilege drop.
 - [systemd v255 manager](https://github.com/systemd/systemd/blob/v255/src/network/networkd-manager.c):
   watch-bind connection to the system bus.
-- [systemd v255 udev availability](https://github.com/systemd/systemd/blob/v255/src/shared/udev-util.c):
-  read-only /sys indicates no udev environment.
+- [Ubuntu official applied source](https://git.launchpad.net/ubuntu/+source/systemd),
+  revision `b7da9ea580f53668cd765dd27d97b272bc4dc482`:
+  `debian/patches/Revert-network-if-sys-is-rw-then-udev-should-be-around.patch`
+  changes `link_check_initialized()` to use `detect_container() > 0`.
+  `src/basic/virt.c` reads `/run/systemd/container` for non-PID-1 processes.
+  This downstream patch differs from the previously cited upstream v255
+  `udev_available()` condition. Read-only /sys alone is not sufficient for
+  Ubuntu link initialization. The local installed 255.4-1ubuntu8.17 binary
+  also calls detect_container at this branch; CI prints its own version.
 - [RFC 2131](https://www.rfc-editor.org/rfc/rfc2131.html), section 4.4.5:
   renewal/rebinding and lease expiry are distinct behaviors.
 
 Local parser/namespace refusal tests do not substitute for the actual CI run.
 CI results and any correction belong in the PR; never skip a failed lifecycle
 stage or ask the phone user to diagnose a disposable CI fixture.
+
+## Resumption correction — 2026-10-03
+
+PR #176 head `796f6cf685022501408551008d2c2b1c4092e28a` failed
+in run `36945051624`, job `110645135668`: no initial lease or route,
+no DHCP server events, and link pending udev initialization. All other jobs
+and four other workflows completed successfully. The earlier read-only-sysfs
+change did not solve this; its unconditional explanation above is corrected.
+
+Distribution source identifies a different initialization predicate. This
+revision supplies the container identity only inside the verified private
+runtime and checks actual detection before/after it. It preserves sysfs,
+network/runtime/config isolation, all original lifecycle deadlines, and every
+acceptance assertion. Startup/version and bounded journal context remain
+available if another stage fails. Five offline refusal/parser tests pass.
+Actual Ubuntu lifecycle CI is still required before claiming the repair worked.

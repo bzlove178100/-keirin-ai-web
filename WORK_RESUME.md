@@ -1,14 +1,16 @@
 # Work resume handoff
 
-Updated: 2026-10-02 (Asia/Tokyo).
+Updated: 2026-10-03 (Asia/Tokyo).
 
 ## Current implementation: isolated DHCPv4 lifecycle qualification
 
-Updated: 2026-10-02 (Asia/Tokyo).
+Updated: 2026-10-03 (Asia/Tokyo).
 
 PR #175 merged at `06646c9b40726517e71da98bcd9509ebc1395b43` after all five workflows succeeded on head `59246821baf89b7bac3a7284e729ba29b52526f1`. The complete user dependency report is accepted below; no identical phone retry is needed.
 
-The next implementation adds `tests/test_secret_custody_network_dhcp.py` and a mandatory Ubuntu CI job. It uses the actual networkd client in private network/mount/runtime/config namespaces and a synthetic DHCP server to test unicast renewal, broadcast rebinding to an alternate server, TCP transport continuity and lease expiry. See [scope and limitations](SECRET_CUSTODY_NETWORK_DHCP_REVIEW.md). Three local parser/host-namespace refusal tests pass; actual lifecycle success must be read from exact-head CI before merge.
+The next implementation adds `tests/test_secret_custody_network_dhcp.py` and a mandatory Ubuntu CI job. It uses the actual networkd client in private network/mount/runtime/config namespaces and a synthetic DHCP server to test unicast renewal, broadcast rebinding to an alternate server, TCP transport continuity and lease expiry. See [scope and limitations](SECRET_CUSTODY_NETWORK_DHCP_REVIEW.md). Five local parser/namespace/runtime refusal tests pass; actual lifecycle success must be read from exact-head CI before merge.
+
+Resumed PR #176 after the user's pause. Previous head `796f6cf685022501408551008d2c2b1c4092e28a` failed initial acquisition in run `36945051624`, job `110645135668`; all other jobs/workflows passed. Ubuntu's downstream patch uses container detection for link initialization, unlike the upstream read-only-sysfs predicate previously assumed. The correction adds a marker only within verified private runtime storage and a real before/after container-detection check. It keeps isolation and lifecycle deadlines/assertions intact. Final-head CI is pending; do not merge or claim success until its real lifecycle passes. No phone operation is needed.
 
 Source review identified a material enforcement distinction: DHCP discovery/rebinding use raw packet sockets; bound renewal uses UDP. Only renewal asserts inet firewall counter passage. Passing this fixture must not be described as raw-frame filtering, DHCP authentication, address renumbering or complete maintenance qualification. The existing static transition/watchdog tests remain intact.
 
