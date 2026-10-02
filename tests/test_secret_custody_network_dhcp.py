@@ -238,6 +238,7 @@ def networkd():
         path.chmod(0o755)
         (path / "network").mkdir()
         (path / "empty").mkdir()
+        (path / "networkd.conf").write_text("[Network]\n")
         (path / "network/10-fixture.network").write_text('''[Match]
 Name=host0
 [Network]
@@ -258,17 +259,17 @@ UseRoutes=yes
               "--property=RuntimeMaxSec=110", "--property=TimeoutStopSec=2",
               "--property=KillMode=control-group", "--property=PrivateMounts=yes",
               "--property=TemporaryFileSystem=/run:mode=0755",
-              "--property=ReadOnlyPaths=/sys",
-              "--property=BindReadOnlyPaths=" + str(path / "network") + ":/etc/systemd/network " + str(path / "empty") + ":/usr/lib/systemd/network",
-              "--property=InaccessiblePaths=-/etc/systemd/networkd.conf -/etc/systemd/networkd.conf.d -/usr/lib/systemd/networkd.conf.d",
+              "--property=BindReadOnlyPaths=" + str(path / "network") + ":/etc/systemd/network " + str(path / "empty") + ":/usr/lib/systemd/network " + str(path / "networkd.conf") + ":/etc/systemd/networkd.conf " + str(path / "empty") + ":/etc/systemd/networkd.conf.d " + str(path / "empty") + ":/usr/lib/systemd/networkd.conf.d",
               "--property=NetworkNamespacePath=/proc/" + str(os.getpid()) + "/ns/net",
               "--setenv=SYSTEMD_LOG_LEVEL=debug", "--setenv=SYSTEMD_LOG_TARGET=console",
-              "/usr/lib/systemd/systemd-networkd")
+              "--setenv=GITHUB_ACTIONS=true", "--setenv=KC_DHCP_CI=1",
+              sys.executable, "-I", "-B", str(Path(__file__).resolve()), "--networkd")
         pid = int(t.run("/usr/bin/systemctl", "show", unit, "--property=MainPID", "--value").stdout)
         assert pid > 1 and os.readlink(f"/proc/{pid}/ns/net") == os.readlink("/proc/self/ns/net")
         assert os.readlink(f"/proc/{pid}/ns/mnt") != os.readlink("/proc/1/ns/mnt")
         # Verify isolation, not merely the requested unit options.
         root = Path(f"/proc/{pid}/root")
+        wait_for(lambda: bool(os.statvfs(root / "sys").f_flag & os.ST_RDONLY), 3)
         assert not (root / "run/dbus/system_bus_socket").exists()
         assert not (root / "run/systemd/network").exists()
         assert [x.name for x in (root / "etc/systemd/network").iterdir()] == ["10-fixture.network"]
@@ -283,6 +284,19 @@ UseRoutes=yes
         t.run("/usr/bin/systemctl", "reset-failed", unit, success=False)
         assert t.run("/usr/bin/systemctl", "show", unit, "--property=MainPID", "--value").stdout == b"0\n"
         shutil.rmtree(path)
+
+
+def networkd_child():
+    guard()
+    # A fresh sysfs belongs to the fixture netns, and its superblock is read-only.
+    # Refuse to mount anything in PID 1's mount namespace.
+    if os.readlink("/proc/self/ns/mnt") == os.readlink("/proc/1/ns/mnt"):
+        raise RuntimeError("PRIVATE_MOUNT_NAMESPACE_REQUIRED")
+    t.run("mount", "-t", "sysfs", "-o", "ro,nosuid,nodev,noexec", "sysfs", "/sys")
+    assert os.statvfs("/sys").f_flag & os.ST_RDONLY
+    print("PASS NETWORKD_FRESH_READONLY_SYSFS", flush=True)
+    t.run("/usr/lib/systemd/systemd-networkd", "--version")
+    os.execv("/usr/lib/systemd/systemd-networkd", ["systemd-networkd"])
 
 
 def address_present():
@@ -426,5 +440,7 @@ if __name__ == "__main__":
         lifecycle()
     elif sys.argv[1:] == ["--peer"]:
         peer()
+    elif sys.argv[1:] == ["--networkd"]:
+        networkd_child()
     else:
         unittest.main(verbosity=2)
