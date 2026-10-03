@@ -1,6 +1,6 @@
 # Dynamic configuration with independent restricted recovery
 
-Prepared 2026-10-03 (Asia/Tokyo). Disposable CI only; no live installer.
+Verified in isolated CI on 2026-10-03 (Asia/Tokyo). Disposable CI only; no live installer.
 
 PR #181 merged at `1dd5666d779d82793b63d4a838b023ce1247d7ed` after all
 five final-head workflows and fourteen regression jobs passed. Its routed
@@ -64,9 +64,28 @@ tables are removed; final state must be loopback-only and an empty ruleset.
 | Either-table drift | Separate actual inet and netdev unexpected rules cause fail-stop, with changed shapes left untouched; observing fixture resets only for its own next test |
 | Cleanup | Units stopped, MainPID zero, peer reaped, owned files/links/rules removed |
 
-Local guards are not kernel proof. Changed-head CI and all five final-head
-workflows must succeed before integration; run/job IDs and actual results
-are recorded in the PR and handoff after execution.
+## Observed evidence
+
+PR #182 code head `69ae85206d5bc193de6f538af2df549f959c16d0` passed all five
+workflows on its first run. Regression run `37128722659` passed all fifteen
+jobs. Dynamic recovery job `111219298078` recorded all seventeen acceptance
+markers (eight IPv4, nine IPv6) and
+`SYNTHETIC_DYNAMIC_RECOVERY_OK_NO_LIVE_APPLY` on kernel `6.17.0-1022-azure`,
+using installed networkd `255.4-1ubuntu8.17`. This qualifies that binary only
+for the tested DHCPv4 and RA/ND cases, not for DHCPv6.
+
+The actual dynamic test ran from 14:10:46 to 14:13:11 UTC. IPv4's independent
+restoration and data revocation completed at 14:11:11, followed by acknowledged
+renewal, approved-alternate rebinding and invalid DHCP-frame rejection at
+14:11:36. IPv6's restoration completed at 14:12:26, followed by RA refresh,
+ND and invalid RA rejection at 14:12:39, then route expiry/off-link denial at
+14:13:11. Both families passed actual pre-apply worker death, pre-apply
+controller death, drift in each table and cleanup. No failure was skipped or
+relaxed; the newly added job passed on its first execution.
+
+Six new local tests and thirteen reused-helper tests also passed. All five
+final-head workflows must pass before integration; their exact IDs and the
+merge receipt are recorded in PR #182.
 
 ## Limits and next work
 
