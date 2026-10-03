@@ -1,0 +1,27 @@
+From 8f5eaeb143dd9e58503980ae5f63dd78c463180e Mon Sep 17 00:00:00 2001
+From: Beniamino Galvani <b.galvani@gmail.com>
+Date: Mon, 21 Jul 2025 14:24:27 +0200
+Subject: [PATCH] sd-dhcp6-lease: fix calculation of t2
+
+sd_dhcp6_lease_get_t2() was returning t1, and so the client was going directly
+to the rebind state skipping the lease renewal.
+
+Reported-by: Jaime Caamano <jcaamano@redhat.com>
+Fixes: 394fac52d0e7 ("sd-dhcp6-client: introduce sd_dhcp6_lease_get_t1() and friends")
+---
+ src/libsystemd-network/sd-dhcp6-lease.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/libsystemd-network/sd-dhcp6-lease.c b/src/libsystemd-network/sd-dhcp6-lease.c
+index 4d8df252c87..80ae1b775f4 100644
+--- a/src/libsystemd-network/sd-dhcp6-lease.c
++++ b/src/libsystemd-network/sd-dhcp6-lease.c
+@@ -115,7 +115,7 @@ static void dhcp6_lease_set_lifetime(sd_dhcp6_lease *lease) {
+         }
+ 
+ DEFINE_GET_TIME_FUNCTIONS(t1, lifetime_t1);
+-DEFINE_GET_TIME_FUNCTIONS(t2, lifetime_t1);
++DEFINE_GET_TIME_FUNCTIONS(t2, lifetime_t2);
+ DEFINE_GET_TIME_FUNCTIONS(valid_lifetime, lifetime_valid);
+ 
+ static void dhcp6_lease_set_server_address(sd_dhcp6_lease *lease, const struct in6_addr *server_address) {

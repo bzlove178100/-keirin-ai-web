@@ -44,7 +44,7 @@ def guard():
 def tables(version):
     if version == 4:
         return (("inet", d.TABLE), ("netdev", d.LINK_TABLE))
-    if version == 6:
+    if version in (6, "dhcp6"):
         return (("inet", v.TABLE), ("netdev", v.LINK))
     raise ValueError("FIXED_IP_FAMILY_REQUIRED")
 
@@ -54,6 +54,8 @@ def profile(version, mode):
     if mode not in ("maintenance", "qualification"):
         raise ValueError("FIXED_PROFILE_REQUIRED")
     result = d.policy() + d.link_policy() if version == 4 else v.policies()
+    if version == "dhcp6":
+        result = module("dhcp6_profile", "test_secret_custody_dhcpv6.py").policies()
     if mode == "maintenance":
         return result
     ip, host, peer = ("ip", d.CLIENT, d.PRIMARY) if version == 4 else ("ip6", v.CLIENT, v.REMOTE)
@@ -574,9 +576,9 @@ if __name__ == "__main__":
         print("RESULT SYNTHETIC_DYNAMIC_RECOVERY_OK_NO_LIVE_APPLY", flush=True)
     elif len(args) == 2 and args[0] == "--peer" and args[1] in ("4", "6"):
         peer(int(args[1]))
-    elif len(args) == 3 and args[0] == "--worker" and args[2] in ("4", "6"):
-        worker(args[1], int(args[2]))
-    elif len(args) == 4 and args[0] == "--controller" and args[2] in ("4", "6") and args[3] in ("before", "after"):
-        controller(args[1], int(args[2]), args[3])
+    elif len(args) == 3 and args[0] == "--worker" and args[2] in ("4", "6", "dhcp6"):
+        worker(args[1], "dhcp6" if args[2] == "dhcp6" else int(args[2]))
+    elif len(args) == 4 and args[0] == "--controller" and args[2] in ("4", "6", "dhcp6") and args[3] in ("before", "after"):
+        controller(args[1], "dhcp6" if args[2] == "dhcp6" else int(args[2]), args[3])
     else:
         unittest.main(verbosity=2)
