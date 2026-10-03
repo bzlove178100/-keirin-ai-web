@@ -70,3 +70,18 @@ Five local DHCP guard/parser tests and three packet checksum/guard tests pass.
 Actual changed-head kernel CI is required; final workflow results, diagnoses and
 merge receipt belong in the PR. Do not skip failed stages or relax tuple rules
 to obtain a passing result.
+
+## Measured completion
+
+Code head `d6554eb9184a6ff83c825a015e6ed2f7d7b634bf` passed regression
+run `37113754710`, DHCP job `111176470089`. The actual log records kernel
+`6.17.0-1022-azure`, nftables `1.0.9`, networkd `255.4-1ubuntu8.17`, all ten
+PASS records and `SYNTHETIC_DHCPV4_LINK_POLICY_COMPOSITION_OK_NO_LIVE_APPLY`.
+The fixed allow/deny packet controls, acquisition with ARP, renewal, alternate
+rebinding with administration continuity, expiry/refusal and owned cleanup
+all succeeded. All eleven regression jobs passed, including the unchanged
+packet-boundary, transition and independent-recovery jobs. No failed stage
+was skipped and no tuple restriction was relaxed.
+
+This qualifies only the composition and limits described above. Final-head
+results for all five workflows and the merge receipt are recorded in PR #178.
