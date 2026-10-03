@@ -296,6 +296,12 @@ def increased(before):
     return all(after[key] > before[key] for key in ("in_dhcp6", "out_dhcp6", "inet_in_dhcp6", "inet_out_dhcp6"))
 
 
+class ClientTimerError(RuntimeError):
+    def __init__(self, pair):
+        self.pair = pair
+        super().__init__("DHCP6_CLIENT_TIMER_CONTRACT: expected T1=7..8 T2=21..24 seconds; reported=" + str(pair))
+
+
 def require_client_timers(log):
     # v255 subtracts at most 10% before logging whole seconds. A known upstream
     # getter defect returns T1 as T2; an occasional Renew must not qualify it.
@@ -303,10 +309,10 @@ def require_client_timers(log):
     pair = [(int(kind), int(value)) for kind, value in reported[-2:]]
     if (len(pair) != 2 or pair[0][0] != 1 or pair[1][0] != 2
             or not 7 <= pair[0][1] <= 8 or not 21 <= pair[1][1] <= 24):
-        raise RuntimeError("DHCP6_CLIENT_TIMER_CONTRACT: expected T1=7..8 T2=21..24 seconds; reported=" + str(pair))
+        raise ClientTimerError(pair)
 
 
-def lifecycle():
+def lifecycle(*, client="installed"):
     guard()
     print("KERNEL", os.uname().release, flush=True)
     assert {x["ifname"] for x in json.loads(t.run(t.IP, "-j", "link", "show").stdout)} == {"lo"}
@@ -329,7 +335,7 @@ def lifecycle():
             t.listen(stack, "::", 22)
             t.listen(stack, "::", 80)
             before = counts()
-            _, unit = stack.enter_context(d.networkd(ipv6=True, dhcp6=True))
+            _, unit = stack.enter_context(d.networkd(ipv6=True, dhcp6=True, client=client))
             try:
                 d.wait_for(lambda: v.usable(v.HOST_LL) and v.counters()["out_rs"] > 0, 12)
                 assert not t.rpc(proc, "events") and not v.usable(v.CLIENT)
@@ -385,10 +391,24 @@ def lifecycle():
         t.run(t.IP, "link", "del", "host0", success=False)
         for family, table in (("inet", v.TABLE), ("netdev", v.LINK)):
             t.nft("delete table " + family + " " + table + "\n", success=False)
-    assert {x["ifname"] for x in json.loads(t.run(t.IP, "-j", "link", "show").stdout)} == {"lo"}
-    assert all("metainfo" in x for x in json.loads(t.run(t.NFT, "-j", "list", "ruleset").stdout)["nftables"])
-    print("PASS DHCP6_FIXTURE_UNITS_PROCESSES_LINKS_RULES_CLEANED", flush=True)
+        assert {x["ifname"] for x in json.loads(t.run(t.IP, "-j", "link", "show").stdout)} == {"lo"}
+        assert all("metainfo" in x for x in json.loads(t.run(t.NFT, "-j", "list", "ruleset").stdout)["nftables"])
+        print("PASS DHCP6_FIXTURE_UNITS_PROCESSES_LINKS_RULES_CLEANED", flush=True)
     print("RESULT SYNTHETIC_DHCP6_LIFECYCLE_OK_NO_LIVE_APPLY", flush=True)
+
+
+def original_control():
+    # Same compiler/options as the patched client. Only this measured getter
+    # defect is the required negative result; unrelated failures still fail CI.
+    try:
+        lifecycle(client="original")
+    except ClientTimerError as exc:
+        if (len(exc.pair) != 2 or exc.pair[0][0] != 1 or exc.pair[1][0] != 2
+                or not 6 <= exc.pair[0][1] <= 8 or not 7 <= exc.pair[1][1] <= 8):
+            raise
+        print("RESULT ORIGINAL_BUILD_DHCP6_TIMER_DEFECT_CONFIRMED_NOT_QUALIFIED", flush=True)
+    else:
+        raise RuntimeError("ORIGINAL_BUILD_NEGATIVE_CONTROL_DID_NOT_REPRODUCE")
 
 
 class Tests(unittest.TestCase):
@@ -446,10 +466,23 @@ class Tests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "DHCP6_CLIENT_TIMER_CONTRACT"):
                 require_client_timers(log)
 
+    def test_original_control_does_not_swallow_unrelated_or_missing_evidence(self):
+        for error in (RuntimeError("other"), ClientTimerError([])):
+            with patch(__name__ + ".lifecycle", side_effect=error):
+                with self.assertRaises(RuntimeError):
+                    original_control()
+        with patch(__name__ + ".lifecycle", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "DID_NOT_REPRODUCE"):
+                original_control()
+
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["--kernel"]:
         lifecycle()
+    elif sys.argv[1:] == ["--original-control"]:
+        original_control()
+    elif sys.argv[1:] == ["--patched-kernel"]:
+        lifecycle(client="patched")
     elif sys.argv[1:] == ["--peer"]:
         peer()
     else:

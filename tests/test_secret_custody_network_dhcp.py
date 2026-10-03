@@ -340,14 +340,25 @@ def link_counters():
     return raw.counters("netdev", LINK_TABLE)
 
 
+def networkd_binary(client):
+    if client == "installed":
+        return "/usr/lib/systemd/systemd-networkd"
+    spec = importlib.util.spec_from_file_location("dhcp6_build", Path(__file__).with_name("build_secret_custody_dhcpv6_client.py"))
+    build = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build)
+    return build.client_path(client)
+
+
 @contextmanager
-def networkd(*, ipv6=False, dhcp6=False):
+def networkd(*, ipv6=False, dhcp6=False, client="installed"):
     guard()
     if dhcp6 and not ipv6:
         raise RuntimeError("DHCP6_REQUIRES_IPV6_PROFILE")
+    if client not in ("installed", "original", "patched") or (client != "installed" and not dhcp6):
+        raise RuntimeError("FIXED_DHCP6_CLIENT_PROFILE_REQUIRED")
     # Private /run hides host D-Bus, netif leases and network configs. Ubuntu
     # patches link initialization to use detect_container(), not udev_available().
-    print(t.run("/usr/lib/systemd/systemd-networkd", "--version").stdout.decode(), flush=True)
+    print(t.run(networkd_binary(client), "--version").stdout.decode(), flush=True)
     path = Path(tempfile.mkdtemp(prefix="kc-dhcp-ci-", dir="/tmp"))
     unit = path.name + ".service"
     try:
@@ -399,16 +410,18 @@ SendRelease=no
 WithoutRA=no
 '''
         (path / "network/10-fixture.network").write_text(config)
+        extra = [] if client == "installed" else ["--setenv=KC_DHCP6_CI=1"]
         t.run("/usr/bin/systemd-run", "--quiet", "--unit=" + unit,
               "--property=Type=exec", "--property=Restart=no",
               "--property=RuntimeMaxSec=" + ("195" if dhcp6 else "110"), "--property=TimeoutStopSec=2",
               "--property=KillMode=control-group", "--property=PrivateMounts=yes",
               "--property=TemporaryFileSystem=/run:mode=0755",
-              "--property=BindReadOnlyPaths=" + str(path / "network") + ":/etc/systemd/network " + str(path / "empty") + ":/usr/lib/systemd/network " + str(path / "networkd.conf") + ":/etc/systemd/networkd.conf " + str(path / "empty") + ":/etc/systemd/networkd.conf.d " + str(path / "empty") + ":/usr/lib/systemd/networkd.conf.d",
+              "--property=BindReadOnlyPaths=" + str(path / "network") + ":/etc/systemd/network " + str(path / "empty") + ":/usr/lib/systemd/network " + str(path / "networkd.conf") + ":/etc/systemd/networkd.conf " + str(path / "empty") + ":/etc/systemd/networkd.conf.d " + str(path / "empty") + ":/usr/lib/systemd/networkd.conf.d" + ("" if client == "installed" else " /tmp/kc-dhcp6-ci-client"),
               "--property=NetworkNamespacePath=/proc/" + str(os.getpid()) + "/ns/net",
               "--setenv=SYSTEMD_LOG_LEVEL=debug", "--setenv=SYSTEMD_LOG_TARGET=console",
               "--setenv=GITHUB_ACTIONS=true", "--setenv=KC_DHCP_CI=1",
-              sys.executable, "-I", "-B", str(Path(__file__).resolve()), "--networkd")
+              *extra, sys.executable, "-I", "-B", str(Path(__file__).resolve()),
+              "--networkd" if client == "installed" else "--networkd-" + client)
         pid = int(t.run("/usr/bin/systemctl", "show", unit, "--property=MainPID", "--value").stdout)
         assert pid > 1 and os.readlink(f"/proc/{pid}/ns/net") == os.readlink("/proc/self/ns/net")
         assert os.readlink(f"/proc/{pid}/ns/mnt") != os.readlink("/proc/1/ns/mnt")
@@ -421,6 +434,8 @@ WithoutRA=no
         assert not (root / "run/dbus/system_bus_socket").exists()
         assert not (root / "run/systemd/network").exists()
         assert [x.name for x in (root / "etc/systemd/network").iterdir()] == ["10-fixture.network"]
+        if client != "installed":
+            assert os.statvfs(root / "tmp/kc-dhcp6-ci-client").f_flag & os.ST_RDONLY
         yield root, unit
     except BaseException:
         # This unit sees only synthetic namespaces and private /run/config.
@@ -436,7 +451,7 @@ WithoutRA=no
         shutil.rmtree(path)
 
 
-def networkd_child():
+def networkd_child(client="installed"):
     guard()
     # A fresh sysfs view belongs to the fixture netns. Set per-mount read-only
     # after mounting: an existing sysfs superblock may already be read-write.
@@ -460,7 +475,7 @@ def networkd_child():
         marker.write("container-other\n")
     assert t.run("/usr/bin/systemd-detect-virt", "--container").stdout == b"container-other\n"
     print("PASS PRIVATE_CONTAINER_DETECTION_NEGATIVE_AND_POSITIVE", flush=True)
-    os.execv("/usr/lib/systemd/systemd-networkd", ["systemd-networkd"])
+    os.execv(networkd_binary(client), ["systemd-networkd"])
 
 
 def address_present():
@@ -645,5 +660,9 @@ if __name__ == "__main__":
         peer()
     elif sys.argv[1:] == ["--networkd"]:
         networkd_child()
+    elif sys.argv[1:] == ["--networkd-original"]:
+        networkd_child("original")
+    elif sys.argv[1:] == ["--networkd-patched"]:
+        networkd_child("patched")
     else:
         unittest.main(verbosity=2)

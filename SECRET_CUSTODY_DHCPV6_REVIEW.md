@@ -1,6 +1,8 @@
 # Isolated real networkd DHCPv6 lifecycle
 
-Prepared 2026-10-03. Fixed synthetic CI only; no live host or apply artifact.
+Updated 2026-10-03. Fixed synthetic CI only; no live host or apply artifact.
+The target is now an explicitly patched private build; the installed Ubuntu
+client remains unqualified. See the paired-build scope below.
 
 PR #179 measured RA/SLAAC and kernel ND/DAD. This slice uses a separate fixed
 networkd profile to measure actual DHCPv6 IA_NA acquisition, Renew, Rebind and
@@ -46,7 +48,8 @@ route for replies. TCP echo is transport evidence, not authenticated SSH.
 
 All fixture events/packets, waits, commands and processes are bounded. Only
 the new DHCPv6 client profile has a 195-second unit ceiling; earlier profiles
-retain 110 seconds. The CI job ceiling is four minutes. Diagnostics contain
+retain 110 seconds. The CI job ceiling is 15 minutes including two source builds; each private
+client still has its 195-second ceiling. Diagnostics contain
 fixed synthetic state and classification, not raw client identifiers or secrets.
 
 ## Limits and next work
@@ -77,11 +80,11 @@ credential/prediction/DB-write/data-fetch/scheduler/report gate stay OFF.
   multicast client/server exchanges, IA_NA, Renew/Rebind and deprecated server
   unicast. Implementation behavior is measured separately from the standard.
 
-Eight new local tests plus four IPv6 and five shared DHCP tests pass. Actual
+Nine DHCPv6, three build-provenance, four IPv6 and five shared DHCP local tests pass (21 total). Actual
 changed-head CI is required; final-head workflows and any diagnosis belong
 in the associated PR. No failed lifecycle stage may be skipped.
 
-## Observed blocker — PR #180 remains unmerged
+## Earlier vendor qualification failure — retained evidence
 
 Initial code head `d92e190d82d6e21669a54ff8dc8e8f897137f9a6` failed
 [regression run 37116221040, job 111183444650](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/37116221040/job/111183444650)
@@ -139,3 +142,42 @@ build, not Ubuntu's original binary. Until the target client is explicitly
 identified and the full required job plus all five final-head workflows pass,
 keep PR #180 draft/unmerged. This diagnostic change does not modify main or
 any live host, install packages, change a live firewall or activate a gate.
+
+## Paired private builds — current validation target
+
+To isolate the fix from compiler/configuration differences, CI builds the
+exact Ubuntu 255.4-1ubuntu8.17 source twice with identical minimal options.
+First it compiles the unmodified packaged source, then applies the official
+one-line T2 fix and incrementally rebuilds. Both are real networkd clients.
+The original build must reach acquisition and exhibit only the specifically
+typed timer defect. Missing evidence, unrelated errors or an unexpectedly
+healthy original are failures. This negative control is explicitly not
+client qualification. The patched build must pass every lifecycle assertion.
+The historical installed-package failures above remain separate evidence.
+
+`build_secret_custody_dhcpv6_client.py` fixes the HTTPS locations and SHA-256
+of the Ubuntu .dsc, original tarball, Debian patch archive and upstream fix.
+It verifies those bytes before dpkg-source extraction, applies the Ubuntu
+patch series and checks that the upstream fix changes exactly the one getter
+line. This verifies pinned inputs, not PGP signatures or bit-reproducibility.
+The source directory is temporary; no package, service or host executable is
+installed. SHA-256 verifies the installed networkd binary stays unchanged.
+
+The two clients statically include systemd's internal libraries so neither
+can load the installed libsystemd-shared. Dynamic dependencies still come
+from the disposable CI OS. Compiler output/version, configure flags, input
+hashes and both executable hashes are retained in CI logs. This is a minimal
+custom build, not an Ubuntu-supported package or production remediation.
+A fixed root-owned depot holds only the two clients and manifest, validates
+hashes at selection and execution, and is bound read-only inside each private
+mount namespace. Callers select only installed/original/patched profiles,
+never an arbitrary executable. IPv4 and RA jobs retain the installed profile.
+The depot is removed only after this job created its ownership marker.
+
+Local guards and parser checks pass (21 tests); actual paired-build/kernel
+results are pending and must be recorded in PR #180 before integration.
+Only full patched-client success plus all final-head workflows would permit
+merging this test infrastructure. It would still leave Ubuntu's installed
+client unqualified and every live deployment/runtime gate OFF. After this
+isolated scope is proven, constrained-path PMTU is the next fixture; live
+DHCPv6 requires an independently reviewed fixed deployment candidate.
