@@ -341,7 +341,7 @@ def link_counters():
 
 
 @contextmanager
-def networkd():
+def networkd(*, ipv6=False):
     guard()
     # Private /run hides host D-Bus, netif leases and network configs. Ubuntu
     # patches link initialization to use detect_container(), not udev_available().
@@ -353,7 +353,7 @@ def networkd():
         (path / "network").mkdir()
         (path / "empty").mkdir()
         (path / "networkd.conf").write_text("[Network]\n")
-        (path / "network/10-fixture.network").write_text('''[Match]
+        config = '''[Match]
 Name=host0
 [Network]
 DHCP=ipv4
@@ -367,7 +367,24 @@ UseNTP=no
 UseHostname=no
 UseMTU=no
 UseRoutes=yes
-''')
+'''
+        if ipv6:
+            config = '''[Match]
+Name=host0
+[Network]
+DHCP=no
+LinkLocalAddressing=ipv6
+IPv6LinkLocalAddressGenerationMode=eui64
+IPv6PrivacyExtensions=no
+IPv6DuplicateAddressDetection=1
+IPv6AcceptRA=yes
+[IPv6AcceptRA]
+Token=::10
+UseDNS=no
+UseDomains=no
+DHCPv6Client=no
+'''
+        (path / "network/10-fixture.network").write_text(config)
         t.run("/usr/bin/systemd-run", "--quiet", "--unit=" + unit,
               "--property=Type=exec", "--property=Restart=no",
               "--property=RuntimeMaxSec=110", "--property=TimeoutStopSec=2",

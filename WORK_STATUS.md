@@ -1,6 +1,16 @@
 # Work status
 
-## Current boundary: DHCPv4 lifecycle composed with restricted link policy
+## Current boundary: IPv6 RA/ND/DAD control fixture
+
+Updated: 2026-10-03 (Asia/Tokyo).
+
+PR #178 merged at `5dd41f9fd28738530b05754582940ef19d08c521`. All five workflows succeeded for final head `89ca803cec06501f4e9b07f18eec4dcdd9266cae`, rechecked on this continuation. Restricted-link DHCPv4 acquisition/renewal/rebinding/expiry and administration survival are complete only in the recorded isolated scope.
+
+The new mandatory IPv6 job reuses the private networkd launcher with a fixed IPv6 profile. It requires actual RA/SLAAC route acquisition/refresh/expiry, dynamic neighbor rediscovery, duplicate-address refusal, header rejection counters and existing/new off-link administration transport. See [IPv6 control review](SECRET_CUSTODY_IPV6_CONTROL_REVIEW.md). Three new local guard/checksum tests and five shared DHCP tests pass; actual changed-head CI and all five final-head workflows must pass before integration. Results and merge evidence belong in the associated PR.
+
+This is not DHCPv6, PMTU, router/neighbor authentication, complete IPv6 validation or live qualification. Next implement real DHCPv6 lifecycle and constrained-path PMTU, then compose qualified dynamic controls with independently supervised restricted recovery. First maintenance-anchor installation and recovery from a wrong shared allowlist remain unresolved. Completed phone observations remain accepted; no phone/AWS/SSH/host action is needed. H2a and every runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gate remain OFF.
+
+## Previous completed slice: DHCPv4 lifecycle composed with restricted link policy
 
 Updated: 2026-10-03 (Asia/Tokyo).
 
