@@ -124,6 +124,39 @@ class FailureTests(unittest.TestCase):
             with self.assertRaisesRegex(h2d.Stop, "MANAGER_FAILURE_REASON_UNPROVEN"):
                 r.wait_failure("timeout", [])
 
+    def test_reset_error_requires_verified_absence_and_complete_cleanup(self):
+        for disappeared in (False, True):
+            r, _, _, _ = runner()
+            owned = dict(LoadState="loaded", Transient="yes", Description=r.description)
+            absent = {"LoadState": "not-found"}
+            states = [owned, owned, absent if disappeared else owned]
+            if disappeared:
+                states += [absent, absent]
+            with patch.object(r, "state", side_effect=states), \
+                    patch.object(r, "command", side_effect=[subprocess.CompletedProcess([], 0), subprocess.CompletedProcess([], 1)]) as command, \
+                    patch.object(r, "no_temporary_dirs", return_value=True) as directories, \
+                    patch.object(h2d.Path, "exists", return_value=False) as cgroup:
+                if disappeared:
+                    r.cleanup()
+                    directories.assert_called_once()
+                    cgroup.assert_called_once()
+                else:
+                    with self.assertRaisesRegex(h2d.Stop, "^PROCESS_RESET_FAILED$"):
+                        r.cleanup()
+                    directories.assert_not_called()
+                self.assertEqual([call.args[0][1] for call in command.call_args_list], ["stop", "reset-failed"])
+
+    def test_disappeared_unit_with_remaining_cgroup_still_fails(self):
+        r, _, _, _ = runner()
+        owned = dict(LoadState="loaded", Transient="yes", Description=r.description)
+        absent = {"LoadState": "not-found"}
+        with patch.object(r, "state", side_effect=[owned, owned, absent, absent, absent]), \
+                patch.object(r, "command", side_effect=[subprocess.CompletedProcess([], 0), subprocess.CompletedProcess([], 1)]), \
+                patch.object(r, "no_temporary_dirs", return_value=True), \
+                patch.object(h2d.Path, "exists", return_value=True):
+            with self.assertRaisesRegex(h2d.Stop, "^PROCESS_CGROUP_REMAINS$"):
+                r.cleanup()
+
     def test_fallback_cleanup_does_not_hide_failure(self):
         r, _, _, _ = runner()
         fake = MagicMock()

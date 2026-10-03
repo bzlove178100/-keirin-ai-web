@@ -66,6 +66,36 @@ class RealFailureTests(unittest.TestCase):
                 r.case("parent")
         self.assert_clean(r)
 
+    def test_unit_collected_between_readback_and_reset_preserves_original_failure(self):
+        r, _, control, _ = self.runner()
+        command = r.command
+        raced = []
+
+        def collect_before_reset(args, **kwargs):
+            if args[1] == "reset-failed":
+                # Perform the collection after cleanup's ownership readback,
+                # then actually issue its now-stale reset against the manager.
+                command(args, **kwargs)
+                deadline = time.monotonic() + 3
+                while r.state().get("LoadState") != "not-found":
+                    self.assertLess(time.monotonic(), deadline)
+                    time.sleep(0.05)
+                result = command(args, **kwargs)
+                self.assertNotEqual(result.returncode, 0)
+                raced.append(True)
+                return result
+            return command(args, **kwargs)
+
+        # Make the stopped unit remain failed until the explicit collection,
+        # so this test does not depend on the manager's natural GC timing.
+        failing_probe = "import signal, sys, time; signal.signal(signal.SIGTERM, lambda *_: sys.exit(7)); print('private-error', flush=True); time.sleep(60)"
+        with patch.object(control, "PROBE", failing_probe), \
+                patch.object(r, "command", side_effect=collect_before_reset):
+            with self.assertRaisesRegex(h2d.Stop, "^PROCESS_EVIDENCE_INVALID$"):
+                r.case("parent")
+        self.assertEqual(raced, [True])
+        self.assert_clean(r)
+
     def test_failed_manager_assertion_cannot_be_rescued_by_fallback_cleanup(self):
         r, _, _, _ = self.runner()
         real_wait = r.wait_failure

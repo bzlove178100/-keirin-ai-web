@@ -243,7 +243,11 @@ def make_runner(h2, controller, memory):
                 if state.get("LoadState") != "not-found":
                     self.own(state)
                     result = self.command(["/usr/bin/systemctl", "reset-failed", self.unit], timeout=3)
-                    need(result.returncode == 0, "PROCESS_RESET_FAILED")
+                    # An inactive transient unit can be collected between show
+                    # and reset-failed. Only verified absence permits cleanup
+                    # to continue; existing directory/cgroup checks still apply.
+                    if result.returncode != 0:
+                        need(self.state().get("LoadState") == "not-found", "PROCESS_RESET_FAILED")
             super().cleanup()
             need(not Path("/sys/fs/cgroup/system.slice", self.unit).exists(), "PROCESS_CGROUP_REMAINS")
 
