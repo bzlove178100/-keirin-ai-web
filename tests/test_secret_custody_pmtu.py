@@ -209,7 +209,7 @@ def child(role, version):
                 neighbor("rright", peer, "peer0")
                 t.run("sysctl", "-qw", "net.ipv4.ip_forward=1" if version == 4 else "net.ipv6.conf.all.forwarding=1")
                 proto = "icmp type destination-unreachable icmp code frag-needed" if version == 4 else "icmpv6 type packet-too-big icmpv6 code 0"
-                t.nft(f'table inet {ROUTER_TABLE} {{ chain output {{ type filter hook output priority 0; policy accept; oifname "rleft" {proto} counter accept comment "router_ptb"; }} }}')
+                t.nft(f'table inet {ROUTER_TABLE} {{ chain output {{ type filter hook output priority 0; policy accept; oifname "rleft" {proto} counter accept comment "router_ptb"; }}; }}\n')
                 result = True
             elif op == "setup" and role == "peer":
                 setup_link("peer0", version, peer)
