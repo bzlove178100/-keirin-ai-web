@@ -1,6 +1,16 @@
 # Work status
 
-## Current boundary: real routed IPv4/IPv6 PMTU fixture
+## Current boundary: dynamic configuration with independent restricted recovery
+
+Updated: 2026-10-03 (Asia/Tokyo).
+
+PR #181 is merged at `1dd5666d779d82793b63d4a838b023ce1247d7ed`. Final head `f43ecb26969555a49a78a27e2e83ca30c784ce82` passed all five workflows and all fourteen regression jobs; this continuation rechecked the merge and workflow results against GitHub. Its actual IPv4/IPv6 routed PMTU evidence remains accepted.
+
+PR #182 adds mandatory `custody-dynamic-recovery`, which composes installed networkd DHCPv4 and IPv6 RA/SLAAC/ND, in separate private networks, with PID 1 supervised recovery. Both inet and netdev tables are replaced in one nft transaction. The controller dies by SIGKILL; actual renewal/RA refresh must continue during qualification and after restricted restoration, existing/new administration must survive, and old/new qualification connections must fail. Real worker death before apply, controller death before apply, and independent drift in either table are negative cases. Shape comparisons ignore only handles and counter measurements, so legitimate packet counts cannot masquerade as policy drift. See [dynamic recovery review](SECRET_CUSTODY_DYNAMIC_RECOVERY_REVIEW.md). Code head `69ae85206d5bc193de6f538af2df549f959c16d0` passed all five workflows on its first run; regression `37128722659` passed all fifteen jobs. Dynamic recovery job `111219298078` passed all seventeen acceptance records (eight IPv4, nine IPv6) and `SYNTHETIC_DYNAMIC_RECOVERY_OK_NO_LIVE_APPLY`, using kernel `6.17.0-1022-azure` and installed networkd `255.4-1ubuntu8.17`. This success applies to DHCPv4 and RA/ND, not DHCPv6. Actual post-restoration DHCP Renew/Rebind, RA refresh/ND/expiry, worker/controller death cases, both-table drift and cleanup all passed without skipped assertions. Six new local tests and thirteen reused-helper tests also pass. All five final-head workflows must pass before integration; final evidence and merge receipt belong in PR #182.
+
+This slice does not combine DHCPv6 or routed PMTU with recovery yet; these are the next composition targets. Installed Ubuntu DHCPv6 remains unqualified, while the separate pinned patched CI build remains qualified only in its recorded scope. DNS/time lifecycle, worker death after the last readiness check, concurrent non-cooperating root writers, reboot, first maintenance installation and a wrong shared administration allowlist remain unresolved. Completed phone evidence stays accepted. No phone/AWS/SSH/live host changes or credential use; H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: real routed IPv4/IPv6 PMTU fixture
 
 Updated: 2026-10-03 (Asia/Tokyo).
 
