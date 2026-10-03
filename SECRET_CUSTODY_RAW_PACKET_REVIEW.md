@@ -7,7 +7,7 @@ socket enforcement unresolved. systemd v255's DHCP discovery/rebinding socket
 is AF_PACKET/SOCK_DGRAM bound to ETH_P_IP. It must not be conflated with an
 ETH_P_ALL capture socket or an ordinary AF_INET UDP socket.
 
-## Required real-kernel evidence
+## Real-kernel acceptance cases
 
 The new mandatory Ubuntu job uses two disposable network namespaces and a
 fixed veth pair with documentation addresses. Receivers are opened before
@@ -117,3 +117,18 @@ The probe is now passed as closed stdlib-only code to the isolated Python exec,
 bound to the exact namespace already verified by the parent. No checkout
 permissions or capability restrictions are relaxed. Actual child assertions
 and full cleanup still must pass in the corrected-head CI.
+
+## Measured completion
+
+Code head `ce4fa08d8377b4dbf1634231598aa159d6af157c` passed the complete
+new job `111173559093` in regression run `37112699408` on kernel
+`6.17.0-1022-azure`. Its log contains all six PASS records, including the
+separately executed capability-free child and owned cleanup, ending with
+`SYNTHETIC_RAW_PACKET_BOUNDARY_OK_NO_LIVE_APPLY`. The prior three fixture
+failures above are superseded in this measured scope, not hidden or skipped.
+Three local guard/checksum tests passed.
+
+This completes the table's fixed IPv4 packet/capability cases. It does not
+complete the host maintenance matrix or the real DHCP lifecycle under netdev.
+The final documentation head must pass all five workflows before integration;
+its workflow results and merge receipt are recorded in PR #177.

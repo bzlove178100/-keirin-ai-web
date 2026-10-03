@@ -1,12 +1,12 @@
 # Work status
 
-## Current implementation: raw packet filtering and capability boundary
+## Current boundary: raw packet filtering measured; DHCP link-policy composition next
 
 Updated: 2026-10-03 (Asia/Tokyo).
 
 PR #176 is merged at `d82ed0cf76d3f3bc240b8fba447c081d0465eec9`. Its final head `526dca65c4101a71176e23ceafcb45b8d7ab7bab` passed all five workflows, rechecked on this resumption. The real DHCPv4 lifecycle is complete in its recorded isolated scope. Completed live phone observations remain accepted; do not request identical retries.
 
-The next mandatory CI fixture measures ordinary UDP, protocol-specific AF_PACKET and ETH_P_ALL receive paths separately. It checks inet versus netdev ingress/egress, normal and qdisc-bypass transmission, wrong tuples/fragments, a separately executed capability-free child and owned cleanup. See [packet boundary review](SECRET_CUSTODY_RAW_PACKET_REVIEW.md). Local tests and source review do not substitute for final-head kernel CI; require all five workflows successful before integration.
+PR #177 adds a mandatory CI fixture that measures ordinary UDP, protocol-specific AF_PACKET and ETH_P_ALL receive paths separately. It checks inet versus netdev ingress/egress, normal and qdisc-bypass transmission, wrong tuples/fragments, a separately executed capability-free child and owned cleanup. See [packet boundary review](SECRET_CUSTODY_RAW_PACKET_REVIEW.md). Code head `ce4fa08d8377b4dbf1634231598aa159d6af157c` passed the complete real-kernel job `111173559093` in regression run `37112699408`, including all six PASS records and `SYNTHETIC_RAW_PACKET_BOUNDARY_OK_NO_LIVE_APPLY`, on kernel `6.17.0-1022-azure`. Three local tests passed. The review records the EPERM assertion, direct-egress protocol matching and capability-free checkout-access corrections with their failed and successful evidence. Final-head workflow results and merge receipt are recorded in PR #177; require all five workflows successful before integration.
 
 The design keeps raw capabilities out of the application worker. netdev ingress is not a confidentiality boundary against privileged ETH_P_ALL capture. These are synthetic packet/permission tests, not a live policy or DHCP authentication. Next compose restricted link rules with the actual DHCP lifecycle and existing administration assertions, then IPv6 control packets and fallback. First restricted maintenance installation/recovery remains unresolved. No phone operation or AWS/SSH/host mutation is requested; H2a and every runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gate remain OFF.
 
