@@ -107,3 +107,13 @@ rules and prints only fixed fixture counters on a mismatch. Actual success
 still requires the corrected positive and negative packet cases in CI; no
 claim of hostile raw-header/metadata consistency or arbitrary Ethernet/VLAN
 validation is added by this fixed SOCK_DGRAM fixture.
+
+Head `674ae6b5aaf3b850c960e59f01d004bdef369cac`, run `37112570619`,
+job `111173193947`, passed both receive-path distinctions and all normal/
+qdisc-bypass egress allow/deny cases. This confirms the protocol-metadata
+correction in the fixture. The capability probe then failed before execution:
+root with all capabilities removed could not read the runner-owned checkout.
+The probe is now passed as closed stdlib-only code to the isolated Python exec,
+bound to the exact namespace already verified by the parent. No checkout
+permissions or capability restrictions are relaxed. Actual child assertions
+and full cleanup still must pass in the corrected-head CI.

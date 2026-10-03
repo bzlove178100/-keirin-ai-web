@@ -5,6 +5,7 @@ Fixed documentation endpoints; no live policy, DHCP authentication or installer.
 from contextlib import ExitStack
 import errno
 import importlib.util
+import inspect
 import json
 import os
 from pathlib import Path
@@ -174,8 +175,13 @@ def counters(family, table):
             for obj in data["nftables"] if "rule" in obj and "comment" in obj["rule"]}
 
 
-def restricted_child():
-    guard()
+def restricted_child(expected_namespace):
+    # The parent checked host exclusion before dropping capabilities. Bind this
+    # exec to that exact namespace without reading protected checkout paths.
+    if (os.environ.get("GITHUB_ACTIONS") != "true"
+            or os.environ.get("KC_RAW_PACKET_CI") != "1"
+            or os.readlink("/proc/self/ns/net") != expected_namespace):
+        raise RuntimeError("RESTRICTED_CHILD_NAMESPACE_MISMATCH")
     status = dict(line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines() if ":" in line)
     assert all(int(status[k], 16) == 0 for k in ("CapEff", "CapPrm", "CapInh", "CapAmb", "CapBnd"))
     assert int(status["NoNewPrivs"]) == 1
@@ -277,8 +283,14 @@ def kernel():
                     outgoing("kc-out-deny-" + variant + str(bypass), bypass, variant, False)
                     assert counters("netdev", NETDEV)[key] == before + 1
             print("PASS NETDEV_EGRESS_FILTERS_NORMAL_AND_QDISC_BYPASS_PACKET_SEND", flush=True)
+            # Root without DAC override may not traverse the runner-owned
+            # checkout. Supply only the closed, stdlib-only probe as code;
+            # never widen checkout modes or restore a capability to run it.
+            code = ("import errno, os, socket\nfrom pathlib import Path\nETH_IP=2048\nETH_ALL=3\n"
+                    + inspect.getsource(restricted_child)
+                    + "\nrestricted_child(" + repr(os.readlink("/proc/self/ns/net")) + ")\n")
             child = t.run("/usr/bin/setpriv", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all",
-                          "--no-new-privs", "--", sys.executable, "-I", "-B", __file__, "--restricted")
+                          "--no-new-privs", "--", sys.executable, "-I", "-B", "-c", code)
             assert child.stdout == b"PASS EXECUTED_CHILD_NO_CAPABILITIES_NO_RAW_OR_INHERITED_SOCKET\n"
             print(child.stdout.decode(), end="", flush=True)
     finally:
@@ -323,7 +335,5 @@ if __name__ == "__main__":
         kernel()
     elif sys.argv[1:] == ["--peer"]:
         peer()
-    elif sys.argv[1:] == ["--restricted"]:
-        restricted_child()
     else:
         unittest.main(verbosity=2)
