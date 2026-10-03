@@ -268,3 +268,14 @@ jobs:
         # Private net/mount namespaces and runtime/config; never host networkd.
         # Fixed local DHCP server only; no external route from the peer namespace.
         run: sudo -n env KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_network_dhcp.py --systemd
+
+  custody-raw-packet-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test raw packet fixture guards and packet checksums
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_raw_packet.py
+      - name: Measure packet hooks and capability denial in disposable namespaces
+        # Fixed veth pair only; no physical/cloud interface or live policy.
+        run: sudo -n env KC_RAW_PACKET_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_raw_packet.py --kernel
