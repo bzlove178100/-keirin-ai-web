@@ -1,6 +1,16 @@
 # Work status
 
-## Current boundary: patched DHCPv6 with independent restricted recovery
+## Current boundary: routed PMTU after independent restricted recovery
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #183 merged at `98f569e29ac7e5b862f5d298704281164ee6121c`. Its final head `1b08ac107d4ad2bfd4e04e478961d0961bbd40d5` passed all five workflows and fifteen regression jobs. Merge state, final workflows and matching clean local/remote main were rechecked on this continuation; all twelve DHCPv6 composition acceptance records remain accepted.
+
+This slice composes routed IPv4/IPv6 PMTU with the existing independent PID 1 recovery worker. Fixed qualification profiles add only the documentation peer's TCP/443 tuple in both owned tables. After controller SIGKILL, actual qualification exchange must succeed; independent atomic restoration must revoke old/new qualification while existing management/bulk and new management connections work. The existing bulk socket must still report PMTU 1500 after restoration. The original forged-error rejection and real router 1500→1280 blocked-PTB stall/same-flow recovery then run under the restored policy. Final shape and old/new denial are checked again. The original standalone fixture stays mandatory. See [PMTU recovery review](SECRET_CUSTODY_PMTU_RECOVERY_REVIEW.md). CI evidence is pending; all five final-head workflows are required before integration.
+
+Next: DNS/time protocol lifecycle and first restricted maintenance installation/recovery design. Static routes/neighbors here do not establish simultaneous DHCP/RA/PMTU composition or a route change during the restoration transaction. Installed Ubuntu DHCPv6 remains unqualified. Worker death after the final readiness check, non-cooperating root writers, reboot and a wrong shared allowlist remain unresolved. Completed phone evidence remains accepted. No phone/AWS/SSH/live host/credential operation; H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: patched DHCPv6 with independent restricted recovery
 
 Updated: 2026-10-04 (Asia/Tokyo).
 
