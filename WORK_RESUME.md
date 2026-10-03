@@ -2,7 +2,17 @@
 
 Updated: 2026-10-03 (Asia/Tokyo).
 
-## Current boundary: real routed IPv4/IPv6 PMTU fixture
+## Current boundary: dynamic configuration with independent restricted recovery
+
+Updated: 2026-10-03 (Asia/Tokyo).
+
+PR #181 is merged at `1dd5666d779d82793b63d4a838b023ce1247d7ed`. Final head `f43ecb26969555a49a78a27e2e83ca30c784ce82` passed all five workflows and all fourteen regression jobs; this continuation rechecked the merge and workflow results against GitHub. Its actual IPv4/IPv6 routed PMTU evidence remains accepted.
+
+The next mandatory fixture composes installed networkd DHCPv4 and IPv6 RA/SLAAC/ND, in separate private networks, with PID 1 supervised recovery. Both inet and netdev tables are replaced in one nft transaction. The controller dies by SIGKILL; actual renewal/RA refresh must continue during qualification and after restricted restoration, existing/new administration must survive, and old/new qualification connections must fail. Real worker death before apply, controller death before apply, and independent drift in either table are negative cases. Shape comparisons ignore only handles and counter measurements, so legitimate packet counts cannot masquerade as policy drift. See [dynamic recovery review](SECRET_CUSTODY_DYNAMIC_RECOVERY_REVIEW.md). Six new local tests and thirteen reused-helper tests pass; actual kernel/systemd CI and all five final-head workflows are required before integration.
+
+This slice does not combine DHCPv6 or routed PMTU with recovery yet; these are the next composition targets. Installed Ubuntu DHCPv6 remains unqualified, while the separate pinned patched CI build remains qualified only in its recorded scope. DNS/time lifecycle, post-readiness worker death, concurrent non-cooperating root writers, reboot, first maintenance installation and a wrong shared administration allowlist remain unresolved. Completed phone evidence stays accepted. No phone/AWS/SSH/live host changes or credential use; H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: real routed IPv4/IPv6 PMTU fixture
 
 Updated: 2026-10-03 (Asia/Tokyo).
 

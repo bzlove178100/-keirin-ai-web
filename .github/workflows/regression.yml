@@ -349,3 +349,15 @@ jobs:
         # Fresh host/router/peer namespaces; only fixed documentation networks.
         # Real kernel errors, same-flow recovery, forged-error and data denial.
         run: sudo -n env KC_PMTU_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_pmtu.py --kernel
+
+  custody-dynamic-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test dynamic recovery isolation, readiness and two-table drift guards
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_dynamic_recovery.py
+      - name: Compose real DHCPv4 and IPv6 RA ND with independent restricted recovery
+        # PID 1 workers enter only fresh test namespaces. No live installer.
+        # Existing separate protocol and watchdog jobs remain mandatory.
+        run: sudo -n env KC_DHCP_CI=1 KC_DYNAMIC_RECOVERY_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dynamic_recovery.py --systemd
