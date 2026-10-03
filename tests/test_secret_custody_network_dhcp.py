@@ -23,10 +23,14 @@ from unittest.mock import patch
 SPEC = importlib.util.spec_from_file_location("transition", Path(__file__).with_name("test_secret_custody_network_transition.py"))
 t = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(t)
+RAW_SPEC = importlib.util.spec_from_file_location("raw_packet", Path(__file__).with_name("test_secret_custody_raw_packet.py"))
+raw = importlib.util.module_from_spec(RAW_SPEC)
+RAW_SPEC.loader.exec_module(raw)
 CLIENT = "192.0.2.10"
 PRIMARY = "192.0.2.2"
 ALTERNATE = "192.0.2.3"
 TABLE = "kc_dhcp_fixture"
+LINK_TABLE = "kc_dhcp_link"
 COOKIE = b"\x63\x82\x53\x63"
 ZERO = b"\0" * 4
 LEASE = 32
@@ -174,6 +178,7 @@ def peer():
             op = message[0]
             if op == "setup":
                 t.run(t.IP, "link", "set", "lo", "up")
+                t.run(t.IP, "link", "set", "peer0", "address", t.MAC_PEER)
                 for address in (PRIMARY, ALTERNATE):
                     t.run(t.IP, "addr", "add", address + "/24", "dev", "peer0")
                 t.run(t.IP, "link", "set", "peer0", "up")
@@ -181,7 +186,13 @@ def peer():
                 stack.callback(server.close)
                 for port in (53, 123, 9999):
                     t.listen(stack, PRIMARY, port, udp=True)
+                packets = packet_receivers(stack, "peer0")
                 result = True
+            elif op == "packet_send":
+                send_case("in", message[1], message[2])
+                result = True
+            elif op == "packet_receive":
+                result = raw.collect(packets, message[1])
             elif op == "events":
                 with server.lock:
                     if server.error:
@@ -201,6 +212,8 @@ def peer():
                 result = t.exchange(old) and t.reaches(CLIENT, 22, PRIMARY)
             elif op == "denied":
                 result = not t.reaches(CLIENT, 80, PRIMARY)
+            elif op == "expired":
+                result = not t.reaches(CLIENT, 22, PRIMARY)
             elif op == "stop":
                 break
             else:
@@ -225,6 +238,106 @@ def policy():
       chain forward { type filter hook forward priority 0; policy drop; }
     }
     '''
+
+
+def link_policy():
+    # Fixed CI tuples only. Bootstrap zero-source traffic is broadcast-only.
+    # No conntrack on netdev; the inet policy still restricts transport state.
+    # No static neighbor entries: actual ARP is required by the lifecycle.
+    return '''table netdev kc_dhcp_link {
+      chain ingress { type filter hook ingress device "host0" priority 0; policy drop;
+        meta protocol arp arp operation { request, reply } arp saddr ip { 192.0.2.2, 192.0.2.3 } arp daddr ip 192.0.2.10 counter accept comment "link_in_arp"
+        meta protocol ip ip frag-off & 0x3fff != 0 counter drop comment "link_in_fragment"
+        meta protocol ip ip saddr { 192.0.2.2, 192.0.2.3 } ip daddr { 192.0.2.10, 255.255.255.255 } udp sport 67 udp dport 68 counter accept comment "link_in_dhcp"
+        meta protocol ip ip saddr 192.0.2.2 ip daddr 192.0.2.10 tcp dport 22 accept
+        meta protocol ip ip saddr 192.0.2.2 ip daddr 192.0.2.10 udp sport { 53, 123 } accept
+        meta protocol ip counter drop comment "link_in_deny"
+      }
+      chain egress { type filter hook egress device "host0" priority 0; policy drop;
+        meta protocol arp arp operation { request, reply } arp saddr ip { 0.0.0.0, 192.0.2.10 } arp daddr ip { 192.0.2.2, 192.0.2.3, 192.0.2.10 } counter accept comment "link_out_arp"
+        meta protocol ip ip frag-off & 0x3fff != 0 counter drop comment "link_out_fragment"
+        meta protocol ip ip saddr 0.0.0.0 ip daddr 255.255.255.255 udp sport 68 udp dport 67 counter accept comment "link_out_bootstrap"
+        meta protocol ip ip saddr 192.0.2.10 ip daddr { 192.0.2.2, 192.0.2.3, 255.255.255.255 } udp sport 68 udp dport 67 counter accept comment "link_out_bound"
+        meta protocol ip ip saddr 192.0.2.10 ip daddr 192.0.2.2 tcp sport 22 accept
+        meta protocol ip ip saddr 192.0.2.10 ip daddr 192.0.2.2 udp dport { 53, 123 } accept
+        meta protocol ip counter drop comment "link_out_deny"
+      }
+    }
+    '''
+
+
+def packet_receivers(stack, interface):
+    return {"ip": raw.packet_socket(stack, interface, raw.ETH_IP),
+            "all": raw.packet_socket(stack, interface, raw.ETH_ALL, socket.SOCK_RAW)}
+
+
+def packet_cases(direction):
+    # Tuples: source, destination, source/destination port, fragment field.
+    if direction == "in":
+        base = (PRIMARY, CLIENT, 67, 68, 0)
+        allowed = {"primary": base, "alternate": (ALTERNATE, CLIENT, 67, 68, 0),
+                   "broadcast": (PRIMARY, "255.255.255.255", 67, 68, 0)}
+    elif direction == "out":
+        base = (CLIENT, PRIMARY, 68, 67, 0)
+        allowed = {"primary": base, "alternate": (CLIENT, ALTERNATE, 68, 67, 0),
+                   "broadcast": (CLIENT, "255.255.255.255", 68, 67, 0),
+                   "bootstrap": ("0.0.0.0", "255.255.255.255", 68, 67, 0)}
+    else:
+        raise ValueError("FIXED_DIRECTION_REQUIRED")
+    denied = {}
+    for name, index, value in (("source", 0, "192.0.2.99"),
+                               ("destination", 1, "192.0.2.99"),
+                               ("sport", 2, 69), ("dport", 3, 69),
+                               ("fragment", 4, 0x2000), ("offset", 4, 1)):
+        values = list(base)
+        values[index] = value
+        denied[name] = tuple(values)
+    if direction == "out":
+        denied["zero_unicast"] = ("0.0.0.0", PRIMARY, 68, 67, 0)
+    return allowed, denied
+
+
+def send_case(direction, name, token, bypass=False):
+    allowed, denied = packet_cases(direction)
+    source, destination, sport, dport, fragment = (allowed | denied)[name]
+    interface, mac = ("peer0", t.MAC_HOST) if direction == "in" else ("host0", t.MAC_PEER)
+    raw.send_packet(interface, mac, source, destination, sport, dport, token, bypass, fragment)
+
+
+def packet_controls(proc, filtered):
+    # Runs before networkd exists; every counter delta is from one probe.
+    # Payloads are unique non-DHCP tokens, never forged lease acknowledgments.
+    with ExitStack() as stack:
+        receivers = packet_receivers(stack, "host0")
+        for direction in ("in", "out"):
+            allowed, denied = packet_cases(direction)
+            for bypass in ((False, True) if direction == "out" else (False,)):
+                for name in allowed | denied:
+                    token = f"kc-link-{filtered}-{direction}-{bypass}-{name}"
+                    accepted = not filtered or name in allowed
+                    if name in allowed:
+                        key = "link_in_dhcp" if direction == "in" else ("link_out_bootstrap" if name == "bootstrap" else "link_out_bound")
+                    else:
+                        key = "link_" + direction + ("_fragment" if name in ("fragment", "offset") else "_deny")
+                    before = link_counters().get(key) if filtered else None
+                    if direction == "in":
+                        assert t.rpc(proc, "packet_send", name, token)
+                        seen = raw.collect(receivers, token)
+                        # The all-protocol tap precedes ingress even on denial.
+                        expected = {"ip": accepted, "all": True}
+                    else:
+                        send_case(direction, name, token, bypass)
+                        seen = t.rpc(proc, "packet_receive", token)
+                        expected = {"ip": accepted, "all": accepted}
+                    assert seen == expected, (token, seen, expected)
+                    if filtered:
+                        after = link_counters()[key]
+                        assert after == before + 1, (token, key, before, after)
+    print("PASS DHCP_LINK_" + ("EXACT_ALLOW_DENY_COUNTERS" if filtered else "UNFILTERED_PACKET_CONTROLS"), flush=True)
+
+
+def link_counters():
+    return raw.counters("netdev", LINK_TABLE)
 
 
 @contextmanager
@@ -357,6 +470,8 @@ def counters():
 
 def lifecycle():
     guard()
+    print("KERNEL", os.uname().release, flush=True)
+    print(t.run(t.NFT, "--version").stdout.decode().strip(), flush=True)
     assert {x["ifname"] for x in json.loads(t.run(t.IP, "-j", "link", "show").stdout)} == {"lo"}
     assert all("metainfo" in x for x in json.loads(t.run(t.NFT, "-j", "list", "ruleset").stdout)["nftables"])
     env = dict(os.environ, FIXTURE_PARENT_NETNS=os.readlink("/proc/self/ns/net"))
@@ -367,9 +482,14 @@ def lifecycle():
         t.run(t.IP, "link", "add", "host0", "type", "veth", "peer", "name", "peer0")
         t.run(t.IP, "link", "set", "peer0", "netns", str(proc.pid))
         t.run(t.IP, "link", "set", "lo", "up")
+        t.run(t.IP, "link", "set", "host0", "address", t.MAC_HOST)
         t.run(t.IP, "link", "set", "host0", "up")
         assert t.rpc(proc, "setup")
-        t.nft(policy())
+        packet_controls(proc, filtered=False)
+        # Both layers exist before networkd starts or any address is acquired.
+        t.nft(policy() + link_policy())
+        packet_controls(proc, filtered=True)
+        acquired_before = link_counters()
         with ExitStack() as stack:
             t.listen(stack, "0.0.0.0", 22)
             t.listen(stack, "0.0.0.0", 80)
@@ -380,8 +500,11 @@ def lifecycle():
                 # Fixed synthetic state only; never a live diagnostic path.
                 print("FIXTURE_ACQUIRE_STATE", json.dumps({"address": address_present(),
                       "route": default_route_present(), "lease_server": lease_server(root),
-                      "events": t.rpc(proc, "events")}), file=sys.stderr)
+                      "events": t.rpc(proc, "events"), "link_counters": link_counters()}), file=sys.stderr)
                 raise
+            acquired_after = link_counters()
+            for key in ("link_in_dhcp", "link_out_bootstrap"):
+                assert acquired_after[key] > acquired_before[key], (key, acquired_before, acquired_after)
             assert t.rpc(proc, "open")
 
             def check():
@@ -394,23 +517,35 @@ def lifecycle():
                 assert t.reaches(PRIMARY, 53, udp=True) and t.reaches(PRIMARY, 123, udp=True)
 
             denied()
+            # Actual ARP resolved the peer without a static-neighbor shortcut.
+            assert link_counters()["link_in_arp"] > 0 and link_counters()["link_out_arp"] > 0
             print("PASS NETWORKD_PRIVATE_RUNTIME_AND_REAL_LEASE", flush=True)
+            print("PASS DHCPV4_ACQUISITION_AND_ARP_UNDER_LINK_POLICY", flush=True)
             before = counters()
+            link_before = link_counters()
             wait_for(lambda: any(e["kind"] == "renew" and e["answered"] for e in t.rpc(proc, "events")), 18, check)
             wait_for(lambda: counters()["dhcp_in"] > before["dhcp_in"] and counters()["dhcp_out"] > before["dhcp_out"], 3, check)
+            assert link_counters()["link_in_dhcp"] > link_before["link_in_dhcp"]
+            assert link_counters()["link_out_bound"] > link_before["link_out_bound"]
             check()
             print("PASS DHCPV4_UNICAST_RENEWAL_TRAVERSES_INET_POLICY", flush=True)
+            print("PASS DHCPV4_UNICAST_RENEWAL_TRAVERSES_LINK_POLICY", flush=True)
+            link_before = link_counters()
             assert t.rpc(proc, "mode", "rebind")
             wait_for(lambda: lease_server(root) == ALTERNATE, 28, check)
             events = t.rpc(proc, "events")
             assert any(e["kind"] == "renew" and not e["answered"] for e in events)
             assert any(e["kind"] == "rebind" and e["answered"] for e in events)
+            assert link_counters()["link_in_dhcp"] > link_before["link_in_dhcp"]
+            assert link_counters()["link_out_bound"] > link_before["link_out_bound"]
             check()
             denied()
             print("PASS DHCPV4_BROADCAST_REBIND_TO_ALTERNATE_PRESERVES_ADMIN", flush=True)
+            print("PASS DHCPV4_BROADCAST_REBIND_TRAVERSES_LINK_POLICY", flush=True)
             assert t.rpc(proc, "mode", "silent")
             wait_for(lambda: not address_present() and not default_route_present(), LEASE + 8)
             assert any(e["kind"] == "renew" and not e["answered"] for e in t.rpc(proc, "events"))
+            assert t.rpc(proc, "expired"), "EXPIRED_ADDRESS_REMAINS_REACHABLE"
             print("PASS DHCPV4_LEASE_EXPIRY_REMOVES_DYNAMIC_ADDRESS_AND_ROUTE", flush=True)
         assert t.rpc(proc, "events") is not None
     finally:
@@ -422,9 +557,12 @@ def lifecycle():
             proc.wait(timeout=2)
         t.run(t.IP, "link", "del", "host0", success=False)
         t.nft("delete table inet " + TABLE + "\n", success=False)
+        t.nft("delete table netdev " + LINK_TABLE + "\n", success=False)
     assert {x["ifname"] for x in json.loads(t.run(t.IP, "-j", "link", "show").stdout)} == {"lo"}
+    assert all("metainfo" in x for x in json.loads(t.run(t.NFT, "-j", "list", "ruleset").stdout)["nftables"])
     print("PASS DHCP_FIXTURE_UNITS_PROCESSES_LINKS_AND_FILES_CLEANED", flush=True)
     print("RESULT SYNTHETIC_NETWORKD_DHCPV4_LIFECYCLE_OK_NO_LIVE_APPLY", flush=True)
+    print("RESULT SYNTHETIC_DHCPV4_LINK_POLICY_COMPOSITION_OK_NO_LIVE_APPLY", flush=True)
 
 
 class Tests(unittest.TestCase):

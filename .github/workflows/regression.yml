@@ -264,9 +264,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test DHCP fixture parser and host-namespace guard
         run: /usr/bin/python3 -I -B tests/test_secret_custody_network_dhcp.py
-      - name: Test actual networkd renewal, rebinding and lease expiry
+      - name: Test actual networkd lifecycle under inet and netdev restrictions
         # Private net/mount namespaces and runtime/config; never host networkd.
         # Fixed local DHCP server only; no external route from the peer namespace.
+        # Exact packet allow/deny controls precede acquisition; real ARP required.
         run: sudo -n env KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_network_dhcp.py --systemd
 
   custody-raw-packet-boundary:
