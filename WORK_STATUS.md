@@ -1,6 +1,16 @@
 # Work status
 
-## Current boundary: isolated DHCPv4 lifecycle passed; control-packet qualification remains
+## Current implementation: raw packet filtering and capability boundary
+
+Updated: 2026-10-03 (Asia/Tokyo).
+
+PR #176 is merged at `d82ed0cf76d3f3bc240b8fba447c081d0465eec9`. Its final head `526dca65c4101a71176e23ceafcb45b8d7ab7bab` passed all five workflows, rechecked on this resumption. The real DHCPv4 lifecycle is complete in its recorded isolated scope. Completed live phone observations remain accepted; do not request identical retries.
+
+The next mandatory CI fixture measures ordinary UDP, protocol-specific AF_PACKET and ETH_P_ALL receive paths separately. It checks inet versus netdev ingress/egress, normal and qdisc-bypass transmission, wrong tuples/fragments, a separately executed capability-free child and owned cleanup. See [packet boundary review](SECRET_CUSTODY_RAW_PACKET_REVIEW.md). Local tests and source review do not substitute for final-head kernel CI; require all five workflows successful before integration.
+
+The design keeps raw capabilities out of the application worker. netdev ingress is not a confidentiality boundary against privileged ETH_P_ALL capture. These are synthetic packet/permission tests, not a live policy or DHCP authentication. Next compose restricted link rules with the actual DHCP lifecycle and existing administration assertions, then IPv6 control packets and fallback. First restricted maintenance installation/recovery remains unresolved. No phone operation or AWS/SSH/host mutation is requested; H2a and every runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gate remain OFF.
+
+## Previous completed slice: isolated DHCPv4 lifecycle passed; control-packet qualification remains
 
 Updated: 2026-10-03 (Asia/Tokyo).
 
@@ -30,7 +40,7 @@ H1 and measured H2a/H2b/H2c/H2d are complete. Keep H2a inactive and every runtim
 
 ## Historical PR #174 preparation: independent recovery rehearsal and private dependency reader
 
-Updated: 2026-10-03 (Asia/Tokyo).
+Updated: 2026-10-02 (Asia/Tokyo).
 
 PR #173 is merged at `180e590d1cede88f1326642170b73856d40deeea`. All five workflows passed for head `c321c22f89ec56c3432115993371535b0f9cc1dd`; regression run `36900487170`, job `110498113203`, completed all seven real IPv4/IPv6 transition markers with `SYNTHETIC_NETWORK_TRANSITION_OK_NO_LIVE_APPLY`. The initial fixture failure below was corrected before that successful run. No live firewall changed.
 
@@ -290,5 +300,3 @@ Local shell syntax validation and 58 offline tests passed, including synthetic p
 Verified base: PR #153 merged, main `c3fd6d1488f1b4c8113ca652ca7dd109c15413d4`; its five exact-head CI workflows succeeded. The unchanged OIDC CloudFormation template passed local `cfn-lint==1.57.1` for Tokyo with no findings and no AWS credentials in the validation process environment. The offline CI now repeats that template check alongside the existing catalog tests. This is local schema validation, not AWS account/change-set validation or deployment.
 
 The SCP change and OIDC bootstrap were subsequently completed, and live run #1 succeeded. Those later observations supersede the old browser/session blocker. Offline work itself did not verify live AWS state. The successful live run also reported checkout Node.js deprecation and ubuntu-latest migration notices; these remain nonblocking maintenance follow-ups.
-
-
