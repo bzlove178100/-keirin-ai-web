@@ -160,9 +160,9 @@ def netdev_policy():
         ether type ip counter drop comment "in_deny"
       }
       chain egress { type filter hook egress device "host0" priority 0; policy drop;
-        ether type ip ip frag-off & 0x3fff != 0 counter drop comment "out_fragment"
-        ether type ip ip saddr 192.0.2.1 ip daddr 192.0.2.2 udp sport 68 udp dport 67 counter accept comment "out_allow"
-        ether type ip counter drop comment "out_deny"
+        meta protocol ip ip frag-off & 0x3fff != 0 counter drop comment "out_fragment"
+        meta protocol ip ip saddr 192.0.2.1 ip daddr 192.0.2.2 udp sport 68 udp dport 67 counter accept comment "out_allow"
+        meta protocol ip counter drop comment "out_deny"
       }
     }
     '''
@@ -230,10 +230,14 @@ def kernel():
                 }[variant]
                 send_packet("host0", t.MAC_PEER, source, destination, 68, dport, token, bypass, fragment)
                 got = t.rpc(proc, "receive", token)
-                assert got == dict.fromkeys(("ip", "all", "udp"), expected), (token, got)
+                if got != dict.fromkeys(("ip", "all", "udp"), expected):
+                    detail = counters("netdev", NETDEV) if netdev_installed else {}
+                    raise AssertionError((token, got, detail))
 
+            netdev_installed = False
             incoming("allowed", "kc-baseline-in", (True, True, True))
             outgoing("kc-baseline-out")
+            outgoing("kc-baseline-bypass", bypass=True)
             socks["udp"].sendto(b"kc-baseline-udp", (PEER, 67))
             assert all(t.rpc(proc, "receive", "kc-baseline-udp").values())
             print("PASS VALID_IPV4_UDP_PACKET_AND_RECEIVER_CONTROLS", flush=True)
@@ -253,6 +257,7 @@ def kernel():
             assert after["inet_in"] == before["inet_in"] + 1 and after["inet_out"] == before["inet_out"]
             print("PASS INET_BLOCKS_UDP_BUT_NOT_PACKET_SOCKET_PATHS", flush=True)
             t.nft(netdev_policy())
+            netdev_installed = True
             before = counters("netdev", NETDEV)
             incoming("allowed", "kc-netdev-in-allow", (True, True, False))
             assert counters("netdev", NETDEV)["in_allow"] == before["in_allow"] + 1

@@ -91,3 +91,19 @@ before installing inet rules. Afterwards it requires EPERM, exactly one
 output-drop counter increment and no peer delivery. Thus an unrelated
 permission error cannot count as successful enforcement. The rest of the
 packet/capability assertions stay intact; corrected-head CI is required.
+
+A second run at `861825b538f5a3aed8f1432cb137039100c02a30`
+(`37112406854`, job `111172721474`) passed the inet and ingress distinctions
+and the normal packet egress cases, then failed the **allowed** qdisc-bypass
+packet. It must not be counted as a successful denial test.
+
+Linux v6.17 `packet_snd`/`packet_parse_headers` do not initialize the MAC-header
+pointer for this SOCK_DGRAM path before direct egress, whereas regular
+`__dev_queue_xmit` resets it. Ether-header payload matching is therefore not
+assumed interchangeable with protocol metadata at this point. The correction
+uses `meta protocol ip` in the egress chain, keeping exact source/destination/
+port and fragment restrictions. It also requires bypass delivery before any
+rules and prints only fixed fixture counters on a mismatch. Actual success
+still requires the corrected positive and negative packet cases in CI; no
+claim of hostile raw-header/metadata consistency or arbitrary Ethernet/VLAN
+validation is added by this fixed SOCK_DGRAM fixture.
