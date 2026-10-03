@@ -1,6 +1,16 @@
 # Work status
 
-## Current boundary: patched DHCPv6 CI lifecycle qualified; PMTU next
+## Current boundary: real routed IPv4/IPv6 PMTU fixture
+
+Updated: 2026-10-03 (Asia/Tokyo).
+
+PR #180 merged at `c64253ff9443a19b6fa2c0964e9c4a75c0e34d07`. All five workflows for final head `c0affba6344e3a3589e4fe01bef6c3cb16dcb7b9` succeeded, rechecked on this continuation. Its success qualifies only the pinned patched CI build; installed Ubuntu 8.17 DHCPv6 remains unqualified.
+
+The next mandatory job places a real kernel router between sender and receiver. For each IP family it establishes TCP at MTU 1500, reduces the downstream path to 1280, proves error-blocked transfer stall, then requires recovery of the same queued 65,536-byte transfer when only RELATED PMTU errors are admitted. Socket/TCP state and receiver packet sizes provide separate evidence. Wrong outer headers, unrelated quoted flow and out-of-window quoted TCP sequence are tested; the latter requires the kernel rejection counter. TCP/443 stays denied and existing/new administration remains usable. See [PMTU review](SECRET_CUSTODY_PMTU_REVIEW.md). Four new and three packet-helper local tests pass; actual changed-head CI and all five final-head workflows are required before integration. Results and any diagnosis belong in the associated PR.
+
+This is fixed isolated PMTU qualification, separate from DHCP/RA and rollback. Next compose qualified dynamic controls with independently supervised restricted recovery. DNS/time lifecycle, a fixed live DHCPv6 deployment candidate, first restricted maintenance installation and wrong shared allowlist recovery remain unresolved. Completed phone observations remain accepted. No phone/AWS/SSH/live host action; H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: patched DHCPv6 CI lifecycle
 
 Updated: 2026-10-03 (Asia/Tokyo).
 

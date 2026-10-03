@@ -333,3 +333,19 @@ jobs:
             rm "$RUNNER_TEMP/kc-dhcp6-depot-owned"
           fi
           if test -f "$RUNNER_TEMP/kc-installed-networkd.sha256"; then sha256sum -c "$RUNNER_TEMP/kc-installed-networkd.sha256"; fi
+
+  custody-routed-pmtu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test PMTU isolation guards and real error checksums
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_pmtu.py
+      - name: Prepare packet offload controls in disposable CI
+        run: |
+          sudo -n apt-get update -qq
+          sudo -n apt-get install -y --no-install-recommends ethtool
+      - name: Measure actual IPv4 and IPv6 router PMTU under restricted policy
+        # Fresh host/router/peer namespaces; only fixed documentation networks.
+        # Real kernel errors, same-flow recovery, forged-error and data denial.
+        run: sudo -n env KC_PMTU_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_pmtu.py --kernel
