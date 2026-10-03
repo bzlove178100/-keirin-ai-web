@@ -1,0 +1,224 @@
+# Isolated real networkd DHCPv6 lifecycle
+
+Updated 2026-10-03. Fixed synthetic CI only; no live host or apply artifact.
+The explicitly patched private build passed the full isolated lifecycle; the
+installed Ubuntu client remains unqualified. See the paired-build scope below.
+
+PR #179 measured RA/SLAAC and kernel ND/DAD. This slice uses a separate fixed
+networkd profile to measure actual DHCPv6 IA_NA acquisition, Renew, Rebind and
+valid-lifetime expiry under restrictive inet/netdev rules. It retains the
+private network/mount/runtime/config isolation and the earlier mandatory jobs.
+
+## Protocol decision
+
+The tested systemd v255 sender uses UDP from its link-local address to
+ff02::1:2 for client messages, including Renew. Renew and Rebind are therefore
+distinguished by actual message types and server-ID fields, not by assuming
+the IPv4 unicast/broadcast pattern. Server responses are unicast to the client.
+RFC 9915 obsoletes the former server-unicast capability; this fixture does not
+claim conformance of every v255 behavior to the newer specification.
+
+The synthetic server joins the multicast group, reads IPV6_PKTINFO and checks
+destination/interface scope, client port, message kind, bounded options,
+client identity/IAID and requested IA address. It replies with matching
+transaction/client identifiers, a fixed IA_NA address, T1/T2/valid times of
+8/24/48 seconds and distinct primary/alternate DUIDs and link-local addresses.
+Rapid Commit is disabled so the four-message exchange is required. This is a
+minimal local test server, not a production allocator, relay or authenticator.
+
+Periodic RA has the managed flag and an on-link, non-autonomous prefix.
+Networkd also disables autonomous prefix use. Thus SLAAC cannot substitute for
+a missing DHCPv6 lease. RA continues during DHCP server silence: address expiry
+is tested independently of default-route expiry. Administration comes from an
+off-link documentation address on the same isolated peer, requiring the RA
+route for replies. TCP echo is transport evidence, not authenticated SSH.
+
+## Required acceptance
+
+| Case | Evidence |
+| --- | --- |
+| Packet controls | Every UDP tuple probe arrives before filtering; afterwards exact one-packet netdev counters and protocol-socket delivery/absence confirm primary/alternate allows and wrong source/destination/ports plus unsupported unicast denial |
+| Capture boundary | ETH_P_ALL still observes denied ingress; no privileged capture isolation claim |
+| Acquisition | Before managed RA no DHCP events/address; then Solicit/Advertise/Request/Reply, usable real address and RA route, inet/netdev DHCP counters, existing/new administration |
+| Client timers | Actual private-client journal must report distinct T1/T2 in the v255 jitter ranges; absent or collapsed timer evidence fails before lifecycle qualification |
+| Renew | Actual multicast Renew names primary DUID; replies extend kernel address lifetime and increment both filter-layer counters |
+| Rebind | Primary Renew goes unanswered; Rebind omits server ID; alternate replies; the next real Renew names the alternate DUID, proving client adoption; administration survives |
+| Expiry | No DHCP replies, including to alternate Renew/Rebind; address disappears, link-local and RA default route remain, and a new administration connection fails |
+| Cleanup | Private unit/files, peer, veth and both tables removed; only loopback and an empty ruleset remain |
+
+All fixture events/packets, waits, commands and processes are bounded. Only
+the new DHCPv6 client profile has a 195-second unit ceiling; earlier profiles
+retain 110 seconds. The CI job ceiling is 15 minutes including two source builds; each private
+client still has its 195-second ceiling. Diagnostics contain
+fixed synthetic state and classification, not raw client identifiers or secrets.
+
+## Limits and next work
+
+This is one fixed IA_NA address retained through server change, not renumbering,
+prefix delegation, relay, Rapid Commit, legacy unicast, DHCP authentication or
+every malformed/forged reply case. Header controls use direct IPv6 next-header
+fields; extension headers, fragments, VLANs and arbitrary raw metadata remain
+outside the claim. DUIDs and source headers are not security identities.
+Two approved server tuples do not implement discovery-to-allowlist widening.
+
+Next qualify IPv4/IPv6 PMTU with an actual constrained intermediate path, then
+compose dynamic dependencies with independently supervised restricted recovery.
+DNS/time lifecycle, first restricted maintenance installation and wrong shared
+allowlist recovery remain incomplete. No live apply, phone retry, AWS/SSH
+session, credential or runtime activation. H2a and every runtime/provider/
+credential/prediction/DB-write/data-fetch/scheduler/report gate stay OFF.
+
+## Primary sources checked
+
+- [systemd v255 DHCPv6 client](https://github.com/systemd/systemd/blob/v255/src/libsystemd-network/sd-dhcp6-client.c):
+  message state/server-ID construction, all_servers UDP send and lease timers.
+- [systemd v255 DHCPv6 sockets](https://github.com/systemd/systemd/blob/v255/src/libsystemd-network/dhcp6-network.c):
+  AF_INET6 UDP, link-local binding and server port.
+- [systemd v255 configuration](https://github.com/systemd/systemd/blob/v255/man/systemd.network.xml):
+  managed RA activation, RapidCommit, autonomous prefix and DHCP options.
+- [RFC 9915](https://www.rfc-editor.org/rfc/rfc9915.html):
+  multicast client/server exchanges, IA_NA, Renew/Rebind and deprecated server
+  unicast. Implementation behavior is measured separately from the standard.
+
+Nine DHCPv6, three build-provenance, four IPv6 and five shared DHCP local tests pass (21 total). Actual
+changed-head CI is required; final-head workflows and any diagnosis belong
+in the associated PR. No failed lifecycle stage may be skipped.
+
+## Earlier vendor qualification failure — retained evidence
+
+Initial code head `d92e190d82d6e21669a54ff8dc8e8f897137f9a6` failed
+[regression run 37116221040, job 111183444650](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/37116221040/job/111183444650)
+on kernel `6.17.0-1022-azure`, networkd `255.4-1ubuntu8.17`.
+All twelve existing regression jobs and the four other workflows succeeded.
+The DHCPv6 failure is mandatory and prevents integration.
+
+The original 8/18/40-second server replies achieved tuple controls,
+four-message acquisition and one primary Renew/lifetime refresh. The peer
+then answered Rebind with the alternate DUID. The real client processed those
+replies and refreshed the address, but repeatedly entered Rebind without the
+required subsequent alternate-DUID Renew. Journal evidence reported both
+T1 and T2 as 7 seconds. The wait for alternate Renew failed; expiry and final
+cleanup acceptance were not reached. This is not evidence that alternate
+replies were filtered or rejected. One observed Renew does not establish
+correct automatic timer behavior.
+
+The upstream v255.4 `sd-dhcp6-lease.c` implements the T2 getter using the T1
+field. The official Ubuntu `255.4-1ubuntu8.17` packaging archive identifies
+that exact version in its changelog; none of its 84 enabled patches changes
+`sd-dhcp6-lease.c`. An older applied-source revision from the DHCPv4 diagnosis
+was checked but identified itself as 8.11, so it is not the exact-version proof.
+The official upstream fix is
+[`8f5eaeb143dd9e58503980ae5f63dd78c463180e`](https://github.com/systemd/systemd/commit/8f5eaeb143dd9e58503980ae5f63dd78c463180e)
+(2025-07-21): it changes the T2 getter to the T2 field and explicitly explains
+skipped renewal. The observed failure agrees with that defect. The checked
+Ubuntu archive currently exposes the base and 8.17 source packages for this
+255.4 series; neither a corrected package nor a patched client was installed.
+
+Sources inspected read-only:
+
+- [upstream v255.4 lease implementation](https://github.com/systemd/systemd-stable/blob/v255.4/src/libsystemd-network/sd-dhcp6-lease.c)
+- [exact Ubuntu packaging archive](https://archive.ubuntu.com/ubuntu/pool/main/s/systemd/systemd_255.4-1ubuntu8.17.debian.tar.xz),
+  SHA-256 `4695ff34f83b1f7e6e02bf3cfac2e2a44ac76b6cfc5a38c0081bac6919d547bb`
+- [upstream fix patch](https://github.com/systemd/systemd/commit/8f5eaeb143dd9e58503980ae5f63dd78c463180e.patch),
+  SHA-256 `b581a4c784a89648f8a8f25866a2b66ad57e54e6644a3ab2c8b6fe75fef86ffb`
+
+The follow-up adds a mandatory real-client timer check. It rejects the known
+collapsed T1/T2 pair and missing evidence, even if scheduling happens to emit
+Renew. A local wire-format check independently verifies response timers,
+transaction/client IDs, alternate DUID and nested address lifetimes.
+A separate fixture issue is also corrected: the client permits 10 seconds of
+timer coalescing, so T2 is raised to 24 seconds and the lease to 48. The minimum
+jittered T2 (21.6) now exceeds maximum T1 (8) by more than that window.
+The longer lease only changes this isolated DHCPv6 unit's bound to 195 seconds.
+No existing lifecycle assertion or mandatory CI job is skipped or waived.
+The next changed-head run checks this explicit rejection, not a claimed fix
+of the installed client. Its result must be recorded in PR #180.
+
+Resume from this dependency blocker, not PMTU: obtain or build a
+provenance-pinned client containing the official fix entirely in disposable
+CI, keep the original unmodified-package failure as a separate result, and
+rerun every lifecycle stage. A privately built client would qualify only that
+build, not Ubuntu's original binary. Until the target client is explicitly
+identified and the full required job plus all five final-head workflows pass,
+keep PR #180 draft/unmerged. This diagnostic change does not modify main or
+any live host, install packages, change a live firewall or activate a gate.
+
+## Paired private builds — current validation target
+
+To isolate the fix from compiler/configuration differences, CI builds the
+exact Ubuntu 255.4-1ubuntu8.17 source twice with identical minimal options.
+First it compiles the unmodified packaged source, then applies the official
+one-line T2 fix and incrementally rebuilds. Both are real networkd clients.
+The original build must reach acquisition and exhibit only the specifically
+typed timer defect. Missing evidence, unrelated errors or an unexpectedly
+healthy original are failures. This negative control is explicitly not
+client qualification. The patched build must pass every lifecycle assertion.
+The historical installed-package failures above remain separate evidence.
+
+`build_secret_custody_dhcpv6_client.py` fixes the HTTPS locations and SHA-256
+of the Ubuntu .dsc, original tarball, Debian patch archive and upstream fix.
+It verifies those bytes before dpkg-source extraction, applies the Ubuntu
+patch series and checks that the upstream fix changes exactly the one getter
+line. This verifies pinned inputs, not PGP signatures or bit-reproducibility.
+The source directory is temporary; no package, service or host executable is
+installed. SHA-256 verifies the installed networkd binary stays unchanged.
+
+The two clients statically include systemd's internal libraries so neither
+can load the installed libsystemd-shared. Dynamic dependencies still come
+from the disposable CI OS. Compiler output/version, configure flags, input
+hashes and both executable hashes are retained in CI logs. This is a minimal
+custom build, not an Ubuntu-supported package or production remediation.
+A fixed root-owned depot holds only the two clients and manifest, validates
+hashes at selection and execution, and is bound read-only inside each private
+mount namespace. Callers select only installed/original/patched profiles,
+never an arbitrary executable. IPv4 and RA jobs retain the installed profile.
+The depot is removed only after this job created its ownership marker.
+
+Local guards and parser checks pass (21 tests). The paired-build/kernel
+run below passed; all final-head workflows remain required before integration.
+Only full patched-client success plus all final-head workflows permit
+merging this test infrastructure. This still leaves Ubuntu's installed
+client unqualified and every live deployment/runtime gate OFF. After this
+isolated scope is proven, constrained-path PMTU is the next fixture; live
+DHCPv6 requires an independently reviewed fixed deployment candidate.
+
+The first paired-build attempt at head `a4f032dfc26bcf115e1bb32405a2b7667fb98084`
+compiled the original client successfully (528 build steps), then failed the
+no-shared-systemd/no-RPATH check in job `111189777752`, run `37118477697`.
+No client lifecycle ran. Inspection of the pinned upstream Meson executable
+template found an inherited `install_rpath` even for the internal-static
+networkd target. Both build variants now receive identical
+`patchelf --remove-rpath` processing before the strict check. Dynamic NEEDED
+entries are logged; shared-systemd dependencies or remaining search paths
+still fail. The installed executable is unaffected. This addresses the build
+artifact check, not the DHCPv6 defect; actual paired kernel results remain
+required. [patchelf official manual](https://github.com/NixOS/patchelf/blob/master/patchelf.1)
+defines removal of DT_RPATH/DT_RUNPATH. Postprocessing is in the manifest.
+
+## Measured paired-build acceptance
+
+Code head `e066c8c97f086df0f6cc0900337df2a402583b9b` passed all five workflows. Regression run `37118721668`, DHCPv6 job `111190467251`, built both clients, confirmed the typed defect in the original, and passed all eight patched-client acceptance records plus `SYNTHETIC_DHCP6_LIFECYCLE_OK_NO_LIVE_APPLY` on kernel `6.17.0-1022-azure`. The patched client acquired its IA_NA address, reported separate timers, refreshed its actual lease, adopted the alternate DUID on the next Renew, preserved administration transport, expired the address while RA routing remained, and cleaned up. All thirteen regression jobs passed. Both root-owned client builds were removed; the installed networkd SHA-256 remained unchanged before and after.
+
+[Successful paired job](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/37118721668/job/111190467251)
+records both binary identities and original/patched source hashes. For that
+run only (not a claim of bit-reproducibility across future compiler images):
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Original client | `51f5b8a5a37ad89b23311f45ffca1bfaede28dae703ecf0a74ee70c21299e384` |
+| Patched client | `994899c1462d12b2a566257bd76ed3db4caba4371c08ef69837c75893082e919` |
+| Original lease source | `52efeb2307de8107bd52272a9ffef4d9c29fd78d580efec8c4176cd24b759f08` |
+| Patched lease source | `2d0818debd85765383916afce413f5445e5c98fcde5b15ec693791831a1a1d51` |
+
+Both clients' NEEDED entries are only libcap, libm, libc and the ELF loader;
+no shared-systemd dependency or RPATH/RUNPATH remains. The original control
+completed acquisition and cleanup, then reported
+`ORIGINAL_BUILD_DHCP6_TIMER_DEFECT_CONFIRMED_NOT_QUALIFIED`. It was not accepted
+as a working client. The patched run emitted all eight PASS records for tuple
+baselines/denials, acquisition, separate timers, Renew, alternate Rebind,
+expiry and cleanup. No installed package or host unit was replaced.
+
+This validates the narrow patched-build policy composition, not a live host,
+all DHCPv6 cases, a vendor package or full maintenance recovery. The next
+fixture is actual constrained-path PMTU. Final-head CI/merge evidence belongs
+in PR #180; no failed vendor qualification is erased by integration.

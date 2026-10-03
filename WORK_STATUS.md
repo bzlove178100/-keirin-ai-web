@@ -1,6 +1,18 @@
 # Work status
 
-## Current boundary: IPv6 RA/ND/DAD control fixture
+## Current boundary: patched DHCPv6 CI lifecycle qualified; PMTU next
+
+Updated: 2026-10-03 (Asia/Tokyo).
+
+PR #179 merged at `e805038a5c1404c260ab1a63a55726c81ec26810`; its IPv6 RA/ND/DAD evidence remains accepted. PR #180 adds paired real networkd source builds in isolated CI. Code head `e066c8c97f086df0f6cc0900337df2a402583b9b` passed all five workflows. Regression run `37118721668`, DHCPv6 job `111190467251`, built both clients, confirmed the typed defect in the original, and passed all eight patched-client acceptance records plus `SYNTHETIC_DHCP6_LIFECYCLE_OK_NO_LIVE_APPLY` on kernel `6.17.0-1022-azure`. The patched client acquired its IA_NA address, reported separate timers, refreshed its actual lease, adopted the alternate DUID on the next Renew, preserved administration transport, expired the address while RA routing remained, and cleaned up. All thirteen regression jobs passed. Both root-owned client builds were removed; the installed networkd SHA-256 remained unchanged before and after.
+
+The qualification target is explicitly the minimal custom Ubuntu 255.4-1ubuntu8.17 source build containing official upstream fix `8f5eaeb143dd9e58503980ae5f63dd78c463180e`. Identical build settings and RPATH removal are used for original and patched clients. Four source inputs are SHA-256 pinned; the applied patch is checked as exactly one getter-line change. Internal systemd libraries are statically linked and runtime binaries/manifest verified before use, then bound read-only inside the private client namespace. Twenty-one local tests pass. See [DHCPv6 review](SECRET_CUSTODY_DHCPV6_REVIEW.md) for the source hashes, executable hashes and acceptance evidence. All five final-head workflows must still pass before integration; their results and merge receipt belong in PR #180.
+
+The original installed Ubuntu client remains unqualified: earlier heads `d92e190d82d6e21669a54ff8dc8e8f897137f9a6` and `87cd699cae804a5589764dfd9a9934f6e8bc1fe3` exposed its T2 getter defect. Do not replace this failure with the custom build's success. The first paired build at `a4f032dfc26bcf115e1bb32405a2b7667fb98084` compiled but failed the dependency/search-path gate; identical RPATH removal corrected that build-artifact issue and the next run verified no shared-systemd dependency. No protocol assertion was waived. Historical failures and the changed validation target remain recorded.
+
+Next implement actual constrained-path IPv4/IPv6 PMTU, then compose dynamic control dependencies with independently supervised restricted recovery. Live DHCPv6 still needs an independently reviewed fixed deployment candidate; this CI build is not an installed or vendor-supported remedy. DNS/time lifecycle, first restricted maintenance installation and wrong shared allowlist recovery remain unresolved. Completed phone observations remain accepted; no phone/AWS/SSH/host action is requested. H2a and every runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gate remain OFF.
+
+## Previous completed slice: IPv6 RA/ND/DAD control fixture
 
 Updated: 2026-10-03 (Asia/Tokyo).
 

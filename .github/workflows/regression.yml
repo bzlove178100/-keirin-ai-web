@@ -292,3 +292,44 @@ jobs:
         # Private net/mount/runtime/config; fixed documentation link only.
         # DHCPv6, PMTU and restricted-recovery composition remain separate.
         run: sudo -n env KC_IPV6_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_ipv6_control.py --kernel
+
+  custody-dhcpv6-lifecycle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test DHCPv6 parser guards and packet checksums
+        run: |
+          /usr/bin/python3 -I -B tests/test_secret_custody_dhcpv6.py
+          /usr/bin/python3 -I -B tests/build_secret_custody_dhcpv6_client.py
+      - name: Prepare disposable CI build tools
+        run: |
+          sha256sum /usr/lib/systemd/systemd-networkd > "$RUNNER_TEMP/kc-installed-networkd.sha256"
+          sudo -n apt-get update -qq
+          sudo -n apt-get install -y --no-install-recommends build-essential dpkg-dev meson ninja-build pkg-config gperf python3-jinja2 libcap-dev libmount-dev libcrypt-dev patchelf
+      - name: Build pinned Ubuntu sources before and after official T2 fix
+        env:
+          KC_DHCP6_BUILD_CI: '1'
+        run: |
+          /usr/bin/python3 -I -B tests/build_secret_custody_dhcpv6_client.py --build
+          sudo -n mkdir -m 0755 /tmp/kc-dhcp6-ci-client
+          touch "$RUNNER_TEMP/kc-dhcp6-depot-owned"
+          sudo -n install -o root -g root -m 0755 "$RUNNER_TEMP/kc-dhcp6-client-output/networkd-original" "$RUNNER_TEMP/kc-dhcp6-client-output/networkd-patched" /tmp/kc-dhcp6-ci-client/
+          sudo -n install -o root -g root -m 0644 "$RUNNER_TEMP/kc-dhcp6-client-output/manifest.json" /tmp/kc-dhcp6-ci-client/
+          sha256sum -c "$RUNNER_TEMP/kc-installed-networkd.sha256"
+      - name: Require known timer defect in unpatched control build
+        # A typed timer defect is required; unrelated failures cannot pass.
+        run: sudo -n env KC_DHCP6_CI=1 KC_IPV6_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dhcpv6.py --original-control
+      - name: Require full lifecycle in explicitly patched CI build
+        # Qualifies only the pinned custom build, not Ubuntu's installed binary.
+        # No host package/unit replacement, external route or live apply.
+        run: sudo -n env KC_DHCP6_CI=1 KC_IPV6_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dhcpv6.py --patched-kernel
+      - name: Remove only the owned disposable client builds
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/kc-dhcp6-depot-owned"; then
+            sudo -n rm -f /tmp/kc-dhcp6-ci-client/networkd-original /tmp/kc-dhcp6-ci-client/networkd-patched /tmp/kc-dhcp6-ci-client/manifest.json
+            sudo -n rmdir /tmp/kc-dhcp6-ci-client
+            rm "$RUNNER_TEMP/kc-dhcp6-depot-owned"
+          fi
+          if test -f "$RUNNER_TEMP/kc-installed-networkd.sha256"; then sha256sum -c "$RUNNER_TEMP/kc-installed-networkd.sha256"; fi
