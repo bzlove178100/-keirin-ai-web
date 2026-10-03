@@ -341,8 +341,10 @@ def link_counters():
 
 
 @contextmanager
-def networkd(*, ipv6=False):
+def networkd(*, ipv6=False, dhcp6=False):
     guard()
+    if dhcp6 and not ipv6:
+        raise RuntimeError("DHCP6_REQUIRES_IPV6_PROFILE")
     # Private /run hides host D-Bus, netif leases and network configs. Ubuntu
     # patches link initialization to use detect_container(), not udev_available().
     print(t.run("/usr/lib/systemd/systemd-networkd", "--version").stdout.decode(), flush=True)
@@ -384,10 +386,22 @@ UseDNS=no
 UseDomains=no
 DHCPv6Client=no
 '''
+            if dhcp6:
+                config = config.replace("DHCP=no", "DHCP=ipv6").replace(
+                    "DHCPv6Client=no", "DHCPv6Client=yes\nUseAutonomousPrefix=no")
+                config += '''[DHCPv6]
+RapidCommit=no
+SendHostname=no
+UseDNS=no
+UseNTP=no
+UseDomains=no
+SendRelease=no
+WithoutRA=no
+'''
         (path / "network/10-fixture.network").write_text(config)
         t.run("/usr/bin/systemd-run", "--quiet", "--unit=" + unit,
               "--property=Type=exec", "--property=Restart=no",
-              "--property=RuntimeMaxSec=110", "--property=TimeoutStopSec=2",
+              "--property=RuntimeMaxSec=" + ("165" if dhcp6 else "110"), "--property=TimeoutStopSec=2",
               "--property=KillMode=control-group", "--property=PrivateMounts=yes",
               "--property=TemporaryFileSystem=/run:mode=0755",
               "--property=BindReadOnlyPaths=" + str(path / "network") + ":/etc/systemd/network " + str(path / "empty") + ":/usr/lib/systemd/network " + str(path / "networkd.conf") + ":/etc/systemd/networkd.conf " + str(path / "empty") + ":/etc/systemd/networkd.conf.d " + str(path / "empty") + ":/usr/lib/systemd/networkd.conf.d",

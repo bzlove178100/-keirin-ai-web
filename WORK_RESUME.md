@@ -2,7 +2,17 @@
 
 Updated: 2026-10-03 (Asia/Tokyo).
 
-## Current boundary: IPv6 RA/ND/DAD control fixture
+## Current boundary: real DHCPv6 lifecycle under restricted policy
+
+Updated: 2026-10-03 (Asia/Tokyo).
+
+PR #179 merged at `e805038a5c1404c260ab1a63a55726c81ec26810`. All five workflows succeeded for final head `b9e7906fcb29e598f3f21657589114903c775b44`, rechecked on this continuation. RA/ND/DAD acceptance is complete only in its recorded isolated scope; the corrected empty-address reader remains covered.
+
+The next mandatory fixture uses real networkd DHCPv6 IA_NA with a minimal local server, restricted inet/netdev tuples and continuing managed RA. It requires four-message acquisition, multicast Renew with actual lifetime refresh, Rebind to an alternate server and a subsequent Renew naming that alternate DUID, administration continuity, and lease expiry while the RA route remains. See [DHCPv6 review](SECRET_CUSTODY_DHCPV6_REVIEW.md). Five new plus nine shared local tests pass; changed-head kernel CI and all five final-head workflows must pass before integration. Results and merge evidence belong in the associated PR.
+
+No legacy DHCPv6 unicast, renumbering, prefix delegation, DHCP authentication, complete protocol or live qualification is claimed. Next constrained-path IPv4/IPv6 PMTU, then dynamic-control composition with independently supervised restricted recovery. DNS/time lifecycle, first restricted maintenance installation and recovery from a wrong shared allowlist remain unresolved. Completed phone observations remain accepted; no phone/AWS/SSH/host action is requested. H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: IPv6 RA/ND/DAD control fixture
 
 Updated: 2026-10-03 (Asia/Tokyo).
 

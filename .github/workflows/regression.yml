@@ -292,3 +292,15 @@ jobs:
         # Private net/mount/runtime/config; fixed documentation link only.
         # DHCPv6, PMTU and restricted-recovery composition remain separate.
         run: sudo -n env KC_IPV6_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_ipv6_control.py --kernel
+
+  custody-dhcpv6-lifecycle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test DHCPv6 parser guards and packet checksums
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_dhcpv6.py
+      - name: Test real networkd DHCPv6 under restricted IPv6 policy
+        # Private client runtime/config; RA and DHCP server are local fixtures.
+        # No SLAAC substitution, external route, provider or live firewall action.
+        run: sudo -n env KC_DHCP6_CI=1 KC_IPV6_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dhcpv6.py --kernel
