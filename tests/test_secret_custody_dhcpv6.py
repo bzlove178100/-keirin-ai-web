@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import struct
 import subprocess
@@ -22,7 +23,9 @@ MULTICAST = "ff02::1:2"
 ALTERNATE = "fe80::3"
 SERVERS = {"primary": bytes.fromhex("00030001020000000102"),
            "alternate": bytes.fromhex("00030001020000000103")}
-T1, T2, LEASE = 8, 18, 40
+# The minimum randomized T2 (21.6s) stays over 10s beyond maximum T1 (8s),
+# avoiding v255's 10-second timer-coalescing window even with the getter fixed.
+T1, T2, LEASE = 8, 24, 48
 
 
 def guard():
@@ -293,6 +296,16 @@ def increased(before):
     return all(after[key] > before[key] for key in ("in_dhcp6", "out_dhcp6", "inet_in_dhcp6", "inet_out_dhcp6"))
 
 
+def require_client_timers(log):
+    # v255 subtracts at most 10% before logging whole seconds. A known upstream
+    # getter defect returns T1 as T2; an occasional Renew must not qualify it.
+    reported = re.findall(rb"DHCPv6 client: T([12]) expires in (\d+)s(?:\r?\n|$)", log)
+    pair = [(int(kind), int(value)) for kind, value in reported[-2:]]
+    if (len(pair) != 2 or pair[0][0] != 1 or pair[1][0] != 2
+            or not 7 <= pair[0][1] <= 8 or not 21 <= pair[1][1] <= 24):
+        raise RuntimeError("DHCP6_CLIENT_TIMER_CONTRACT: expected T1=7..8 T2=21..24 seconds; reported=" + str(pair))
+
+
 def lifecycle():
     guard()
     print("KERNEL", os.uname().release, flush=True)
@@ -316,7 +329,7 @@ def lifecycle():
             t.listen(stack, "::", 22)
             t.listen(stack, "::", 80)
             before = counts()
-            stack.enter_context(d.networkd(ipv6=True, dhcp6=True))
+            _, unit = stack.enter_context(d.networkd(ipv6=True, dhcp6=True))
             try:
                 d.wait_for(lambda: v.usable(v.HOST_LL) and v.counters()["out_rs"] > 0, 12)
                 assert not t.rpc(proc, "events") and not v.usable(v.CLIENT)
@@ -328,6 +341,8 @@ def lifecycle():
                 assert increased(before)
                 assert t.rpc(proc, "open") and t.rpc(proc, "denied")
                 print("PASS REAL_DHCP6_FOUR_MESSAGE_ACQUISITION_AND_RA_ROUTE", flush=True)
+                require_client_timers(t.run("/usr/bin/journalctl", "--no-pager", "-u", unit, "-n", "120").stdout)
+                print("PASS DHCP6_CLIENT_DISTINCT_T1_T2_CONFIRMED", flush=True)
 
                 def check():
                     assert v.usable(v.CLIENT) and v.route_present()
@@ -339,7 +354,7 @@ def lifecycle():
                 print("PASS DHCP6_MULTICAST_RENEW_REFRESHES_ACTUAL_ADDRESS_LIFETIME", flush=True)
                 before = counts()
                 assert t.rpc(proc, "mode", "rebind")
-                d.wait_for(lambda: any(e["kind"] == "rebind" and e["answered"] for e in t.rpc(proc, "events")), 35, check)
+                d.wait_for(lambda: any(e["kind"] == "rebind" and e["answered"] for e in t.rpc(proc, "events")), 40, check)
                 d.wait_for(lambda: any(e["kind"] == "renew" and e["requested_server"] == "alternate" and e["answered"] for e in t.rpc(proc, "events")), 25, check)
                 events = t.rpc(proc, "events")
                 assert any(e["kind"] == "renew" and e["requested_server"] == "primary" and not e["answered"] for e in events)
@@ -410,6 +425,26 @@ class Tests(unittest.TestCase):
             self.assertEqual(raw.checksum(pseudo + packet[40:]), 0)
         self.assertEqual(managed_ra()[45], 0x80)
         self.assertEqual(managed_ra()[67], 0x80)
+
+    def test_reply_encodes_distinct_timers_and_alternate_identity(self):
+        opts = {1: b"test-client", 3: b"iaid" + bytes(8)}
+        packet = reply(b"\x06\x01\x02\x03", "rebind", "alternate", opts)
+        self.assertEqual(packet[:4], b"\x07\x01\x02\x03")
+        fields = options(packet[4:])
+        self.assertEqual(fields[1], b"test-client")
+        self.assertEqual(fields[2], SERVERS["alternate"])
+        self.assertEqual(struct.unpack("!4sII", fields[3][:12]), (b"iaid", 8, 24))
+        self.assertEqual(options(fields[3][12:])[5], v.packed(v.CLIENT) + struct.pack("!II", 48, 48))
+        self.assertGreater(T2 * 0.9 - T1, 10)
+
+    def test_correct_client_timer_jitter_is_accepted(self):
+        for t1, t2 in ((7, 21), (8, 24)):
+            require_client_timers(f"DHCPv6 client: T1 expires in {t1}s\nDHCPv6 client: T2 expires in {t2}s\n".encode())
+
+    def test_known_client_timer_defect_and_missing_evidence_are_rejected(self):
+        for log in (b"", b"DHCPv6 client: T1 expires in 7s\n", b"DHCPv6 client: T1 expires in 7s\nDHCPv6 client: T2 expires in 7s\n"):
+            with self.assertRaisesRegex(RuntimeError, "DHCP6_CLIENT_TIMER_CONTRACT"):
+                require_client_timers(log)
 
 
 if __name__ == "__main__":

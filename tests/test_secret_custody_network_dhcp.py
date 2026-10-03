@@ -401,7 +401,7 @@ WithoutRA=no
         (path / "network/10-fixture.network").write_text(config)
         t.run("/usr/bin/systemd-run", "--quiet", "--unit=" + unit,
               "--property=Type=exec", "--property=Restart=no",
-              "--property=RuntimeMaxSec=" + ("165" if dhcp6 else "110"), "--property=TimeoutStopSec=2",
+              "--property=RuntimeMaxSec=" + ("195" if dhcp6 else "110"), "--property=TimeoutStopSec=2",
               "--property=KillMode=control-group", "--property=PrivateMounts=yes",
               "--property=TemporaryFileSystem=/run:mode=0755",
               "--property=BindReadOnlyPaths=" + str(path / "network") + ":/etc/systemd/network " + str(path / "empty") + ":/usr/lib/systemd/network " + str(path / "networkd.conf") + ":/etc/systemd/networkd.conf " + str(path / "empty") + ":/etc/systemd/networkd.conf.d " + str(path / "empty") + ":/usr/lib/systemd/networkd.conf.d",

@@ -2,13 +2,17 @@
 
 Updated: 2026-10-03 (Asia/Tokyo).
 
-## Current boundary: real DHCPv6 lifecycle under restricted policy
+## Current boundary: DHCPv6 qualification blocked by client timer defect
 
 Updated: 2026-10-03 (Asia/Tokyo).
 
 PR #179 merged at `e805038a5c1404c260ab1a63a55726c81ec26810`. All five workflows succeeded for final head `b9e7906fcb29e598f3f21657589114903c775b44`, rechecked on this continuation. RA/ND/DAD acceptance is complete only in its recorded isolated scope; the corrected empty-address reader remains covered.
 
-The next mandatory fixture uses real networkd DHCPv6 IA_NA with a minimal local server, restricted inet/netdev tuples and continuing managed RA. It requires four-message acquisition, multicast Renew with actual lifetime refresh, Rebind to an alternate server and a subsequent Renew naming that alternate DUID, administration continuity, and lease expiry while the RA route remains. See [DHCPv6 review](SECRET_CUSTODY_DHCPV6_REVIEW.md). Five new plus nine shared local tests pass; changed-head kernel CI and all five final-head workflows must pass before integration. Results and merge evidence belong in the associated PR.
+PR #180 is draft and blocked, not complete or merged. Initial head `d92e190d82d6e21669a54ff8dc8e8f897137f9a6` failed regression run `37116221040`, DHCPv6 job `111183444650`, on networkd `255.4-1ubuntu8.17`. All twelve existing regression jobs and the other four workflows passed. Packet controls, four-message acquisition and one primary Renew succeeded, but the required next Renew naming the alternate DUID did not occur after Rebind. The client accepted alternate replies, yet logged T1 and T2 both at 7 seconds; expiry and final cleanup acceptance were not reached.
+
+The official v255.4 source returns T1 from the T2 getter. The exact Ubuntu 8.17 packaging archive has no patch changing that source; upstream fix `8f5eaeb143dd9e58503980ae5f63dd78c463180e` addresses this same skipped-renewal defect. See [DHCPv6 review](SECRET_CUSTODY_DHCPV6_REVIEW.md) for version-specific sources, hashes and the rejected filtering/alternate-server hypothesis. A follow-up rejects collapsed/missing client timer evidence explicitly and checks response wire fields locally. Its separate timer-coalescing correction uses T1/T2/lease 8/24/48 seconds and a 195-second private DHCPv6 unit bound. Eight new plus nine shared local tests must pass; changed-head CI must demonstrate explicit rejection on the original affected client. Record that result in PR #180; never relabel a rejection as lifecycle success.
+
+Next obtain/build a provenance-pinned client with the official fix in disposable CI, retaining the original package's failed qualification separately. Require real acquisition, distinct timers, Renew/lifetime refresh, alternate Rebind and next alternate-DUID Renew, administration continuity, expiry and cleanup before qualification. A custom build would qualify only that build. Keep this PR unmerged until the target client and complete evidence are established; do not advance to PMTU by silently skipping this blocker. No repeated CI retry without changed conditions. Do not ask the phone user to debug CI or redo completed observations.
 
 No legacy DHCPv6 unicast, renumbering, prefix delegation, DHCP authentication, complete protocol or live qualification is claimed. Next constrained-path IPv4/IPv6 PMTU, then dynamic-control composition with independently supervised restricted recovery. DNS/time lifecycle, first restricted maintenance installation and recovery from a wrong shared allowlist remain unresolved. Completed phone observations remain accepted; no phone/AWS/SSH/host action is requested. H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
 
