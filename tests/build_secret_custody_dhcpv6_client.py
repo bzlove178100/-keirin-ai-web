@@ -55,7 +55,13 @@ def build():
         root = Path(temp)
         for name, (url, expected) in SOURCES.items():
             target = root / name
-            run("curl", "--proto", "=https", "--tlsv1.2", "-fsSL", "--max-time", "90", url, "-o", str(target), timeout=100)
+            if name == "fix.patch":
+                # GitHub's generated patch changes abbreviated index widths as
+                # its object database grows. Keep the exact previously reviewed
+                # bytes and original hash; URL remains provenance, not input.
+                shutil.copyfile(Path(__file__).with_name("fixtures") / "dhcpv6-t2-fix.patch", target)
+            else:
+                run("curl", "--proto", "=https", "--tlsv1.2", "-fsSL", "--max-time", "90", url, "-o", str(target), timeout=100)
             checked_input(target, expected)
         # SHA-256 pins are verified above; this is not a claim of PGP validation.
         run("dpkg-source", "--no-check", "-x", str(root / "systemd_255.4-1ubuntu8.17.dsc"), str(root / "source"), cwd=root)
@@ -122,6 +128,9 @@ def client_path(variant):
 
 
 class Tests(unittest.TestCase):
+    def test_vendored_fix_preserves_original_reviewed_hash(self):
+        checked_input(Path(__file__).with_name("fixtures") / "dhcpv6-t2-fix.patch", SOURCES["fix.patch"][1])
+
     def test_build_refuses_without_ci_before_output_or_commands(self):
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}), patch.object(Path, "mkdir") as mkdir, patch(__name__ + ".run") as command:
             with self.assertRaisesRegex(RuntimeError, "UNPRIVILEGED_CI_BUILD_REQUIRED"):

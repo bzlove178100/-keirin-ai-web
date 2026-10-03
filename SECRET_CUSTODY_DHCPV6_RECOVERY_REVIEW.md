@@ -14,6 +14,8 @@ The peer event list is then cleared without restarting the client or server. The
 
 ## Validation boundary
 
+Initial PR #183 head `54530d4ce47f13850da3fd8a904bfd9b750fe1fc` failed before compilation in run `37161194778`, job `111314797928`: `PINNED_CLIENT_INPUT_MISMATCH`. All three Ubuntu downloads still match their original hashes. The GitHub-generated fix patch changed only its index abbreviations from 11 to 12 hex digits; restoring the 11-digit representation exactly reproduces original SHA-256 `b581a4c784a89648f8a8f25866a2b66ad57e54e6644a3ab2c8b6fe75fef86ffb`. The current generated patch hashes to `f67ad156f3ec7e005cbdeb7975c5f7af201e2ac081714ea9a6d348d465743667`; the official commit API confirms the same one-line getter fix. The original reviewed bytes are now vendored in `tests/fixtures/dhcpv6-t2-fix.patch`. No pin or source change is accepted automatically: the old SHA check and exact applied one-line comparison remain mandatory. The changed condition is local immutable patch input rather than GitHub's generated representation. Actual composition remains unverified until the corrected CI passes.
+
 Two new guard tests plus six shared recovery and nine DHCPv6 tests pass locally (17 total). Kernel/systemd composition and all five final-head workflows must pass before integration. Actual run IDs, observations and any failure diagnosis will be recorded in the PR and handoff; local tests alone do not qualify the composition.
 
 ## Limits and next step
