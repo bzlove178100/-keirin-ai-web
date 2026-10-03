@@ -1,8 +1,8 @@
 # Isolated real networkd DHCPv6 lifecycle
 
 Updated 2026-10-03. Fixed synthetic CI only; no live host or apply artifact.
-The target is now an explicitly patched private build; the installed Ubuntu
-client remains unqualified. See the paired-build scope below.
+The explicitly patched private build passed the full isolated lifecycle; the
+installed Ubuntu client remains unqualified. See the paired-build scope below.
 
 PR #179 measured RA/SLAAC and kernel ND/DAD. This slice uses a separate fixed
 networkd profile to measure actual DHCPv6 IA_NA acquisition, Renew, Rebind and
@@ -174,10 +174,10 @@ mount namespace. Callers select only installed/original/patched profiles,
 never an arbitrary executable. IPv4 and RA jobs retain the installed profile.
 The depot is removed only after this job created its ownership marker.
 
-Local guards and parser checks pass (21 tests); actual paired-build/kernel
-results are pending and must be recorded in PR #180 before integration.
-Only full patched-client success plus all final-head workflows would permit
-merging this test infrastructure. It would still leave Ubuntu's installed
+Local guards and parser checks pass (21 tests). The paired-build/kernel
+run below passed; all final-head workflows remain required before integration.
+Only full patched-client success plus all final-head workflows permit
+merging this test infrastructure. This still leaves Ubuntu's installed
 client unqualified and every live deployment/runtime gate OFF. After this
 isolated scope is proven, constrained-path PMTU is the next fixture; live
 DHCPv6 requires an independently reviewed fixed deployment candidate.
@@ -194,3 +194,31 @@ still fail. The installed executable is unaffected. This addresses the build
 artifact check, not the DHCPv6 defect; actual paired kernel results remain
 required. [patchelf official manual](https://github.com/NixOS/patchelf/blob/master/patchelf.1)
 defines removal of DT_RPATH/DT_RUNPATH. Postprocessing is in the manifest.
+
+## Measured paired-build acceptance
+
+Code head `e066c8c97f086df0f6cc0900337df2a402583b9b` passed all five workflows. Regression run `37118721668`, DHCPv6 job `111190467251`, built both clients, confirmed the typed defect in the original, and passed all eight patched-client acceptance records plus `SYNTHETIC_DHCP6_LIFECYCLE_OK_NO_LIVE_APPLY` on kernel `6.17.0-1022-azure`. The patched client acquired its IA_NA address, reported separate timers, refreshed its actual lease, adopted the alternate DUID on the next Renew, preserved administration transport, expired the address while RA routing remained, and cleaned up. All thirteen regression jobs passed. Both root-owned client builds were removed; the installed networkd SHA-256 remained unchanged before and after.
+
+[Successful paired job](https://github.com/bzlove178100/-keirin-ai-web/actions/runs/37118721668/job/111190467251)
+records both binary identities and original/patched source hashes. For that
+run only (not a claim of bit-reproducibility across future compiler images):
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Original client | `51f5b8a5a37ad89b23311f45ffca1bfaede28dae703ecf0a74ee70c21299e384` |
+| Patched client | `994899c1462d12b2a566257bd76ed3db4caba4371c08ef69837c75893082e919` |
+| Original lease source | `52efeb2307de8107bd52272a9ffef4d9c29fd78d580efec8c4176cd24b759f08` |
+| Patched lease source | `2d0818debd85765383916afce413f5445e5c98fcde5b15ec693791831a1a1d51` |
+
+Both clients' NEEDED entries are only libcap, libm, libc and the ELF loader;
+no shared-systemd dependency or RPATH/RUNPATH remains. The original control
+completed acquisition and cleanup, then reported
+`ORIGINAL_BUILD_DHCP6_TIMER_DEFECT_CONFIRMED_NOT_QUALIFIED`. It was not accepted
+as a working client. The patched run emitted all eight PASS records for tuple
+baselines/denials, acquisition, separate timers, Renew, alternate Rebind,
+expiry and cleanup. No installed package or host unit was replaced.
+
+This validates the narrow patched-build policy composition, not a live host,
+all DHCPv6 cases, a vendor package or full maintenance recovery. The next
+fixture is actual constrained-path PMTU. Final-head CI/merge evidence belongs
+in PR #180; no failed vendor qualification is erased by integration.
