@@ -2,7 +2,17 @@
 
 Updated: 2026-10-03 (Asia/Tokyo).
 
-## Current boundary: dynamic configuration with independent restricted recovery
+## Current boundary: patched DHCPv6 with independent restricted recovery
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #182 merged at `a8cb390df54b1c183623cfee31d7c905eef8dc39`. Final head `a8fb90bfbec4a575a144952805fe2d0c1d6591b0` passed all five workflows and fifteen regression jobs. GitHub merge and final workflows were rechecked on this continuation; its seventeen dynamic-recovery acceptance records remain accepted.
+
+The next slice adds a fixed DHCPv6 profile to the independent PID 1 worker, using only the previously qualified pinned patched CI networkd build. A real Renew must refresh the lease while the controller is dead and qualification is active; the worker then atomically restores inet and netdev, denying established/new qualification traffic while preserving administration. The original complete lifecycle is reused after restore, with a fresh event window for Renew, alternate-DUID Rebind/adoption and lease expiry while RA routing remains. A post-restore wrong-source frame is rejected. The original-client defect control and standalone patched lifecycle remain mandatory. Seventeen local tests pass; actual CI remains required before integration. See [DHCPv6 recovery review](SECRET_CUSTODY_DHCPV6_RECOVERY_REVIEW.md).
+
+Next is routed IPv4/IPv6 PMTU recovery composition. Installed Ubuntu DHCPv6 remains unqualified. DNS/time lifecycle, worker death after the last readiness check, non-cooperating root writers, reboot, first maintenance installation and a wrong shared allowlist remain unresolved. Completed phone observations stay accepted. No AWS/SSH/live host/credential operation; H2a and every runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gate remain OFF.
+
+## Previous completed slice: dynamic configuration with independent restricted recovery
 
 Updated: 2026-10-03 (Asia/Tokyo).
 

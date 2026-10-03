@@ -233,6 +233,13 @@ def peer():
                 with server.lock:
                     server.ra = True
                 result = True
+            elif op == "qualification_listener":
+                t.listen(stack, v.REMOTE, 443)
+                result = True
+            elif op == "clear_events":
+                with server.lock:
+                    server.events.clear()
+                result = True
             elif op == "mode":
                 if msg[1] not in ("rebind", "silent"):
                     raise RuntimeError("FIXED_MODE_REQUIRED")
@@ -312,7 +319,7 @@ def require_client_timers(log):
         raise ClientTimerError(pair)
 
 
-def lifecycle(*, client="installed"):
+def lifecycle(*, client="installed", recovery=None):
     guard()
     print("KERNEL", os.uname().release, flush=True)
     assert {x["ifname"] for x in json.loads(t.run(t.IP, "-j", "link", "show").stdout)} == {"lo"}
@@ -331,6 +338,7 @@ def lifecycle(*, client="installed"):
         packet_controls(proc, False)
         t.nft(policies())
         packet_controls(proc, True)
+        prepared = recovery.prepare() if recovery is not None else None
         with ExitStack() as stack:
             t.listen(stack, "::", 22)
             t.listen(stack, "::", 80)
@@ -354,6 +362,8 @@ def lifecycle(*, client="installed"):
                     assert v.usable(v.CLIENT) and v.route_present()
                     assert t.rpc(proc, "check"), "DHCP6_ADMIN_TRANSPORT_LOST"
 
+                if recovery is not None:
+                    recovery.exercise(stack, proc, check, prepared)
                 before = counts()
                 d.wait_for(lambda: any(e["kind"] == "renew" and e["requested_server"] == "primary" and e["answered"] for e in t.rpc(proc, "events")), 25, check)
                 d.wait_for(lambda: remaining() > LEASE - 4 and increased(before), 3, check)
@@ -378,6 +388,8 @@ def lifecycle(*, client="installed"):
                 assert any(e["kind"] == "renew" and e["requested_server"] == "alternate" and not e["answered"] for e in events)
                 assert any(e["kind"] == "rebind" and not e["answered"] for e in events)
                 print("PASS DHCP6_EXPIRY_REMOVES_ADDRESS_WHILE_RA_ROUTE_REMAINS", flush=True)
+                if recovery is not None:
+                    recovery.verify_expired(prepared)
             except BaseException:
                 print("FIXTURE_DHCP6_STATE", json.dumps({"addresses": v.addresses(), "routes": v.routes(), "counters": counts(), "events": t.rpc(proc, "events")}), file=sys.stderr)
                 raise
