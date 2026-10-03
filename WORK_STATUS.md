@@ -1,6 +1,18 @@
 # Work status
 
-## Current boundary: patched DHCPv6 CI lifecycle qualified; PMTU next
+## Current boundary: real routed IPv4/IPv6 PMTU fixture
+
+Updated: 2026-10-03 (Asia/Tokyo).
+
+PR #180 merged at `c64253ff9443a19b6fa2c0964e9c4a75c0e34d07`. All five workflows for final head `c0affba6344e3a3589e4fe01bef6c3cb16dcb7b9` succeeded, rechecked on this continuation. Its success qualifies only the pinned patched CI build; installed Ubuntu 8.17 DHCPv6 remains unqualified.
+
+PR #181 adds mandatory `custody-routed-pmtu`. Code head `a0e599ec6dde248882980182c7325cc92ec4b9ba`, regression run `37121414940`, job `111198105956`, passed all ten acceptance records and `SYNTHETIC_ROUTED_PMTU_OK_NO_LIVE_APPLY` on kernel `6.17.0-1022-azure`. Both IPv4/IPv6 real routers emitted valid errors quoting 1500-byte TCP packets and announcing MTU 1280. Blocking those errors stalled the queued transfer; admitting only RELATED PMTU errors recovered the same 65,536-byte transfer. Connected MTU and TCP_INFO PMTU read 1500 then 1280; MSS changed 1448→1228 for IPv4 and 1428→1208 for IPv6. Receiver packet lengths were at most 1280, with a 1280-byte packet observed. Wrong source/code, unrelated quoted flow and out-of-window quoted TCP sequence rejection all passed, including the kernel sequence-rejection counter. TCP/443 stayed denied, existing/new administration remained usable, and namespace/process/link/rule cleanup passed. All fourteen regression jobs and all five code-head workflows succeeded. Four new and three shared-helper local tests pass. See [PMTU review](SECRET_CUSTODY_PMTU_REVIEW.md). All five final-head workflows must pass before integration; final results and merge receipt belong in PR #181.
+
+The first PMTU head `8db90623c103fef7c85cf1bf164e8bb943d24c89` failed router setup in run `37121343744`, job `111197907590`: a missing separator after the nested nft chain produced an explicit parser error. The corrected separator/newline was the changed condition; the next run exercised every required assertion successfully. No PMTU success was claimed from the initial setup failure and no failed assertion was skipped.
+
+This is fixed isolated PMTU qualification, separate from DHCP/RA and rollback. Next compose qualified dynamic controls with independently supervised restricted recovery. DNS/time lifecycle, a fixed live DHCPv6 deployment candidate, first restricted maintenance installation and wrong shared allowlist recovery remain unresolved. Completed phone observations remain accepted. No phone/AWS/SSH/live host action; H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: patched DHCPv6 CI lifecycle
 
 Updated: 2026-10-03 (Asia/Tokyo).
 
