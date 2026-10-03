@@ -1,6 +1,6 @@
 # Routed IPv4/IPv6 PMTU under restricted policy
 
-Prepared 2026-10-03. Fixed synthetic CI only, never a live installer.
+Verified in isolated CI on 2026-10-03. Fixed synthetic CI only, never a live installer.
 
 The earlier fixtures do not establish that an allowed management transfer
 survives a smaller MTU on its actual route. This mandatory fixture creates
@@ -43,8 +43,30 @@ The kernel sources were checked for forwarding error generation and the TCP
 sequence-window check before PMTU updates. Linux UAPI in.h/in6.h/tcp.h define
 the connected MTU socket options and TCP_INFO fields used for independent
 readback. Four new local guard/header/checksum tests and three existing packet
-helper tests pass. Changed-head kernel CI and all five final-head workflows
-must pass before integration; exact run IDs/results belong in the PR.
+helper tests pass.
+
+## Observed CI evidence and initial failure
+
+PR #181 code head `a0e599ec6dde248882980182c7325cc92ec4b9ba`, regression
+run `37121414940`, job `111198105956`, passed all ten acceptance records and
+`SYNTHETIC_ROUTED_PMTU_OK_NO_LIVE_APPLY` on kernel `6.17.0-1022-azure`.
+Both genuine errors quoted a 1500-byte original TCP packet and advertised
+1280. IPv4 used router source `192.0.2.1`; IPv6 used `2001:db8:10::1`.
+Both connected MTU and TCP_INFO PMTU changed from 1500 to 1280. IPv4 MSS
+changed from 1448 to 1228; IPv6 MSS from 1428 to 1208. Each same-flow
+transfer received exactly 65,536 bytes and its maximum receiver-observed
+IP packet length was 1280. All four forged-error cases per family, blocked
+real-error stalls, ongoing administration, TCP/443 denial and cleanup passed.
+
+Initial head `8db90623c103fef7c85cf1bf164e8bb943d24c89`, run `37121343744`,
+job `111197907590`, stopped at router setup: the one-line nft table lacked
+a separator after its inner chain. The child reported a concrete parser
+error, then cleanup ran; no PMTU success was inferred. Adding the missing
+separator and final newline allowed the same mandatory assertions to run.
+No failed case was skipped, widened or replaced with simulated success.
+All fourteen regression jobs and all five code-head workflows succeeded.
+All five final-head workflows must pass before integration; exact final-head
+run IDs and the merge receipt are recorded in PR #181.
 
 ## Limits and next boundary
 
