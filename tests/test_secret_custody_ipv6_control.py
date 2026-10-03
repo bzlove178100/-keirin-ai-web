@@ -178,7 +178,8 @@ def peer():
 
 
 def addresses():
-    return json.loads(t.run(t.IP, "-j", "-6", "addr", "show", "dev", "host0").stdout)[0].get("addr_info", [])
+    links = json.loads(t.run(t.IP, "-j", "-6", "addr", "show", "dev", "host0").stdout)
+    return [address for link in links for address in link.get("addr_info", [])]
 
 
 def flagged(address, flag):
@@ -315,6 +316,12 @@ def kernel():
 
 
 class Tests(unittest.TestCase):
+    def test_no_ipv6_address_is_a_valid_empty_state(self):
+        result = subprocess.CompletedProcess([], 0, stdout=b"[]")
+        with patch.object(t, "run", return_value=result):
+            self.assertEqual(addresses(), [])
+            self.assertFalse(usable(CLIENT))
+
     def test_host_namespace_refused_before_commands(self):
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "KC_DHCP_CI": "1", "KC_IPV6_CI": "1"}), patch.object(os, "geteuid", return_value=0), patch.object(os, "readlink", return_value="same"), patch.object(t, "run") as run:
             with self.assertRaises(RuntimeError):

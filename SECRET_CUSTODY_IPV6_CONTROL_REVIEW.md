@@ -71,7 +71,19 @@ prediction/DB-write/data-fetch/scheduler/report gate remain OFF.
 - [Packet boundary review](SECRET_CUSTODY_RAW_PACKET_REVIEW.md):
   ingress filtering does not isolate privileged all-protocol capture.
 
-Three new guard/checksum tests and five shared DHCP guard/parser tests pass
+Four new guard/checksum/empty-state tests and five shared DHCP guard/parser tests pass
 locally. Actual changed-head CI results and any diagnosis belong in the PR;
 all five final-head workflows must pass before integration. No local parser
 test substitutes for the real networkd/kernel cases above.
+
+## Initial fixture correction
+
+Head `af9a4a152b53329e2b45b9cb4d74afe0a2113e0f`, regression run
+`37114865244`, IPv6 job `111179614984`, passed the unfiltered packet baseline
+on kernel `6.17.0-1022-azure`, then raised IndexError before rule installation.
+The IPv6-only address query returned an empty interface list when no IPv6
+address existed. The helper had incorrectly indexed the first element.
+It now flattens address entries across the returned list, correctly representing
+an empty list as no addresses; command failures still raise. A local regression
+replays this exact empty output. No packet/lifecycle assertion is removed.
+Changed-head kernel CI is still required.
