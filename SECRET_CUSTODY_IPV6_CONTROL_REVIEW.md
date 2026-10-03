@@ -87,3 +87,14 @@ It now flattens address entries across the returned list, correctly representing
 an empty list as no addresses; command failures still raise. A local regression
 replays this exact empty output. No packet/lifecycle assertion is removed.
 Changed-head kernel CI is still required.
+
+## Measured completion
+
+Corrected code head `153d681d755c2e332873370eadc01041a55fca42` passed IPv6
+job `111179939207` in regression run `37114983663`. Its actual log records
+kernel `6.17.0-1022-azure`, networkd `255.4-1ubuntu8.17`, all nine acceptance
+PASS records and `SYNTHETIC_IPV6_RA_ND_DAD_OK_NO_LIVE_APPLY`.
+This resolves the empty-state fixture defect and measures the full table above;
+it does not extend the stated scope to DHCPv6, PMTU, recovery or the live host.
+Four IPv6 and five shared DHCP local tests pass. All five final-head workflow
+results and the merge receipt are recorded in PR #179.
