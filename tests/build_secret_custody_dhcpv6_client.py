@@ -25,6 +25,7 @@ CONFIG = ["--prefix=/usr", "--sysconfdir=/etc", "--libdir=lib", "--libexecdir=li
           "-Dinstall-tests=false", "-Dtranslations=false", "-Dresolve=false",
           "-Dversion-tag=255.4-kc-dhcp6-ci"]
 DEPOT = Path("/tmp/kc-dhcp6-ci-client")
+POSTPROCESS = ["patchelf", "--remove-rpath"]
 
 
 def digest(path):
@@ -74,7 +75,11 @@ def build():
                     raise RuntimeError("EXACT_UPSTREAM_ONE_LINE_FIX_REQUIRED")
             run("ninja", "-C", str(builddir), "-j2", "systemd-networkd")
             binary = builddir / "systemd-networkd"
+            # Meson's common executable template reserves install_rpath even
+            # for internal-static builds. Remove it identically in both clients.
+            run(*POSTPROCESS, str(binary), timeout=10)
             dynamic = subprocess.run(["readelf", "-d", str(binary)], check=True, capture_output=True, timeout=10).stdout
+            print("CI_CLIENT_DYNAMIC", variant, [line.decode() for line in dynamic.splitlines() if any(key in line for key in (b"NEEDED", b"RPATH", b"RUNPATH"))], flush=True)
             if any(value in dynamic for value in (b"libsystemd-shared", b"RPATH", b"RUNPATH")):
                 raise RuntimeError("SELF_CONTAINED_INTERNAL_CLIENT_REQUIRED")
             target = output / ("networkd-" + variant)
@@ -86,7 +91,7 @@ def build():
             raise RuntimeError("DISTINCT_CLIENT_BUILDS_REQUIRED")
         manifest = {"schema": 1, "source_version": "255.4-1ubuntu8.17",
                     "inputs": {k: v[1] for k, v in SOURCES.items()}, "fix": FIX,
-                    "configure": CONFIG, "binaries": hashes,
+                    "configure": CONFIG, "postprocess": POSTPROCESS, "binaries": hashes,
                     "original_lease_sha256": hashlib.sha256(old).hexdigest(),
                     "patched_lease_sha256": digest(lease)}
         (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -109,6 +114,7 @@ def client_path(variant):
     if (manifest.get("schema") != 1 or manifest.get("source_version") != "255.4-1ubuntu8.17"
             or manifest.get("inputs") != {k: v[1] for k, v in SOURCES.items()}
             or manifest.get("fix") != FIX or manifest.get("configure") != CONFIG
+            or manifest.get("postprocess") != POSTPROCESS
             or manifest.get("binaries", {}).get(variant) != digest(binary)):
         raise RuntimeError("CLIENT_BUILD_MANIFEST_MISMATCH")
     print("CI_CLIENT", variant, digest(binary), flush=True)

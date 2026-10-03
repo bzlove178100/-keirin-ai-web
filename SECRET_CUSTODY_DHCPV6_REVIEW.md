@@ -181,3 +181,16 @@ merging this test infrastructure. It would still leave Ubuntu's installed
 client unqualified and every live deployment/runtime gate OFF. After this
 isolated scope is proven, constrained-path PMTU is the next fixture; live
 DHCPv6 requires an independently reviewed fixed deployment candidate.
+
+The first paired-build attempt at head `a4f032dfc26bcf115e1bb32405a2b7667fb98084`
+compiled the original client successfully (528 build steps), then failed the
+no-shared-systemd/no-RPATH check in job `111189777752`, run `37118477697`.
+No client lifecycle ran. Inspection of the pinned upstream Meson executable
+template found an inherited `install_rpath` even for the internal-static
+networkd target. Both build variants now receive identical
+`patchelf --remove-rpath` processing before the strict check. Dynamic NEEDED
+entries are logged; shared-systemd dependencies or remaining search paths
+still fail. The installed executable is unaffected. This addresses the build
+artifact check, not the DHCPv6 defect; actual paired kernel results remain
+required. [patchelf official manual](https://github.com/NixOS/patchelf/blob/master/patchelf.1)
+defines removal of DT_RPATH/DT_RUNPATH. Postprocessing is in the manifest.

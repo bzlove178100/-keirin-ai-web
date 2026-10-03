@@ -306,7 +306,7 @@ jobs:
         run: |
           sha256sum /usr/lib/systemd/systemd-networkd > "$RUNNER_TEMP/kc-installed-networkd.sha256"
           sudo -n apt-get update -qq
-          sudo -n apt-get install -y --no-install-recommends build-essential dpkg-dev meson ninja-build pkg-config gperf python3-jinja2 libcap-dev libmount-dev libcrypt-dev
+          sudo -n apt-get install -y --no-install-recommends build-essential dpkg-dev meson ninja-build pkg-config gperf python3-jinja2 libcap-dev libmount-dev libcrypt-dev patchelf
       - name: Build pinned Ubuntu sources before and after official T2 fix
         env:
           KC_DHCP6_BUILD_CI: '1'
