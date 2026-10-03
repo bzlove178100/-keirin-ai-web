@@ -76,3 +76,18 @@ report gates remain OFF.
 
 Local guards/checksum tests must pass, followed by actual CI without skips.
 Final-head workflow results and any diagnosed correction belong in the PR.
+
+## Initial CI correction
+
+Head `e5440f430a3456d00d503070b92eaf25d4386daa`, regression run
+`37112295809`, job `111172403460`, reached the valid raw packet/receiver
+controls on kernel `6.17.0-1022-azure`, then the ordinary UDP denial probe
+returned EPERM. The fixture incorrectly let that expected refusal abort the
+measurement. [Linux v6.17 netfilter core](https://github.com/torvalds/linux/blob/v6.17/net/netfilter/core.c)
+returns -EPERM for a drop verdict without a different explicit error.
+
+The correction first requires ordinary UDP transmission to all peer receivers
+before installing inet rules. Afterwards it requires EPERM, exactly one
+output-drop counter increment and no peer delivery. Thus an unrelated
+permission error cannot count as successful enforcement. The rest of the
+packet/capability assertions stay intact; corrected-head CI is required.

@@ -234,10 +234,16 @@ def kernel():
 
             incoming("allowed", "kc-baseline-in", (True, True, True))
             outgoing("kc-baseline-out")
+            socks["udp"].sendto(b"kc-baseline-udp", (PEER, 67))
+            assert all(t.rpc(proc, "receive", "kc-baseline-udp").values())
             print("PASS VALID_IPV4_UDP_PACKET_AND_RECEIVER_CONTROLS", flush=True)
             t.nft(inet_policy())
             before = counters("inet", INET)
-            socks["udp"].sendto(b"kc-normal-udp-denied", (PEER, 67))
+            try:
+                socks["udp"].sendto(b"kc-normal-udp-denied", (PEER, 67))
+                raise AssertionError("INET_DROP_MUST_REJECT_UDP_SEND")
+            except PermissionError as exc:
+                assert exc.errno == errno.EPERM
             assert not any(t.rpc(proc, "receive", "kc-normal-udp-denied").values())
             assert counters("inet", INET)["inet_out"] == before["inet_out"] + 1
             before = counters("inet", INET)
