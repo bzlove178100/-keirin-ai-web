@@ -280,3 +280,15 @@ jobs:
       - name: Measure packet hooks and capability denial in disposable namespaces
         # Fixed veth pair only; no physical/cloud interface or live policy.
         run: sudo -n env KC_RAW_PACKET_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_raw_packet.py --kernel
+
+  custody-ipv6-control:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test IPv6 fixture guards and real ICMPv6 checksums
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_ipv6_control.py
+      - name: Test real networkd RA and kernel ND DAD under restricted policy
+        # Private net/mount/runtime/config; fixed documentation link only.
+        # DHCPv6, PMTU and restricted-recovery composition remain separate.
+        run: sudo -n env KC_IPV6_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_ipv6_control.py --kernel
