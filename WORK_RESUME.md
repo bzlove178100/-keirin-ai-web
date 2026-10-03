@@ -2,7 +2,17 @@
 
 Updated: 2026-10-03 (Asia/Tokyo).
 
-## Current boundary: raw packet filtering measured; DHCP link-policy composition next
+## Current boundary: DHCPv4 lifecycle composed with restricted link policy
+
+Updated: 2026-10-03 (Asia/Tokyo).
+
+PR #177 merged at `e6f7c597d24c73f0d8f8852631b3c06bd87f67a6`. All five workflows succeeded for its final head `8d3af4b191c246359d3005a7ac773e41d0dda147`, rechecked on this continuation. The protocol-specific versus all-protocol packet-socket distinction and capability-free worker boundary remain accepted.
+
+The next change strengthens the mandatory real networkd DHCPv4 fixture: inet and default-drop netdev restrictions exist before initial acquisition, then remain through unicast renewal, alternate-server rebinding and expiry. It adds pre-rule positive packet controls, exact drop counters for wrong tuples/fragments, qdisc-bypass controls, actual ARP without static neighbors and expired-address reachability refusal. Existing/new TCP administration transport and all prior lifecycle assertions remain required. See [composition review](SECRET_CUSTODY_DHCP_LINK_REVIEW.md). Five DHCP and three packet local tests pass. Code head `d6554eb9184a6ff83c825a015e6ed2f7d7b634bf` passed regression run `37113754710`, DHCP job `111176470089`, with all ten PASS records and `SYNTHETIC_DHCPV4_LINK_POLICY_COMPOSITION_OK_NO_LIVE_APPLY` on kernel `6.17.0-1022-azure`, nftables `1.0.9` and networkd `255.4-1ubuntu8.17`. All eleven regression jobs succeeded, including unchanged transition, recovery and packet-boundary jobs. Require all five final-head workflows successful before integration; their results and merge receipt belong in PR #178.
+
+This is a fixed synthetic IPv4 composition, not a live policy, server authentication, ETH_P_ALL capture isolation, address renumbering, ARP spoofing defense or complete maintenance qualification. Next qualify IPv6 control traffic, then dynamic-dependency composition with restricted recovery. The first restricted maintenance anchor and recovery from an incorrect shared allowlist remain unresolved. Completed phone observations remain accepted; no repeated phone/AWS/SSH/host operation is needed. H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: raw packet filtering measured; DHCP link-policy composition next
 
 Updated: 2026-10-03 (Asia/Tokyo).
 

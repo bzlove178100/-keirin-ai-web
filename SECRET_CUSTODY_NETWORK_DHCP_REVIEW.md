@@ -2,6 +2,11 @@
 
 Updated 2026-10-03. CI only; no live host command or firewall installer.
 
+The current fixture additionally composes a fixed netdev link policy with this
+lifecycle. See [composition acceptance and limits](SECRET_CUSTODY_DHCP_LINK_REVIEW.md).
+The historical inet-only evidence below remains scoped to PR #176; it does not
+by itself prove the later link restrictions.
+
 The accepted private report shows DHCPv4 configuration. Fixed-address tests
 cannot establish that address renewal or rebinding works. This change runs the
 installed Ubuntu 24.04 systemd-networkd client against a minimal local synthetic
