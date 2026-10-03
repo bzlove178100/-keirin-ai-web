@@ -11,7 +11,7 @@ CI-only fixed documentation networks, no installer or live profile. Reuse the re
 5. Lower the real router's outgoing and receiver link MTU to 1280. Blocking real related PMTU errors must stall the queued 65,536-byte transfer with PMTU still 1500. Admit those errors, then require full delivery on the same socket, socket/TCP PMTU 1280, reduced MSS and unfragmented wire packets at most 1280 with 1280 observed.
 6. Recheck restored rule shape (excluding handles/counter measurements only) and old/new qualification denial. Existing namespace/process/link/table cleanup and worker unit/directory cleanup are mandatory.
 
-There are sixteen composition acceptance records (eight per family), in addition to the ten standalone records. These are assertions to run, not success claims until CI evidence is recorded.
+There are sixteen composition acceptance records (eight per family), in addition to the ten standalone records. All passed in the code-head run recorded below.
 
 ## Limits and remaining work
 
@@ -21,4 +21,4 @@ H2a and all live/provider/runtime/credential/prediction/DB-write/data-fetch/sche
 
 ## Evidence
 
-Pending local and CI validation. All five workflows for the exact final head must pass before integration; final run IDs and merge receipt belong in the PR.
+Code head `ed5e49640688e2384ae95016a170be795b271dd8` passed all sixteen composition acceptance records in regression run `37162795373`, PMTU job `111319533837`, on kernel `6.17.0-1022-azure`. The ten standalone records also passed. For both families the independently restored bulk socket still reported PMTU 1500; subsequent real router errors quoted 1500-byte packets and announced MTU 1280. Blocking them stalled the transfer, and admitting them delivered all 65,536 bytes on the same socket. IPv4 MSS changed 1448→1228, IPv6 1428→1208, with actual unfragmented wire packet lengths at most 1280 and 1280 observed. Post-restoration forged-error rejection, restored shape, old/new qualification denial, management survival and cleanup passed. The composition ended with `SYNTHETIC_PMTU_INDEPENDENT_RECOVERY_OK_NO_LIVE_APPLY` at 23:46:31 UTC on October 3 (08:46 JST on October 4). Fourteen local tests and `git diff --check` passed. All five code-head workflows succeeded, including all fifteen regression jobs in run `37162795373`. All five workflows for the exact final head must pass before integration; final run IDs and merge receipt belong in the PR.
