@@ -369,3 +369,17 @@ jobs:
         # PID 1 workers enter only fresh test namespaces. No live installer.
         # Existing separate protocol and watchdog jobs remain mandatory.
         run: sudo -n env KC_DHCP_CI=1 KC_DYNAMIC_RECOVERY_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dynamic_recovery.py --systemd
+
+  custody-dns-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test bounded DNS messages framing and isolation guards
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_dns.py
+      - name: Install DNS client only in disposable CI
+        run: |
+          sudo -n apt-get update -qq
+          sudo -n apt-get install -y --no-install-recommends bind9-dnsutils
+      - name: Verify actual DNS UDP TCP fallback and independently restored policy
+        run: sudo -n env KC_DNS_CI=1 KC_DHCP_CI=1 KC_DYNAMIC_RECOVERY_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dns.py --systemd

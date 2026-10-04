@@ -1,6 +1,16 @@
 # Work status
 
-## Current boundary: routed PMTU after independent restricted recovery
+## Current boundary: fixed DNS transport through independent recovery
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #184 merged at `99110f436a3cb8ac1bd1b94342d09e0fdbf43144`. Final corrected head `231acd82c86d806480f47b883fed1412cdc47fa1` passed all five workflows and fifteen regression jobs (`37163379851`). Its PMTU job `111321280325` passed ten standalone and sixteen recovery records. H2d job `111321280201` passed fourteen local and five real-systemd tests including intentional collection before stale reset. This continuation rechecked the merge, exact final workflows and matching clean local/remote main. The earlier reset failure remains historical evidence; its omitted state is not retroactively proved by the reproduced race.
+
+This slice adds mandatory `custody-dns-recovery` with installed `dig` and bounded synthetic DNS servers in a private dual-stack network. Require actual A/AAAA answers over UDP, explicit TCP and UDP truncation→TCP fallback under maintenance, after controller SIGKILL with qualification active, and after independent two-table restoration. A silent approved server must cause a bounded failed query; an unapproved changed endpoint must remain denied over UDP/TCP; re-enabling the original server with changed data must yield fresh answers. Actual unsolicited replies from the approved address must reach netdev then be denied by inet conntrack, and wrong-source replies must be denied at netdev. Existing/new administration, old/new qualification denial, final rule shape and cleanup remain required. Fourteen local DNS/recovery helper tests pass; CI evidence is pending. See [DNS recovery review](SECRET_CUSTODY_DNS_RECOVERY_REVIEW.md). All five final-head workflows and sixteen regression jobs are the integration gate; exact final evidence and merge receipt belong in the PR.
+
+This qualifies fixed DNS transport only, not systemd-resolved/NSS, cache or TTL expiry, automatic resolver discovery/failover, DNSSEC, encrypted DNS, or simultaneous DHCP/RA/PMTU lifecycles. No resolver configuration or host clock is changed. Next: synthetic time-source behavior, resolver integration/discovery design and first restricted maintenance installation/recovery design. Installed Ubuntu DHCPv6 remains unqualified. Worker death after the final readiness check, non-cooperating root writers, reboot and wrong shared allowlists remain unresolved. Completed phone evidence stays accepted. No phone/AWS/SSH/live host/credential action; H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: routed PMTU after independent restricted recovery
 
 Updated: 2026-10-04 (Asia/Tokyo).
 
