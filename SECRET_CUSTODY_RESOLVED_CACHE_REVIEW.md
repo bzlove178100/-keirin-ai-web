@@ -34,7 +34,7 @@ For each upstream family, use a fresh resolver process and fixed numeric peers:
 5. Change the private resolver to an unapproved fixed peer, read back that state
    and flush its private cache. A lookup must fail within its bounded client wait;
    output-drop counters must advance, the unapproved server must receive nothing,
-   and rules must stay exact. Restore the approved source and require new answers.
+   and rules must stay exact. Require a pending transaction after the one-second UDP client timeout; restore the approved source, observe zero active transactions within fifteen seconds, flush the private cache, and require fresh same-name A/AAAA upstream events.
 6. Reap resolver/bus/wrapper, remove owned cgroup/config/runtime and preserve host
    resolv.conf identity/content. Remove peer, links and owned rules; namespace empty.
 
@@ -47,6 +47,10 @@ Exact tested head, run/job IDs and merge receipt belong in the PR.
 ## Initial failure and correction
 
 Initial head `51bcca67c3d792ff0666580ff1d3ab91a4178654`, regression `37174153597`, resolver job `111353154685`, passed direct upstream baseline then stopped before daemon startup: `/run/systemd` already existed in the private runtime and exclusive mkdir raised FileExistsError. The private mount/runtime/config guards had passed. The fixture now accepts an existing real directory after lstat, but rejects symlinks/files; a real temporary-filesystem regression covers these cases. Six resolver plus eleven reused tests pass (17 total). No isolation guard, deadline or network assertion was relaxed. Corrected real-resolver CI is pending.
+
+## Pending-query recovery measurement
+
+Second head `c5f7197dc1b626614471137e24e8de7fde7ab4d5`, regression `37174244369`, resolver job `111353435221`, passed isolation plus IPv4 cache/TTL, truncation/TCP, controller-death and restored fresh queries, and unapproved-source denial. It failed the immediate same-name query after restoring the approved source. The log shows the denied UDP attempt falling back to TCP and the subsequent query remaining in processing; upstream v255 uses a ten-second TCP transaction timeout. A pending old transaction is the hypothesis to measure, not an assertion that configuration readback guarantees immediate recovery. The changed test requires actual positive TransactionStatistics after client timeout, restores the approved source, waits at most fifteen seconds for actual zero active transactions, then flushes only the private cache and requires fresh A/AAAA upstream events. Existing one-second client queries, isolation, policy shape and deny assertions are unchanged. If transactions do not drain, the test fails; no daemon restart or blind retry is used. Corrected CI is pending.
 
 ## Scope and remaining work
 
@@ -73,3 +77,5 @@ gates remain OFF; H2a inactive. No phone/AWS/SSH/live host/credential request.
 
 The actual Ubuntu CI version and behavior must be measured; upstream inspection
 alone does not qualify Ubuntu's packaged implementation.
+
+- [systemd v255 transaction implementation](https://github.com/systemd/systemd/blob/v255/src/resolve/resolved-dns-transaction.c): ten-second TCP transaction timeout.

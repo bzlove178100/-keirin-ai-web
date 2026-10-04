@@ -236,6 +236,17 @@ class Resolver:
         assert len(result.stdout) < 4096
         return json.loads(result.stdout)
 
+    def active_transactions(self):
+        result = self.bus("org.freedesktop.DBus.Properties", "Get", "ss", "org.freedesktop.resolve1.Manager", "TransactionStatistics")
+        assert len(result.stdout) < 1024
+        data = json.loads(result.stdout)
+        assert data["type"] == "v" and len(data["data"]) == 1
+        value = data["data"][0]
+        assert value["type"] == "(tt)" and len(value["data"]) == 2, data
+        active, total = value["data"]
+        assert type(active) is int and type(total) is int and 0 <= active <= total
+        return active
+
     def set_source(self, address):
         assert address in ("192.0.2.2", "192.0.2.3", "2001:db8:1::2", "2001:db8:1::3")
         family = socket.AF_INET6 if ":" in address else socket.AF_INET
@@ -413,9 +424,21 @@ def kernel():
                 assert t.rpc(proc, "events", prefix + "3") == before and y.counts()["inet_output_deny"] > drops
                 assert r.shape(y.KEY) == maintenance
                 print(f"PASS IPv{version}_RESOLVED_CHANGED_UNAPPROVED_SOURCE_DENIED_NO_WIDENING", flush=True)
+                active = res.active_transactions()
+                assert active > 0, "PENDING_DENIED_TRANSACTION_REQUIRED"
                 res.set_source(prefix + "2")
+                started = time.monotonic()
+                # The denied UDP send caused a TCP attempt; the upstream v255
+                # transaction timeout is 10 seconds. A one-second dig timeout
+                # does not cancel a UDP stub query. Observe actual completion,
+                # with a 15-second limit, before testing a fresh same-name query.
+                r.d.wait_for(lambda: res.active_transactions() == 0, 15, check)
+                print(f"DRAIN IPv{version} pending={active} elapsed={time.monotonic() - started:.3f}", flush=True)
+                res.call("FlushCaches")
+                before = len(t.rpc(proc, "events", prefix + "2"))
                 for kind in (1, 28):
                     query(kind)
+                assert len(t.rpc(proc, "events", prefix + "2")) >= before + 2
                 assert r.shape(y.KEY) == maintenance and not t.exchange(old)
                 check()
                 print(f"PASS IPv{version}_RESOLVED_APPROVED_SOURCE_RETURN_AND_ADMIN_SURVIVAL", flush=True)
