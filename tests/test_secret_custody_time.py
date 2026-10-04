@@ -1,5 +1,6 @@
 """CI-only chronyd source selection with no clock-setting capability."""
 from contextlib import ExitStack, contextmanager
+import errno
 import hashlib
 import importlib.util
 import json
@@ -150,11 +151,14 @@ def probe(address, success=True):
     data = bytes([0x23]) + bytes(39) + stamp(time.time())
     with socket.socket(af, socket.SOCK_DGRAM) as sock:
         sock.settimeout(0.4)
-        sock.sendto(data, (address, 123))
         try:
+            sock.sendto(data, (address, 123))
             result, source = sock.recvfrom(512)
         except socket.timeout:
             assert not success
+        except OSError as exc:
+            if success or exc.errno != errno.EPERM:
+                raise
         else:
             assert success and source[0] == address and source[1] == 123
             assert len(result) == 48 and result[0] == 0x24 and result[24:32] == data[40:48]
@@ -368,6 +372,27 @@ def kernel():
 
 
 class Tests(unittest.TestCase):
+    def test_probe_accepts_only_expected_denial_and_requires_positive_reply(self):
+        with patch.object(socket, "socket") as factory:
+            sock = factory.return_value.__enter__.return_value
+            sock.sendto.side_effect = PermissionError(errno.EPERM, "denied")
+            probe("192.0.2.9", success=False)
+            sock.recvfrom.assert_not_called()
+            with self.assertRaises(PermissionError):
+                probe("192.0.2.2")
+            sock.sendto.side_effect = OSError(errno.ENETUNREACH, "no route")
+            with self.assertRaises(OSError):
+                probe("192.0.2.9", success=False)
+            sock.sendto.side_effect = None
+            sock.recvfrom.side_effect = socket.timeout()
+            probe("192.0.2.9", success=False)
+            with self.assertRaises(AssertionError):
+                probe("192.0.2.2")
+            sock.recvfrom.side_effect = None
+            sock.recvfrom.return_value = (bytes(48), ("192.0.2.9", 123))
+            with self.assertRaises(AssertionError):
+                probe("192.0.2.9", success=False)
+
     def test_host_namespace_refused_before_commands(self):
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}), patch.object(os, "geteuid", return_value=0), patch.object(os, "readlink", return_value="same"), patch.object(t, "run") as command:
             with self.assertRaises(RuntimeError):

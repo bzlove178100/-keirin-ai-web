@@ -23,9 +23,13 @@ Fifteen acceptance records are required: six per family plus baseline, client cl
 
 ## Evidence and limits
 
-Four local packet/report/isolation tests and six reused recovery tests pass. CI is pending; all five workflows and seventeen regression jobs for the final head must pass before integration. Exact final evidence and merge receipt belong in the PR.
+Five local packet/report/isolation tests and six reused recovery tests pass. CI is pending; all five workflows and seventeen regression jobs for the final head must pass before integration. Exact final evidence and merge receipt belong in the PR.
 
 No installed/live time source is approved by this test. It does not qualify NTS, cryptographic authenticity, a malicious-but-plausible time source, clock correction, long-term drift, leap handling, RTC, suspend/reboot, DNS-resolved pools, dynamic source discovery, systemd-resolved, or simultaneous DHCP/RA/DNS/PMTU changes. Source preference is explicit, not discovered from the nine live entries. Initial restricted maintenance installation and independent recovery from a wrong shared allowlist remain unsolved. All activation gates OFF; H2a inactive.
+
+## Initial failure and changed condition
+
+Initial head `dd847428974c748d5472f3b2dd47b865b30e6e0e`, regression `37166897486`, time job `111331572656`, passed baseline and five IPv4 records, including accepted measurements after restoration and alternate selection for silent/wrong-origin replies. It stopped at the unapproved UDP probe: `sendto` returned `EPERM` immediately, but the helper handled only receive timeout. The helper now accepts only EPERM or timeout for an expected denial; positive probes, unrelated errors and any received reply still fail. A local regression covers these distinctions. The actual output-drop increment and unchanged peer counters remain mandatory. Five time tests plus six recovery tests pass. Corrected CI is pending; IPv6 and complete cleanup are not yet qualified.
 
 ## References
 
