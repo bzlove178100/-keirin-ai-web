@@ -38,6 +38,7 @@ def policy(mode):
     base = h.policy()
     if mode != "maintenance":
         base = "\n".join(line if "arp " in line else line.replace("192.0.2.2", "192.0.2.99").replace("192.0.2.3", "192.0.2.98") for line in base.splitlines()) + "\n"
+        base += f'insert rule inet {d.TABLE} output oifname "host0" ip saddr {{ 0.0.0.0, {d.CLIENT} }} udp sport 68 udp dport 67 counter drop comment "rescue_blocked_dhcp"\n'
         base += f'insert rule netdev {d.LINK_TABLE} egress meta protocol ip udp sport 68 udp dport 67 counter drop comment "rescue_blocked_dhcp"\n'
     # Static addresses/neighbors on this distinct link require no DHCP/DNS/ARP.
     for chain, direction, source, dest in (("input", "iifname", PEER, HOST), ("output", "oifname", HOST, PEER)):
@@ -148,6 +149,16 @@ def denied(main, res, kind):
     assert t.rpc(main, "dns_events", d.PRIMARY) == before
 
 
+def dhcp_drops():
+    return {family: d.raw.counters(family, name)["rescue_blocked_dhcp"]
+            for family, name in r.tables("rescue")}
+
+
+def dhcp_progress(before, after):
+    return (all(after[key] >= before[key] for key in ("inet", "netdev"))
+            and any(after[key] > before[key] for key in ("inet", "netdev")))
+
+
 def case(broken):
     guard()
     z.y.empty()
@@ -204,9 +215,10 @@ def case(broken):
                     old = stack.enter_context(t.connect(d.PRIMARY, 443))
                     assert t.exchange(old)
                     epoch = t.rpc(main, "change", d.PRIMARY)
-                    count = d.raw.counters("netdev", d.LINK_TABLE)["rescue_blocked_dhcp"]
+                    count = dhcp_drops()
                     denied(main, res, 1)
-                    d.wait_for(lambda: d.raw.counters("netdev", d.LINK_TABLE)["rescue_blocked_dhcp"] > count, 12, res.check)
+                    d.wait_for(lambda: dhcp_progress(count, dhcp_drops()), 12, res.check)
+                    print("RESCUE_DHCP_DENIAL_COUNTERS", label, json.dumps({"before": count, "after": dhcp_drops()}), flush=True)
                     assert not any(e["epoch"] == epoch for e in t.rpc(main, "events"))
                     assert d.address_present() and not (path / "result").exists()
                     assert t.rpc(rescue, "check") == {"old": True, "new": True}
@@ -302,6 +314,12 @@ class Tests(unittest.TestCase):
             self.assertFalse(any(result[k] for k in ("qualification", "mutation", "apply_allowed", "freshness_verified")))
         self.assertEqual(verdict(*values)["decision"], "CI_RESCUE_VERIFIED_REVIEW_ONLY")
         self.assertEqual(verdict(values[0], True, False, True, True)["reason"], "RESCUE_PATH_UNAVAILABLE")
+
+    def test_actual_dhcp_denial_can_precede_netdev_but_cannot_use_old_counts(self):
+        before = {"inet": 3, "netdev": 2}
+        for after, expected in (({"inet": 4, "netdev": 2}, True), ({"inet": 3, "netdev": 3}, True),
+                                ({"inet": 3, "netdev": 2}, False), ({"inet": 2, "netdev": 3}, False)):
+            self.assertEqual(dhcp_progress(before, after), expected)
 
     def test_fixed_profile_separates_rescue_from_shared_corruption(self):
         good, bad, fallback = policy("maintenance"), policy("qualification"), policy("wrong-maintenance")

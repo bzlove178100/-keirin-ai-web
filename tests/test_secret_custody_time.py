@@ -347,7 +347,9 @@ def kernel():
                     old = stack.enter_context(t.connect(prefix + "2", 443))
                     assert t.exchange(old)
                     before = clock.ntpstats("2")["Total good RX"]
-                    r.d.wait_for(lambda: clock.ntpstats("2")["Total good RX"] > before and clock.selected("2"), 3, check)
+                    selection_wait(clock, proc, "post-controller-sample", lambda state:
+                        clock.ntpstats("2")["Total good RX"] > before and state[prefix + "2"]["state"] == "*"
+                        and state[prefix + "2"]["reach"] > 0, 3, check, baseline={prefix + "2": {"Total good RX": before}})
                     assert not (path / "result").exists()
                     print(f"PASS IPv{version}_CHRONY_FRESH_SAMPLES_AFTER_CONTROLLER_SIGKILL", flush=True)
                     r.d.wait_for(lambda: (path / "result").exists(), 10, check)
@@ -355,7 +357,9 @@ def kernel():
                 assert r.shape(KEY) == maintenance and not t.exchange(old)
                 assert not t.reaches(prefix + "2", 443) and t.reaches(prefix + "2", 22)
                 before = clock.ntpstats("2")["Total good RX"]
-                r.d.wait_for(lambda: clock.ntpstats("2")["Total good RX"] >= before + 2 and clock.selected("2"), 5, check)
+                selection_wait(clock, proc, "post-restore-samples", lambda state:
+                    clock.ntpstats("2")["Total good RX"] >= before + 2 and state[prefix + "2"]["state"] == "*"
+                    and state[prefix + "2"]["reach"] > 0, 5, check, baseline={prefix + "2": {"Total good RX": before}})
                 print(f"PASS IPv{version}_CHRONY_SAME_CLIENT_POST_RESTORE_SAMPLES_AND_DENIAL", flush=True)
                 for mode in ("silent", "origin"):
                     # Selection can reuse retained samples. Require fresh good
