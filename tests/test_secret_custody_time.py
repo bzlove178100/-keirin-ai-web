@@ -244,10 +244,15 @@ def selection_wait(clock, proc, phase, predicate, timeout, check, baseline=None)
     try:
         r.d.wait_for(ready, timeout, check)
     except BaseException:
+        def sample(read):
+            try:
+                return read()
+            except Exception as error:
+                return {"diagnostic_error": type(error).__name__}
         print("TIME_SELECTION_DIAGNOSTIC", json.dumps({"phase": phase, "sources": latest, "baseline": baseline,
-            "client": {clock.prefix + s: clock.ntpstats(s) for s in ("2", "3")},
-            "last_ntpdata": {clock.prefix + s: clock.ntpdata(s) for s in ("2", "3")},
-            "server": {clock.prefix + s: t.rpc(proc, "counts", clock.prefix + s) for s in ("2", "3")}}), flush=True)
+            "client": {clock.prefix + s: sample(lambda: clock.ntpstats(s)) for s in ("2", "3")},
+            "last_ntpdata": {clock.prefix + s: sample(lambda: clock.ntpdata(s)) for s in ("2", "3")},
+            "server": {clock.prefix + s: sample(lambda: t.rpc(proc, "counts", clock.prefix + s)) for s in ("2", "3")}}), flush=True)
         raise
 
 
@@ -477,12 +482,15 @@ class Tests(unittest.TestCase):
         clock.ntpstats.return_value = {"Total good RX": 13}
         clock.ntpdata.return_value = {"NTP tests": "111 111 1111", "Total good RX": "13"}
         baseline = {"192.0.2.2": {"Total good RX": 10}}
-        with patch.object(r.d, "wait_for", side_effect=RuntimeError("original-deadline")), patch.object(t, "rpc", return_value={}), patch("builtins.print") as output:
-            with self.assertRaisesRegex(RuntimeError, "original-deadline"):
-                selection_wait(clock, None, "origin-prime", lambda _: False, 12, lambda: None, baseline)
-            diagnostic = json.loads(output.call_args.args[1])
-        self.assertEqual(diagnostic["baseline"], baseline)
-        self.assertEqual(diagnostic["last_ntpdata"]["192.0.2.2"]["NTP tests"], "111 111 1111")
+        for error in (None, RuntimeError("diagnostic-read-failed")):
+            clock.ntpdata.side_effect = error
+            with patch.object(r.d, "wait_for", side_effect=RuntimeError("original-deadline")), patch.object(t, "rpc", return_value={}), patch("builtins.print") as output:
+                with self.assertRaisesRegex(RuntimeError, "original-deadline"):
+                    selection_wait(clock, None, "origin-prime", lambda _: False, 12, lambda: None, baseline)
+                diagnostic = json.loads(output.call_args.args[1])
+            self.assertEqual(diagnostic["baseline"], baseline)
+            self.assertEqual(diagnostic["last_ntpdata"]["192.0.2.2"],
+                {"diagnostic_error": "RuntimeError"} if error else clock.ntpdata.return_value)
 
 
 if __name__ == "__main__":

@@ -251,12 +251,26 @@ def case(broken):
 
 def kernel():
     guard()
+    z.y.empty()
     print("KERNEL", os.uname().release, flush=True)
     for binary in (z.NETWORKD, z.DAEMON, z.BUS_DAEMON):
         print("CLIENT", binary, hashlib.sha256(Path(binary).read_bytes()).hexdigest(), flush=True)
-    for broken in (False, True):
-        case(broken)
+    for name in ("available", "broken"):
+        # t.listen's daemon accept threads can outlive a context close. Give
+        # each case its own process/netns and reap it before reusing port 22.
+        subprocess.run(["unshare", "--net", sys.executable, "-I", "-B", __file__, "--case", name],
+            env=dict(os.environ, RESCUE_CASE_PARENT_NETNS=os.readlink("/proc/self/ns/net")),
+            timeout=120, check=True)
+        z.y.empty()
     print("RESULT SYNTHETIC_RESTRICTED_RESCUE_OK_NO_LIVE_APPLY", flush=True)
+
+
+def child_case(name):
+    guard()
+    parent = os.environ.get("RESCUE_CASE_PARENT_NETNS")
+    if name not in ("available", "broken") or not parent or parent == os.readlink("/proc/self/ns/net"):
+        raise RuntimeError("DISTINCT_RESCUE_CASE_NAMESPACE_REQUIRED")
+    case(name == "broken")
 
 
 class Tests(unittest.TestCase):
@@ -271,6 +285,12 @@ class Tests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "RESTRICTED_RESCUE_CI_OPT_IN_REQUIRED"):
                 kernel()
             run.assert_not_called()
+
+    def test_each_case_requires_a_distinct_parent_namespace(self):
+        with patch(__name__ + ".guard"), patch.object(os, "readlink", return_value="parent"), patch.dict(os.environ, {"RESCUE_CASE_PARENT_NETNS": "parent"}), patch(__name__ + ".case") as launch:
+            with self.assertRaisesRegex(RuntimeError, "DISTINCT_RESCUE_CASE_NAMESPACE_REQUIRED"):
+                child_case("available")
+            launch.assert_not_called()
 
     def test_each_missing_proof_blocks_despite_shape_restoration(self):
         values = ["RESTORE_MAINTENANCE", True, True, True, True]
@@ -307,5 +327,7 @@ if __name__ == "__main__":
         kernel()
     elif sys.argv[1:] == ["--peer"]:
         peer()
+    elif len(sys.argv) == 3 and sys.argv[1] == "--case":
+        child_case(sys.argv[2])
     else:
         unittest.main(verbosity=2)
