@@ -68,6 +68,14 @@ composition tests pass locally (19 total), plus git diff --check. Actual kernel
 acceptance is pending; all five final-head workflows and twenty regression jobs
 are required before integration.
 
+## Initial failures and changed conditions
+
+Initial rescue head `18ad1e1ea9edf9c7c5d7a0e4b20ffe03e707e944`, regression `37189213031`, job `111397692130`, failed before daemon startup at 17:32:04 JST: the unrelated sentinel table omitted a separator after its nested chain. The emitted nft error identifies the closing table brace. Add the same chain separator used by the existing dynamic fixture; policy shape/isolation/client deadlines and all fifteen acceptance requirements remain unchanged. No rescue acceptance record passed on that initial head.
+
+The initial runtime smoke `37189213111`, job `111397691920`, separately reported verification_failed:github.verify_ci at 17:31:49 JST. It reads latest completed main CI, not this PR's kernel test. Direct Actions GET (the commit helper only lists pull-request events) revealed post-merge main regression `37188611863` on `dfbb572a7f101b3f979951b085bc93395444393f` failed time job `111395857615`. At 17:21:40 JST its origin-prime preparation exceeded twelve seconds after successful IPv4 silent-primary failover/return. The primary was selected, both sources had reach 255/poll 0; primary cumulative RX/valid/good were 31/31/20, alternate 39/39/39. The preparation baseline and per-packet rejection reason were not retained, so the precise cause is unproven. Earlier PR #191 final CI and this PR's unchanged time job `111397692121` both passed. The prior PR acceptance statement remains correct; its later main push run did not pass.
+
+One targeted diagnostic rerun of that failed main time job is authorized by the existing CI workflow scope and has been requested on a newly provisioned runner, with code/assertions/deadlines unchanged. Hypothesis: runner-dependent scheduling/sample acceptance may affect fresh-phase preparation. New information: whether the failure reproduces and the actual fresh-phase/client/server counters in the second run. Success requires all fifteen existing records including all four fresh preparations; a pass does not establish a root-cause fix. If it fails again, stop identical reruns and inspect the retained diagnostics. Do not weaken main verification or bypass the final CI gate. The historical preparation reliability limitation stays recorded regardless of that result.
+
 ## Unqualified boundaries and next step
 
 The fixture begins from an already tested restricted anchor and cannot authorize

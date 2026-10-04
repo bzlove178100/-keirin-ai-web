@@ -174,7 +174,7 @@ def case(broken):
             t.nft(replace("qualification"))
             candidate = r.shape("rescue")
             t.nft(replace("maintenance"))
-            t.nft(f"table inet {UNRELATED} {{ chain sentinel {{ counter drop; }} }}\n")
+            t.nft(f"table inet {UNRELATED} {{ chain sentinel {{ counter drop; }}; }}\n")
             unrelated = r.table_shape("inet", UNRELATED)
             with z.resolver(dhcp=True) as res:
                 ready(res)
