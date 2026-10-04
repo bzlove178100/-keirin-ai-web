@@ -1,6 +1,18 @@
 # Work resume handoff
 
-## Current boundary: DHCP DNS changes across independent restricted recovery
+## Current boundary: caller-bound observation restart and stale-result rejection
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #190 is merged/closed at `d5f3cf5cb5ed39ded6423522b4faa4ca3a6b0596`; final head `13712ab400fd0b4971aee4ed949208539ef9492e` passed all five workflows and nineteen regression jobs (`37179787609`). Final DHCP DNS job `111369842553` passed twelve standalone plus eighteen composed records; time job `111369842505` passed fifteen prepared-phase records. The exact historical chrony timeout cause remains unproven. This continuation rechecked the merge, final workflows and matching clean local/remote main; no accepted phone evidence is repeated.
+
+The CI collector now pins the caller's expected boot, daemon PID/start/executable, namespace, cgroup, interface and private-bus identities before its first manager read and before publication. Lease/link versions remain a per-collection bracket, separate from daemon identity. The parent launches a collector, records its actual PID/start and publishes the request atomically; the collector checks its own identity. Consumption requires the exact request ID and collector instance, matching expected service identities and current file bracket, ordered integer monotonic times, a collection window of at most four seconds and request age of at most five seconds. Partial/legacy, different-attempt, expired, changed-identity and changed-bracket results are rejected. All review/apply/freshness/qualification/mutation gates remain false. This is CI plumbing, not a new production reader.
+
+Eight new negative/contract tests plus five DHCP DNS, four composition and six resolver tests pass locally (23 total); git diff --check passes. The nineteenth regression job retains its original twelve standalone and eighteen composed records and adds seven mandatory acceptance records: valid caller binding; actual observer SIGKILL/restart with rejection of old complete/partial results; old sandbox cleanup; whole private networkd/resolved/bus replacement with rejection of old expected identities and old completed results; a newly bound collection of the same selected DNS facts plus fresh A/AAAA/admin; replacement cleanup; and peer/link/rule cleanup. Actual kernel acceptance has not yet run on this change. All five final-head workflows and nineteen jobs must succeed before integration; exact evidence and merge receipt belong in the PR.
+
+Whole private-sandbox replacement is the intended restart scope, not an individual service restart retaining the same private bus/mount. Synthetic cases exercise same-PID/different-start and identity/clock changes; real kernel PID reuse and machine reboot are not claimed. Equal brackets and short age do not establish atomicity, authenticated origin, production freshness, protection from arbitrary root writers, or single-use replay protection inside one accepted attempt. The immutable live dependency reader is unchanged and uninvoked. First restricted installation, independent rescue for wrong shared allowances, reboot, non-cooperating writers and recovery-worker death after readiness remain unqualified. Next: review and test an independent restricted rescue path under deliberately wrong shared allowances before considering initial installation. No phone/AWS/SSH/live host/credential operation; H2a and every runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gate remain OFF.
+
+## Previous completed slice: DHCP DNS changes across independent restricted recovery
 
 Updated: 2026-10-04 (Asia/Tokyo).
 
