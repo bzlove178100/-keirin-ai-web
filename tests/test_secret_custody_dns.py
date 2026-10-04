@@ -208,12 +208,17 @@ def query(version, endpoint=2, kind=1, tcp=False, success=True, generation=0):
     result = t.run(DIG, "-r", "-" + str(version), "@" + prefix + str(endpoint), NAME,
                    "A" if kind == 1 else "AAAA", "+noedns", "+nocookie", "+noadflag", "+nocdflag", "+norecurse",
                    "+nosearch", "+tries=1", "+time=1", "+short", "+tcp" if tcp else "+notcp", success=False)
+    validate_result(result, success, kind, generation)
+
+
+def validate_result(result, success, kind=1, generation=0):
     assert len(result.stdout) + len(result.stderr) < 4096
-    lines = [line for line in result.stdout.decode().splitlines() if line and not line.startswith(";;")]
+    # dig emits both single- and double-semicolon diagnostics on timeout.
+    lines = [line for line in result.stdout.decode().splitlines() if line and not line.startswith(";")]
     if success:
         assert result.returncode == 0 and lines == [answer_address(kind, generation)], (result.returncode, result.stdout[:1000], result.stderr[:1000])
     else:
-        assert result.returncode != 0 and not lines, (result.returncode, result.stdout[:1000])
+        assert result.returncode == 9 and not lines, (result.returncode, result.stdout[:1000])
 
 
 def transport(proc, version, phase, generation=0):
@@ -238,7 +243,10 @@ def kernel():
     empty()
     # Keep unsolicited replies outside all automatically chosen dig source ports.
     assert int(Path("/proc/sys/net/ipv4/ip_local_port_range").read_text().split()[1]) < 62000
-    print("DIG", t.run(DIG, "-v").stdout.decode().strip(), "KERNEL", os.uname().release, flush=True)
+    version = t.run(DIG, "-v")
+    identity = (version.stdout + version.stderr).decode().strip()
+    assert identity.startswith("DiG ") and len(identity) < 256
+    print("DIG", identity, "KERNEL", os.uname().release, flush=True)
     env = dict(os.environ, FIXTURE_PARENT_NETNS=os.readlink("/proc/self/ns/net"))
     proc = subprocess.Popen(["unshare", "--net", sys.executable, "-I", "-B", __file__, "--peer"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
     try:
@@ -370,6 +378,15 @@ class Tests(unittest.TestCase):
         for data in (b"", query + b"x", bytes(513), response(query), query[:-4] + struct.pack("!HH", 252, 1)):
             with self.assertRaises(ValueError):
                 question(data)
+
+    def test_timeout_diagnostics_are_not_answers_or_arbitrary_failure_success(self):
+        diagnostics = b";; communications error: timed out\n\n; <<>> DiG 9.18 <<>>\n; (1 server found)\n;; no servers could be reached\n"
+        validate_result(subprocess.CompletedProcess([], 9, diagnostics, b""), False)
+        for code, output in ((1, diagnostics), (0, diagnostics), (9, diagnostics + b"198.51.100.60\n")):
+            with self.assertRaises(AssertionError):
+                validate_result(subprocess.CompletedProcess([], code, output, b""), False)
+        with self.assertRaises(AssertionError):
+            validate_result(subprocess.CompletedProcess([], 0, diagnostics, b""), True)
 
     def test_tcp_framing_handles_fragmentation_and_rejects_eof(self):
         with patch.object(socket.socket, "recv", side_effect=[b"a", b"bc"]) as receive:
