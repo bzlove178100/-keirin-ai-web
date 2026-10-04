@@ -177,7 +177,9 @@ mandatory; a third private-namespace step requires seven records:
 6. Replacement processes, private runtime and cgroup are cleaned up.
 7. Peer, links and owned rules are removed.
 
-Actual kernel acceptance for this slice is pending. This exercises whole-sandbox
+Code head `21ce5116c4ec3591685138150e9a0a0049308656`, regression `37188103326`, DHCP DNS job `111394316107`, passed all twelve standalone, eighteen composed and seven new restart records. The restart success marker appeared at 2026-10-04 17:13:36 JST (08:13:36 UTC runner log). Actual SIGKILL/restart rejected old completed and partial results. After verified teardown, a second real networkd/resolved/bus sandbox acquired the same selected DNS facts; the old expected identity caused the collector to exit before publishing any partial/complete file, and the old completed result was rejected against the new identity. A new caller-bound collection succeeded, with fresh A/AAAA/TCP upstream events, administration, unchanged policy shapes and complete cleanup. The job reported kernel `6.17.0-1022-azure` and the same installed binary hashes as PR #189/#190. No failure or retry occurred in this code-head acceptance. Four other workflows were successful; the existing DHCPv6 lifecycle job was still running when this evidence was recorded. All five workflows and nineteen regression jobs on the final documentation head remain the integration gate; exact final results and merge receipt belong in PR #191.
+
+ This exercises whole-sandbox
 replacement, not service-only restart keeping the same bus/mount. Same-PID reuse
 and boot/clock changes are synthetic negative cases, not real kernel reuse/reboot
 evidence. The caller retains its own binding; a result cannot establish its own
