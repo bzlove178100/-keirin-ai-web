@@ -76,3 +76,5 @@ The synthetic server uses Linux SO_TIMESTAMPNS_NEW (64), recvmsg and a fixed two
 A private-netns control queues a datagram, waits 25ms after readability, and requires the emitted receive field to equal the kernel stamp with at least 20ms measured queue time. This demonstrates the corrected residence accounting independently of a chrony pass. All original fifteen acceptance records, filters, four-fresh-sample predicates and deadlines remain. New unit tests check delayed dequeue and fail-closed ancillary decoding. CI evidence belongs in PR #194.
 
 Reference: https://docs.kernel.org/networking/timestamping.html (SO_TIMESTAMPNS_NEW and __kernel_timespec). This is a fixture timestamp correction, not proof of production clock accuracy or a retrospective explanation of every historical rejection.
+
+Code-head acceptance: `cdbc510f38d7b3b3dc15c49dffd04e20f797446f`, regression `37207894470`, time job `111452833052`, fifteen PASS records at 23:05:48 JST. Kernel queue control measured 25.1536ms and matched T2. All four fresh phases passed original requirements; raw delay-deviation rejections remain observable. Final integration receipts are in PR #194.
