@@ -254,6 +254,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test typed local evidence, bounds and private-output separation
         run: /usr/bin/python3 -I -B tests/test_secret_custody_network_dependencies.py
+      - name: Test DNS observation reconciliation without policy widening
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_dns_reconciliation.py
       - name: Test actual Ubuntu local readers with sanitized output
         run: sudo -n env GITHUB_ACTIONS="$GITHUB_ACTIONS" /usr/bin/python3 -I -B tests/test_secret_custody_network_dependencies.py --ci-host
 

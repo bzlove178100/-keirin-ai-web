@@ -126,3 +126,7 @@ These references guide synthetic acceptance cases; none supplies private
 Lightsail browser ranges, verifies live packets or grants apply permission.
 All runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report
 gates remain OFF; host remains untrusted/no-secret.
+
+## Follow-up design, 2026-10-04
+
+The [DNS reconciliation and first-install review](SECRET_CUSTODY_DNS_RECONCILIATION_REVIEW.md) now defines a pure selected-fact comparator and concrete stop/recovery evidence for initial installation. It does not solve or authorize the initial anchor. Real resolver/cache/discovery integration and an independently usable restricted rescue path remain unqualified. The original accepted observation above remains complete; do not repeat it.
