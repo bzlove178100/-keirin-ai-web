@@ -63,10 +63,10 @@ fallback is used. A cache/coalesced DNS failure does not count as a new transact
 
 The dynamic fixtures retain their original mandatory jobs. This slice adds the
 twentieth job with a five-minute bound; existing client/daemon/worker deadlines
-are unchanged. Four new scope/verdict tests, six recovery, five DHCP DNS and four
-composition tests pass locally (19 total), plus git diff --check. Actual kernel
-acceptance is pending; all five final-head workflows and twenty regression jobs
-are required before integration.
+are unchanged. Six rescue, seven chrony, six recovery, five DHCP DNS and four
+composition tests pass locally (28 total), plus git diff --check. Corrected kernel
+acceptance passed as recorded below; all five final-head workflows and twenty
+regression jobs are required before integration.
 
 ## Initial failures and changed conditions
 
@@ -82,7 +82,13 @@ Corrected grammar head `64a3ae63f9190036bd574cd46e44663dc7eb597c`, regression `3
 
 Head `3ff7ced5deaafa790f70c0a24036bacf3a6ce937`, regression `37189773966`, rescue job `111399353028`, again passed all eight available-path records and reached the broken-case baseline. It then timed out waiting only for a netdev DHCP drop. The journal shows real ACK/T1/T2 setup at 17:43:05 JST and bound-to-renewing at 17:43:13; the twelve-second wait ended at 17:43:21 before observing the later-layer count. The candidate also denies normal UDP output at inet, so netdev-only measurement cannot establish absence of DHCP activity. The correction adds a dedicated matching DHCP drop counter at inet as well, requires fresh non-regressing progress in either layer, prints both before/after counts, and still requires no server receipt, a live address, unfinished recovery and separate-path availability. The twelve-second measurement and 22-second recovery windows are unchanged. A new local test rejects unchanged/regressing counts and covers either observed layer.
 
-The same head's time job `111399353040` passed IPv4 fully, then failed IPv6's existing five-second post-restore two-good-sample wait at 17:43:32 JST. That earlier phase had not used the new diagnostic helper, so its exact baseline/rejection cause remains missing. The unchanged three-second post-controller and five-second post-restore predicates now use the same bounded diagnostic wrapper and preserve original sample/selection/reach requirements and failures. No blind rerun or deadline extension is used. Six rescue, seven chrony and fifteen reused tests pass locally (28 total). Corrected actual acceptance is still required.
+The same head's time job `111399353040` passed IPv4 fully, then failed IPv6's existing five-second post-restore two-good-sample wait at 17:43:32 JST. That earlier phase had not used the new diagnostic helper, so its exact baseline/rejection cause remains missing. The unchanged three-second post-controller and five-second post-restore predicates now use the same bounded diagnostic wrapper and preserve original sample/selection/reach requirements and failures. No blind rerun or deadline extension is used. Six rescue, seven chrony and fifteen reused tests pass locally (28 total). Corrected-code acceptance is recorded below.
+
+## Corrected acceptance
+
+Corrected code head `14fcf826654b16c6fd311e190203fbcb3c4322d6` (tree `56f40d20f7eff67f30a22785cfb03449b6201d79`), regression `37190000878`, rescue job `111400011794`, passed all fifteen records and `SYNTHETIC_RESTRICTED_RESCUE_OK_NO_LIVE_APPLY` at 2026-10-04 17:47:41 JST. Both AVAILABLE and BROKEN cases measured DHCP drops `{inet: 0, netdev: 0}` to `{inet: 1, netdev: 0}` with no new server receipt: this run directly observed denial at the earlier inet hook. Both cases restored exact restricted shape, revoked old/new qualification, reacquired actual DHCP ACK/fresh DNS/primary administration and cleaned up all owned resources. AVAILABLE verified the separate existing/new/bidirectional path; BROKEN correctly returned BLOCKED/RESCUE_PATH_UNAVAILABLE despite successful shape/primary recovery. All verdict gates remained false. Kernel `6.17.0-1022-azure` and networkd/resolved/dbus hashes match PR #191's recorded binaries.
+
+The same head's time job `111400011614` passed all fifteen records at 17:47:53 JST, with fresh primary/alternate good-sample deltas (4,4) in each of the four IPv4/IPv6 silent/origin preparations and poll 0 throughout. Chronyd/chronyc hashes and version 4.5 match the previous recorded binaries. This validates the changed diagnostic code and original acceptance in this run; it does not establish a fix for the missing historical rejection causes. Four other workflows had passed and the existing DHCPv6 lifecycle job was still running when this targeted evidence was recorded. All five final-documentation-head workflows and twenty regression jobs remain required before merging PR #192; exact final results and merge receipt belong in that PR. No additional identical diagnostic rerun is planned; any recurrence must use the new retained baseline/ntpdata evidence.
 
 ## Unqualified boundaries and next step
 
