@@ -144,6 +144,50 @@ Initial head `c23e575df48f5d068b840aae52e9286293088ed2`, regression `37179257704
 
 Primary upstream v255 review: [resolved-dns-transaction.c](https://github.com/systemd/systemd/blob/v255/src/resolve/resolved-dns-transaction.c), blob `696fce532a41f98fb36c679b62f5576b58fe626f`, retries on timeout and TCP connection failure. [resolved-dns-stub.c](https://github.com/systemd/systemd/blob/v255/src/resolve/resolved-dns-stub.c), blob `259f82eff4e81d8610d28061837b5a202a4c3e34`, explicitly destroys queries for a closed TCP stub stream; a UDP client timeout does not supply that stream-close signal. Runtime counters, denial and successful approved return still require the corrected installed-binary CI evidence.
 
+## Caller-bound observer restart and reuse
+
+The shared CI collector now uses `CI_DHCP_DNS_OBSERVATION_V2`. A caller captures
+expected boot/process/start/executable/net/mount/cgroup/interface/bus identities.
+The child must match that expectation before DNS/networkd reads and at completion.
+Lease/link file versions are intentionally excluded from the stable expectation;
+they still bracket the collection and must match a new stamp at consumption.
+The parent records the actual collector PID/start before atomically releasing its
+request. Each result must match that exact collector and request UUID. Integer
+monotonic ordering, the existing four-second collection limit and a five-second
+request-to-consumption limit are required. Partial and legacy results are rejected.
+Report gates remain false and the pure comparison is recomputed at consumption.
+
+`test_secret_custody_observer_restart.py` adds eight local tests covering malformed
+or partial results, different attempts, collector PID reuse, daemon PID/start and
+other identity changes, lease-only changes, stale/future/reversed/noninteger times,
+and changed review gates. Five existing DHCP DNS, four composition and six resolver
+tests also pass locally (23 total). All five final-head workflows and nineteen
+regression jobs remain required. The original two DHCP DNS runtime steps remain
+mandatory; a third private-namespace step requires seven records:
+
+1. Actual completed observation matches caller identities at collection/consumption.
+2. SIGKILL an observer after its first read; restart with a new attempt and process,
+   rejecting both the old completed result and the killed process's partial result.
+3. Stop the entire first private networkd/resolved/bus sandbox and verify cleanup.
+4. Start a second private sandbox on the same fixture interface and acquire the
+   same actual DHCP DNS facts. Old result/expectation must fail identity checks;
+   a child given the old expectation must exit with no partial or complete file.
+5. A newly bound collection succeeds, same selected DNS facts compare equal, and
+   fresh stub A/AAAA/TCP plus administration work under the unchanged table shapes.
+6. Replacement processes, private runtime and cgroup are cleaned up.
+7. Peer, links and owned rules are removed.
+
+Code head `21ce5116c4ec3591685138150e9a0a0049308656`, regression `37188103326`, DHCP DNS job `111394316107`, passed all twelve standalone, eighteen composed and seven new restart records. The restart success marker appeared at 2026-10-04 17:13:36 JST (08:13:36 UTC runner log). Actual SIGKILL/restart rejected old completed and partial results. After verified teardown, a second real networkd/resolved/bus sandbox acquired the same selected DNS facts; the old expected identity caused the collector to exit before publishing any partial/complete file, and the old completed result was rejected against the new identity. A new caller-bound collection succeeded, with fresh A/AAAA/TCP upstream events, administration, unchanged policy shapes and complete cleanup. The job reported kernel `6.17.0-1022-azure` and the same installed binary hashes as PR #189/#190. No failure or retry occurred in this code-head acceptance. Four other workflows were successful; the existing DHCPv6 lifecycle job was still running when this evidence was recorded. All five workflows and nineteen regression jobs on the final documentation head remain the integration gate; exact final results and merge receipt belong in PR #191.
+
+ This exercises whole-sandbox
+replacement, not service-only restart keeping the same bus/mount. Same-PID reuse
+and boot/clock changes are synthetic negative cases, not real kernel reuse/reboot
+evidence. The caller retains its own binding; a result cannot establish its own
+expected identity. No cryptographic authenticity or single-use replay protection
+within the same accepted attempt is claimed. Matching brackets/age do not prove
+atomicity or live freshness. All apply/qualification/mutation/freshness flags stay
+false, and the existing live dependency reader remains unchanged and uninvoked.
+
 ## Remaining boundary
 
 DHCPv6 DNS, NSS, production observation and simultaneous route/RA/PMTU lifecycle

@@ -446,6 +446,7 @@ jobs:
         run: |
           /usr/bin/python3 -I -B tests/test_secret_custody_dhcp_dns.py
           /usr/bin/python3 -I -B tests/test_secret_custody_dhcp_dns_recovery.py
+          /usr/bin/python3 -I -B tests/test_secret_custody_observer_restart.py
       - name: Install query client in disposable CI
         run: |
           sudo -n apt-get update -qq
@@ -454,3 +455,5 @@ jobs:
         run: sudo -n env KC_DHCP_DNS_CI=1 KC_RESOLVED_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dhcp_dns.py --systemd
       - name: Compose actual DHCP DNS changes with independent restricted recovery
         run: sudo -n env KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_DNS_CI=1 KC_RESOLVED_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dhcp_dns_recovery.py --systemd
+      - name: Reject stale observations across collector and private daemon replacement
+        run: sudo -n env KC_DHCP_DNS_CI=1 KC_RESOLVED_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_observer_restart.py --systemd

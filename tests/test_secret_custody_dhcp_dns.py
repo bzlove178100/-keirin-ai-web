@@ -215,20 +215,65 @@ def finish(before, after, start, end, first_dns, last_dns):
         raise RuntimeError("OBSERVATION_SOURCE_CHANGED")
 
 
+def identity(value):
+    # Lease/link file versions bracket each read; they are not daemon identities.
+    return {k: value[k] for k in ("boot", "processes", "interface", "bus")}
+
+
+def require_identity(expected, actual):
+    if expected != identity(actual):
+        raise RuntimeError("OBSERVATION_EXPECTED_IDENTITY_MISMATCH")
+
+
+def collector_identity(pid):
+    return {"pid": pid, "start": r.process_start(pid)}
+
+
+def consume(value, request, current, now):
+    """Validate one caller-bound CI result. Never authorize a live action."""
+    try:
+        if value.get("schema") != "CI_DHCP_DNS_OBSERVATION_V2":
+            raise RuntimeError("OBSERVATION_COMPLETE_REQUIRED")
+        if value["id"] != request["id"] or value["collector"] != request["collector"]:
+            raise RuntimeError("OBSERVATION_ATTEMPT_MISMATCH")
+        require_identity(request["expected"], value["identity"])
+        require_identity(request["expected"], current)
+        if value["identity"] != current:
+            raise RuntimeError("OBSERVATION_CURRENT_BRACKET_CHANGED")
+        start, end, issued = value["start"], value["end"], request["issued"]
+        if (not all(type(v) is int for v in (start, end, issued, now))
+                or not issued <= start <= end <= now or end - start > 4_000_000_000
+                or now - issued > 5_000_000_000):
+            raise RuntimeError("OBSERVATION_RESULT_EXPIRED_OR_INVALID_TIME")
+        report = value["report"]
+        if (value["freshness_verified"] is not False or value["apply_allowed"] is not False
+                or report["qualification"] is not False or report["mutation"] is not False
+                or value["review"] != compare.compare(report, report)):
+            raise RuntimeError("OBSERVATION_REVIEW_ONLY_REQUIRED")
+        return value
+    except (KeyError, TypeError, AttributeError) as exc:
+        raise RuntimeError("OBSERVATION_INVALID_RESULT") from exc
+
+
 def collect(directory):
     guard()
     path = Path(directory)
     assert path.parent == Path("/tmp") and re.fullmatch(r"kc-dhcp-dns-observe-[a-z0-9_]+", path.name)
     assert stat.S_ISDIR(path.lstat().st_mode) and path.stat().st_uid == 0 and path.stat().st_mode & 0o777 == 0o700
+    # Parent pins the newly launched process before releasing the request.
+    d.wait_for(lambda: (path / "request.json").exists(), 5)
     data = (path / "request.json").read_bytes()
-    assert len(data) < 4096
+    assert len(data) < 8192
     request = json.loads(data)
     assert re.fullmatch(r"[0-9a-f]{32}", request["id"])
     assert set(request["children"]) == {"bus", "daemon", "networkd"}
     assert all(type(p) is int and p > 1 for p in [request["pid"], *request["children"].values()])
+    assert request["collector"] == collector_identity(os.getpid()), "OBSERVATION_COLLECTOR_MISMATCH"
     res = z.Resolver(request["pid"], request["children"])
     started = time.monotonic_ns()
+    assert type(request["issued"]) is int and 0 <= started - request["issued"] <= 5_000_000_000
     before = stamp(res)
+    require_identity(request["expected"], before)
     first_dns = dns_values(res)
     net = network_values(res)
     (path / "partial.json").write_text(json.dumps({"id": request["id"], "networkd": net}))
@@ -240,10 +285,12 @@ def collect(directory):
     after = stamp(res)
     ended = time.monotonic_ns()
     finish(before, after, started, ended, first_dns, last_dns)
+    require_identity(request["expected"], after)
     parts = {"addresses": addresses, "dns": last_dns, "dns_fallback": fallback, "networkd": net}
     report = {"schema": "LOCAL_NETWORK_DEPENDENCIES_V1", "qualification": False, "mutation": False,
               "sections": {k: {"status": "observed", "count": len(v), "private_values": v} for k, v in parts.items()}}
-    result = {"id": request["id"], "collector": os.getpid(), "start": started, "end": ended,
+    result = {"schema": "CI_DHCP_DNS_OBSERVATION_V2", "id": request["id"],
+              "collector": request["collector"], "start": started, "end": ended,
               "identity": before, "report": report, "review": compare.compare(report, report),
               "freshness_verified": False, "apply_allowed": False}
     (path / "complete.tmp").write_text(json.dumps(result))
@@ -251,19 +298,19 @@ def collect(directory):
 
 
 @contextmanager
-def collector(res, pause=False):
+def attempt(res, pause=False, expected=None):
     guard()
     with tempfile.TemporaryDirectory(prefix="kc-dhcp-dns-observe-", dir="/tmp") as directory:
         path = Path(directory)
-        generation = uuid.uuid4().hex
-        (path / "request.json").write_text(json.dumps({"id": generation, "pid": res.pid, "children": res.children, "pause": pause}))
+        request = {"id": uuid.uuid4().hex, "pid": res.pid, "children": dict(res.children), "pause": pause,
+                   "expected": identity(stamp(res)) if expected is None else expected,
+                   "issued": time.monotonic_ns()}
         proc = subprocess.Popen([sys.executable, "-I", "-B", __file__, "--collect", directory], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
-            d.wait_for(lambda: (path / "partial.json").exists() or proc.poll() is not None, 5)
-            if not (path / "partial.json").exists():
-                raise AssertionError(proc.communicate(timeout=1))
-            assert json.loads((path / "partial.json").read_text())["id"] == generation
-            yield proc, path, generation
+            request["collector"] = collector_identity(proc.pid)
+            (path / "request.tmp").write_text(json.dumps(request))
+            (path / "request.tmp").replace(path / "request.json")
+            yield proc, path, request
         finally:
             if proc.poll() is None:
                 proc.kill()
@@ -273,14 +320,30 @@ def collector(res, pause=False):
     assert not path.exists()
 
 
+@contextmanager
+def collector(res, pause=False):
+    with attempt(res, pause) as (proc, path, request):
+        d.wait_for(lambda: (path / "partial.json").exists() or proc.poll() is not None, 5)
+        if not (path / "partial.json").exists():
+            raise AssertionError(proc.communicate(timeout=1))
+        assert json.loads((path / "partial.json").read_text())["id"] == request["id"]
+        yield proc, path, request
+
+
+def completed(proc, path, request, res):
+    out, error = proc.communicate(timeout=6)
+    assert proc.returncode == 0, (out, error)
+    data = (path / "complete.json").read_bytes()
+    assert len(data) < 131072
+    value = json.loads(data)
+    current = stamp(res)
+    return consume(value, request, current, time.monotonic_ns())
+
+
 def observation(res):
-    with collector(res) as (proc, path, generation):
-        out, error = proc.communicate(timeout=6)
-        assert proc.returncode == 0, (out, error)
-        value = json.loads((path / "complete.json").read_text())
-        assert value["id"] == generation and value["collector"] == proc.pid
-        assert value["freshness_verified"] is False and value["apply_allowed"] is False
-        print("OBSERVATION", generation, value["end"] - value["start"],
+    with collector(res) as (proc, path, request):
+        value = completed(proc, path, request, res)
+        print("OBSERVATION", request["id"], value["end"] - value["start"],
               value["review"]["reason"], hashlib.sha256(json.dumps(value["identity"], sort_keys=True).encode()).hexdigest(), flush=True)
         return value
 
