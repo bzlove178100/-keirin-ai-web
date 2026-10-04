@@ -1,6 +1,18 @@
 # Work status
 
-## Current boundary: isolated real resolver cache and source switching
+## Current boundary: actual DHCPv4 DNS delivery and interrupted observation
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #188 merged at `b364f4fcd2400dfa436cb0e995cbec2b0f1ab2a3`. Final head `afc2a2bfe2362e1865af0d6bca852c9316753dab` passed all five workflows and eighteen regression jobs (`37174593370`); final resolver job `111354474154` reproduced all eighteen acceptance records. This continuation rechecked merged/closed state, the final workflows and matching clean local/remote main.
+
+This slice shares a private mount/network/runtime and D-Bus between actual installed networkd and resolved. A bounded synthetic DHCPv4 server supplies option 6; real renewals change the DNS address and restore it, and real lease expiry withdraws it. No SetLinkDNS is used. Require the private lease, actual DNSEx and networkd Describe origin to agree, then query the real stub and observe upstream answers. Unapproved DHCP-provided DNS must be denied without changing either firewall table. Existing administration and the same daemon identities must survive source changes; expiry intentionally removes address/route reachability. Separate collection processes bind a unique attempt ID, monotonic window, boot/process/start/namespace/interface/bus identities and private lease/link file versions. Real SIGKILL after the first read must leave no complete observation. A real renewal between reads must reject the mixed collection. Completion is fixture evidence only: matching brackets do not prove atomicity or live freshness, and all apply/qualification/freshness gates stay false.
+
+Five new tests and six resolver tests pass locally (11 total). A nineteenth mandatory regression job and twelve kernel acceptance records are added. Actual kernel acceptance is pending CI; all five workflows and nineteen regression jobs on the final head are required before merge. See [DHCP DNS observation review](SECRET_CUSTODY_DHCP_DNS_REVIEW.md). Exact final results and merge receipt belong in the PR.
+
+This qualifies neither DHCPv6 DNS nor NSS, production collection, authenticated origin, atomic cross-manager snapshots, first restricted installation, independent rescue from wrong shared allowances, reboot, non-cooperating writers, or worker death after readiness. The collection ID is not a DHCP protocol generation. The prior resolver recovery fixture remains separately mandatory; combined DHCP-DNS plus controller-death restoration is still untested. Next: compose actual DHCP-delivered DNS changes with independent restoration and review bounded observer restart/reuse under changed daemon identities. Accepted phone evidence is not repeated. No phone/AWS/SSH/live host/credential operation; H2a and every runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gate remain OFF.
+
+## Previous completed slice: isolated real resolver cache and source switching
 
 Updated: 2026-10-04 (Asia/Tokyo).
 

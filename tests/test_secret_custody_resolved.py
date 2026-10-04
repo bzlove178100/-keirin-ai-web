@@ -23,6 +23,7 @@ y = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(y)
 r, t = y.r, y.t
 DAEMON = "/usr/lib/systemd/systemd-resolved"
+NETWORKD = "/usr/lib/systemd/systemd-networkd"
 BUS_DAEMON = "/usr/bin/dbus-daemon"
 BUS = "/run/dbus/system_bus_socket"
 NAME, QNAME, TTL = "fixture.test.", b"\x07fixture\x04test\0", 8
@@ -164,14 +165,27 @@ def ensure_directory(path):
     assert stat.S_ISDIR(path.lstat().st_mode), "REAL_RUNTIME_DIRECTORY_REQUIRED"
 
 
-def child():
+def dhcp_guard():
+    r.d.guard()
+    if os.environ.get("KC_DHCP_DNS_CI") != "1":
+        raise RuntimeError("DHCP_DNS_CI_OPT_IN_REQUIRED")
+
+
+def child(dhcp=False):
     private_guard()
+    if dhcp:
+        dhcp_guard()
     Path("/run/kc-sys").mkdir()
     t.run("mount", "-t", "sysfs", "-o", "nosuid,nodev,noexec", "sysfs", "/run/kc-sys")
     t.run("mount", "--bind", "/run/kc-sys", "/sys")
     t.run("mount", "-o", "remount,bind,ro", "/sys")
     Path("/run/dbus").mkdir()
     ensure_directory(Path("/run/systemd"))
+    if dhcp:
+        # Ubuntu networkd's link initialization uses container detection.
+        with Path("/run/systemd/container").open("x") as marker:
+            marker.write("container-other\n")
+        assert t.run("/usr/bin/systemd-detect-virt", "--container").stdout == b"container-other\n"
     processes = []
     def stop(*_):
         raise SystemExit(0)
@@ -183,7 +197,12 @@ def child():
         assert bus.poll() is None
         daemon = subprocess.Popen([DAEMON], env=ENV)
         processes.append(daemon)
-        Path("/run/kc-ready").write_text(json.dumps({"bus": bus.pid, "daemon": daemon.pid}))
+        children = {"bus": bus.pid, "daemon": daemon.pid}
+        if dhcp:
+            networkd = subprocess.Popen([NETWORKD], env=ENV)
+            processes.append(networkd)
+            children["networkd"] = networkd.pid
+        Path("/run/kc-ready").write_text(json.dumps(children))
         while True:
             assert all(p.poll() is None for p in processes), "PRIVATE_DAEMON_EXITED"
             time.sleep(0.2)
@@ -213,18 +232,19 @@ class Resolver:
         for name, pid in self.children.items():
             assert os.readlink(f"/proc/{pid}/ns/net") == os.readlink(f"/proc/{self.pid}/ns/net")
             assert os.readlink(f"/proc/{pid}/ns/mnt") == os.readlink(f"/proc/{self.pid}/ns/mnt")
-            assert os.readlink(f"/proc/{pid}/exe") == (DAEMON if name == "daemon" else BUS_DAEMON)
+            assert os.readlink(f"/proc/{pid}/exe") == {"daemon": DAEMON, "bus": BUS_DAEMON, "networkd": NETWORKD}[name]
         host_bus = Path(BUS)
         if host_bus.exists():
             private_bus = self.root / BUS.lstrip("/")
             assert (private_bus.stat().st_dev, private_bus.stat().st_ino) != (host_bus.stat().st_dev, host_bus.stat().st_ino)
         assert (self.root / "etc/resolv.conf").read_text() == "nameserver 127.0.0.53\n"
 
-    def bus(self, *args, success=True):
+    def bus(self, *args, success=True, networkd=False):
         self.check()
+        service = "network1" if networkd else "resolve1"
         return t.run("/usr/bin/nsenter", "--target=" + str(self.pid), "--mount", "--net", "--root", "--wd=/",
                      "/usr/bin/busctl", "--address=unix:path=" + BUS, "--auto-start=no", "--timeout=2", "--json=short",
-                     "call", "org.freedesktop.resolve1", "/org/freedesktop/resolve1", *args, success=success)
+                     "call", "org.freedesktop." + service, "/org/freedesktop/" + service, *args, success=success)
 
     def call(self, method, *args):
         return self.bus("org.freedesktop.resolve1.Manager", method, *args)
@@ -259,8 +279,10 @@ class Resolver:
 
 
 @contextmanager
-def resolver():
+def resolver(dhcp=False):
     guard()
+    if dhcp:
+        dhcp_guard()
     path = Path(tempfile.mkdtemp(prefix="kc-resolved-ci-", dir="/tmp"))
     path.chmod(0o755)
     unit = path.name + ".service"
@@ -273,6 +295,35 @@ def resolver():
         (etc / "kc-owned").write_text("RESOLVED_CI_ONLY\n")
         (etc / "passwd").write_text(f"root:x:0:0:root:/:/bin/false\nsystemd-resolve:x:{account.pw_uid}:{account.pw_gid}:fixture:/:/bin/false\n")
         (etc / "group").write_text(f"root:x:0:\nsystemd-resolve:x:{account.pw_gid}:\n")
+        if dhcp:
+            network = pwd.getpwnam("systemd-network")
+            with (etc / "passwd").open("a") as f:
+                f.write(f"systemd-network:x:{network.pw_uid}:{network.pw_gid}:fixture:/:/bin/false\n")
+            with (etc / "group").open("a") as f:
+                f.write(f"systemd-network:x:{network.pw_gid}:\n")
+            (etc / "systemd/network").mkdir()
+            (etc / "systemd/networkd.conf").write_text("[Network]\n")
+            (etc / "systemd/network/10-fixture.network").write_text('''[Match]
+Name=host0
+[Network]
+DHCP=ipv4
+LinkLocalAddressing=no
+IPv6AcceptRA=no
+DNSDefaultRoute=yes
+Domains=~.
+LLMNR=no
+MulticastDNS=no
+[DHCPv4]
+ClientIdentifier=mac
+SendHostname=no
+UseDNS=yes
+UseNTP=no
+UseHostname=no
+UseMTU=no
+UseRoutes=yes
+UseDomains=no
+SendRelease=no
+''')
         (etc / "nsswitch.conf").write_text("passwd: files\ngroup: files\nhosts: files dns\n")
         (etc / "machine-id").write_text("f" * 32 + "\n")
         (etc / "resolv.conf").write_text("nameserver 127.0.0.53\n")
@@ -295,16 +346,22 @@ ReadEtcHosts=no
 <policy user="root"><allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/></policy>
 <policy user="systemd-resolve"><allow own="org.freedesktop.resolve1"/><allow send_destination="*"/><allow receive_sender="*"/></policy>
 </busconfig>''')
+        extra = []
+        if dhcp:
+            bus_config = (etc / "dbus.conf").read_text().replace('<allow user="systemd-resolve"/>', '<allow user="systemd-resolve"/><allow user="systemd-network"/>')
+            bus_config = bus_config.replace("</busconfig>", '<policy user="systemd-network"><allow own="org.freedesktop.network1"/><allow send_destination="*"/><allow receive_sender="*"/></policy></busconfig>')
+            (etc / "dbus.conf").write_text(bus_config)
+            extra = ["--setenv=KC_DHCP_CI=1", "--setenv=KC_DHCP_DNS_CI=1"]
         t.run("/usr/bin/systemd-run", "--quiet", "--unit=" + unit,
               "--property=Type=exec", "--property=Restart=no", "--property=RuntimeMaxSec=150",
               "--property=TimeoutStopSec=5", "--property=KillMode=control-group", "--property=PrivateMounts=yes",
               "--property=ProtectSystem=strict", "--property=NoNewPrivileges=yes",
               "--property=TemporaryFileSystem=/run:mode=0755 /var:mode=0755",
               "--property=BindReadOnlyPaths=" + str(etc) + ":/etc",
-              "--property=InaccessiblePaths=-/usr/lib/systemd/resolved.conf.d -/usr/local/lib/systemd/resolved.conf.d",
+              "--property=InaccessiblePaths=-/usr/lib/systemd/resolved.conf.d -/usr/local/lib/systemd/resolved.conf.d" + (" -/usr/lib/systemd/network -/usr/local/lib/systemd/network -/usr/lib/systemd/networkd.conf.d -/usr/local/lib/systemd/networkd.conf.d" if dhcp else ""),
               "--property=NetworkNamespacePath=/proc/" + str(os.getpid()) + "/ns/net",
               "--setenv=GITHUB_ACTIONS=true", "--setenv=KC_RESOLVED_CI=1",
-              sys.executable, "-I", "-B", str(Path(__file__).resolve()), "--daemon")
+              *extra, sys.executable, "-I", "-B", str(Path(__file__).resolve()), "--daemon-dhcp" if dhcp else "--daemon")
         pid = int(t.run("/usr/bin/systemctl", "show", unit, "--property=MainPID", "--value").stdout)
         assert pid > 1
         group = t.run("/usr/bin/systemctl", "show", unit, "--property=ControlGroup", "--value").stdout.decode().strip()
@@ -312,7 +369,7 @@ ReadEtcHosts=no
         root = Path(f"/proc/{pid}/root")
         r.d.wait_for(lambda: (root / "run/kc-ready").exists(), 5)
         children = json.loads((root / "run/kc-ready").read_text())
-        assert set(children) == {"bus", "daemon"} and all(type(v) is int and v > 1 for v in children.values())
+        assert set(children) == ({"bus", "daemon", "networkd"} if dhcp else {"bus", "daemon"}) and all(type(v) is int and v > 1 for v in children.values())
         value = Resolver(pid, children)
         r.d.wait_for(lambda: value.read() is not None, 5)
         yield value
@@ -527,5 +584,7 @@ if __name__ == "__main__":
         peer()
     elif sys.argv[1:] == ["--daemon"]:
         child()
+    elif sys.argv[1:] == ["--daemon-dhcp"]:
+        child(dhcp=True)
     else:
         unittest.main(verbosity=2)
