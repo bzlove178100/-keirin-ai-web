@@ -439,14 +439,18 @@ jobs:
 
   custody-dhcp-dns-observation:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@v4
       - name: Test DHCP DNS scope and observation rejection
-        run: /usr/bin/python3 -I -B tests/test_secret_custody_dhcp_dns.py
+        run: |
+          /usr/bin/python3 -I -B tests/test_secret_custody_dhcp_dns.py
+          /usr/bin/python3 -I -B tests/test_secret_custody_dhcp_dns_recovery.py
       - name: Install query client in disposable CI
         run: |
           sudo -n apt-get update -qq
           sudo -n apt-get install -y --no-install-recommends bind9-dnsutils
       - name: Verify actual DHCP delivery renewal expiry and interrupted observation
         run: sudo -n env KC_DHCP_DNS_CI=1 KC_RESOLVED_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dhcp_dns.py --systemd
+      - name: Compose actual DHCP DNS changes with independent restricted recovery
+        run: sudo -n env KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_DNS_CI=1 KC_RESOLVED_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dhcp_dns_recovery.py --systemd

@@ -186,7 +186,7 @@ def sources(text, prefix):
             fields = line.split()
             assert len(fields) >= 7 and fields[0] in ("^*", "^+", "^-", "^?", "^x", "^~")
             assert fields[1] in (prefix + "2", prefix + "3") and fields[1] not in result
-            result[fields[1]] = {"state": fields[0][1], "reach": int(fields[4], 8)}
+            result[fields[1]] = {"state": fields[0][1], "reach": int(fields[4], 8), "poll": int(fields[3])}
     assert set(result) == {prefix + "2", prefix + "3"}, text
     return result
 
@@ -223,6 +223,27 @@ class Client:
     def selected(self, suffix):
         result = self.state()
         return result[self.prefix + suffix]["state"] == "*" and result[self.prefix + suffix]["reach"] > 0
+
+
+def fresh_sources(before, after, state, primary):
+    return (state[primary]["state"] == "*" and all(state[ip]["reach"] > 0
+            and after[ip]["Total good RX"] >= before[ip]["Total good RX"] + 4 for ip in before))
+
+
+def selection_wait(clock, proc, phase, predicate, timeout, check):
+    """One source-state read per predicate; retain bounded failure evidence."""
+    latest = {}
+    def ready():
+        nonlocal latest
+        latest = clock.state()
+        return predicate(latest)
+    try:
+        r.d.wait_for(ready, timeout, check)
+    except BaseException:
+        print("TIME_SELECTION_DIAGNOSTIC", json.dumps({"phase": phase, "sources": latest,
+            "client": {clock.prefix + s: clock.ntpstats(s) for s in ("2", "3")},
+            "server": {clock.prefix + s: t.rpc(proc, "counts", clock.prefix + s) for s in ("2", "3")}}), flush=True)
+        raise
 
 
 @contextmanager
@@ -327,8 +348,19 @@ def kernel():
                 r.d.wait_for(lambda: clock.ntpstats("2")["Total good RX"] >= before + 2 and clock.selected("2"), 5, check)
                 print(f"PASS IPv{version}_CHRONY_SAME_CLIENT_POST_RESTORE_SAMPLES_AND_DENIAL", flush=True)
                 for mode in ("silent", "origin"):
+                    # Selection can reuse retained samples. Require fresh good
+                    # measurements from BOTH sources before each fault phase.
+                    baseline = {prefix + s: clock.ntpstats(s) for s in ("2", "3")}
+                    def primed(state):
+                        current = {prefix + s: clock.ntpstats(s) for s in ("2", "3")}
+                        return fresh_sources(baseline, current, state, prefix + "2")
+                    selection_wait(clock, proc, mode + "-prime", primed, 12, check)
+                    print("TIME_FRESH_PHASE", version, mode, json.dumps({"before": baseline,
+                          "after": {prefix + s: clock.ntpstats(s) for s in ("2", "3")}, "sources": clock.state()}), flush=True)
                     before = t.rpc(proc, "mode", prefix + "2", mode)
-                    r.d.wait_for(lambda: clock.selected("3") and clock.state()[prefix + "2"]["reach"] == 0, 35, check)
+                    selection_wait(clock, proc, mode + "-failover", lambda state:
+                        state[prefix + "3"]["state"] == "*" and state[prefix + "3"]["reach"] > 0
+                        and state[prefix + "2"]["reach"] == 0, 35, check)
                     after = t.rpc(proc, "counts", prefix + "2")
                     assert after["requests"] > before["requests"]
                     if mode == "origin":
@@ -342,7 +374,8 @@ def kernel():
                         assert after["responses"] == before["responses"]
                     print(f"PASS IPv{version}_CHRONY_{mode.upper()}_PRIMARY_ALTERNATE_SELECTED", flush=True)
                     assert t.rpc(proc, "mode", prefix + "2", "good")
-                    r.d.wait_for(lambda: clock.selected("2"), 20, check)
+                    selection_wait(clock, proc, mode + "-return", lambda state:
+                        state[prefix + "2"]["state"] == "*" and state[prefix + "2"]["reach"] > 0, 20, check)
                 before = raw.counters("inet", TABLE)["inet_output_deny"]
                 denied = t.rpc(proc, "counts", prefix + "9")
                 probe(prefix + "9", success=False)
@@ -420,10 +453,19 @@ class Tests(unittest.TestCase):
 
     def test_source_report_requires_exact_peers_and_octal_reach(self):
         text = "MS Name/IP address\n^* 192.0.2.2 1 0 377 0 +1us\n^- 192.0.2.3 1 0 7 0 +2us\n"
-        self.assertEqual(sources(text, "192.0.2.")["192.0.2.2"], {"state": "*", "reach": 255})
+        self.assertEqual(sources(text, "192.0.2.")["192.0.2.2"], {"state": "*", "reach": 255, "poll": 0})
         for bad in ("", text.replace("192.0.2.3", "192.0.2.9"), text + text):
             with self.assertRaises(AssertionError):
                 sources(bad, "192.0.2.")
+
+    def test_selection_with_old_samples_does_not_satisfy_fresh_phase(self):
+        state = {"primary": {"state": "*", "reach": 255}, "alternate": {"state": "+", "reach": 255}}
+        before = {ip: {"Total good RX": 10} for ip in state}
+        for primary, alternate, expected in ((10, 10, False), (14, 10, False), (10, 14, False), (14, 14, True)):
+            after = {"primary": {"Total good RX": primary}, "alternate": {"Total good RX": alternate}}
+            self.assertEqual(fresh_sources(before, after, state, "primary"), expected)
+        state["alternate"]["reach"] = 0
+        self.assertFalse(fresh_sources(before, after, state, "primary"))
 
 
 if __name__ == "__main__":

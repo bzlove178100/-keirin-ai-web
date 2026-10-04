@@ -90,10 +90,65 @@ Code head `7638dcc6000d9921752333caf3f0f6b4293a23c8`, regression `37178001953`, 
 
 Exact final-head workflow/job results and merge receipt belong in PR #189.
 
+## Independent restricted recovery composition
+
+The subsequent fixture `test_secret_custody_dhcp_dns_recovery.py` reuses the full
+standalone lifecycle with an explicit recovery hook. The standalone twelve-record
+run remains mandatory, followed by a separate fresh namespace for the composed
+run in the same CI job. Job timeout increases from five to seven minutes for the
+additional lifecycle; client deadlines and daemon/worker bounds are unchanged.
+
+The fixed `dhcp-dns` profile uses exactly the standalone maintenance policy. Its
+qualification variant adds only the primary peer TCP/443 tuple in both tables.
+The worker and controller recognize this explicit profile; recovery continues to
+require known two-table shape, independent PID 1 supervision and atomic replacement.
+No general established-connection allowance or observed-source permission is added.
+
+Six additional acceptance records are required:
+
+1. After controller SIGKILL, the qualification socket works and real stub A/AAAA
+   including TCP client transport produce fresh approved upstream events.
+2. Before the independent deadline, real DHCP renewal changes lease/DNSEx to the
+   unapproved source. Actual collection requires review with all gates false;
+   fresh query fails, output drops increase and the unapproved upstream receives
+   nothing. Qualification and old/new administration still work.
+3. PID 1 restores both tables, reports RESTORE_MAINTENANCE and cleans up its unit.
+   Old/new qualification is denied while administration survives. The unapproved
+   DHCP DNS remains configured: firewall restoration did not overwrite it.
+4. The first denied A transaction is still pending. Flush only private cache,
+   issue a distinct AAAA and require active count 1→2, a new output drop and no
+   upstream receipt. A repeated/coalesced old query is insufficient evidence.
+5. A new real DHCP renewal returns the approved source. Require fresh A/AAAA
+   answers, matching selected facts, the same daemon identities and administration.
+6. The base suite then completes killed/mixed observation rejection, another real
+   changed-source denial/return, lease expiry and cleanup under the restored policy.
+
+After the actual approved-source return, drain observes TransactionStatistics
+with the existing fifteen-second bound; private cache flush does not substitute
+for drain. No early drain is assumed while an unapproved source stays configured. The first changed-source
+assertions must complete while the candidate profile is still active and before
+the worker result exists. This proves the exercised event order, not simultaneous
+DHCP mutation and firewall restoration inside one kernel transaction.
+
+Four composition, five DHCP DNS, six shared recovery, six resolver and six chrony
+tests pass locally (27 total), plus git diff --check. All five final-head workflows
+and nineteen regression jobs remain mandatory before merge.
+
+Corrected DNS code head `7466aba9da805d768ed9d58403edaa8ea8e125fb`, regression `37179484253`, DHCP DNS job `111368947973`, passed all twelve standalone plus eighteen composed acceptance records and `SYNTHETIC_DHCP_DNS_INDEPENDENT_RECOVERY_OK_NO_LIVE_APPLY` at 14:20:57 JST. The installed binaries/kernel match PR #189. In the real composed run, A increased active transactions 0→1 before restoration and distinct AAAA increased 1→2 afterward; approved-source renewal drained the work and fresh A/AAAA answers succeeded with unchanged daemons/admin. The restored policy subsequently passed the full interrupted/mixed collection, source-change, return and real expiry lifecycle. This proves the exercised order, not simultaneous DHCP mutation and firewall restoration. The full run did not pass because the separate existing chrony job failed as recorded below.
+
+On the same head/run, time job `111368947964` passed IPv4 and IPv6 post-restore samples plus IPv6 silent-primary failover, then exceeded the unchanged 35-second IPv6 wrong-origin failover bound. Its log shows alternate selection at 14:19:11 JST and primary return at 14:19:12, but omits reach, poll and accepted-measurement state at timeout; the historical cause is not established. Existing code started the next fault as soon as primary selection returned, which can reuse old samples. Phase carryover/insufficient fresh alternate samples is a hypothesis to test, not a retroactive diagnosis. The changed fixture requires four fresh good measurements from BOTH sources with primary selected/reachable before each fault (12-second bounded preparation), reads one source-state snapshot per failover predicate, records poll/reach and client/server counters, and preserves the original 35-second failover/20-second return bounds and invalid-response rejection. The same unprivileged clockless client survives throughout; no reset, forced selection or packet-filter change is introduced. One new local test rejects old/one-sided/unreachable measurements. Six chrony plus twenty-one DNS/recovery/resolver tests pass (27 total). Current-head real fresh-phase acceptance and all five workflows/nineteen regression jobs remain required; exact final results and merge receipt belong in PR #190. A later successful prepared-phase run does not prove the missing historical state.
+
+### Initial composition failure and changed acceptance
+
+Initial head `c23e575df48f5d068b840aae52e9286293088ed2`, regression `37179257704`, job `111368290742`, passed all twelve standalone records plus fresh queries after controller death, actual changed-DNS denial under qualification and PID 1 restoration with old/new qualification denial. It then failed while waiting fifteen seconds for all transactions to disappear with the unapproved DNS still configured. The retained journal explicitly shows timeout/retry and TCP fallback for transaction 48673 at 14:14:56 JST; a one-second UDP client timeout did not cancel the resolver's continuing work. The earlier source-return drain result does not apply while the source stays blocked. The correction keeps the original A denial, requires its one pending transaction after restoration, then issues distinct AAAA and requires actual active count 1→2 plus a new output drop and no peer receipt. This prevents coalesced/cached failure from being accepted without assuming premature drain. After actual DHCP return to the approved source, the original fifteen-second zero-transaction bound and fresh A/AAAA answer requirements remain. A new local negative test rejects unchanged active count; four composition tests pass (21 total with reused suites). No firewall/client deadline was relaxed and no daemon restart or blind rerun is used. Corrected DNS acceptance subsequently passed as recorded above; the full final CI gate remains required.
+
+Primary upstream v255 review: [resolved-dns-transaction.c](https://github.com/systemd/systemd/blob/v255/src/resolve/resolved-dns-transaction.c), blob `696fce532a41f98fb36c679b62f5576b58fe626f`, retries on timeout and TCP connection failure. [resolved-dns-stub.c](https://github.com/systemd/systemd/blob/v255/src/resolve/resolved-dns-stub.c), blob `259f82eff4e81d8610d28061837b5a202a4c3e34`, explicitly destroys queries for a closed TCP stub stream; a UDP client timeout does not supply that stream-close signal. Runtime counters, denial and successful approved return still require the corrected installed-binary CI evidence.
+
 ## Remaining boundary
 
-DHCPv6 DNS, NSS, production observation, simultaneous route/RA/PMTU lifecycle and
-combined DHCP DNS changes with controller-death restoration are not qualified.
+DHCPv6 DNS, NSS, production observation and simultaneous route/RA/PMTU lifecycle
+are not qualified. Combined DHCP DNS changes with controller-death restoration
+passed the corrected CI acceptance above; this does not authorize live use.
 The earlier eighteen-record resolved recovery fixture remains mandatory. Initial
 restricted installation, independent rescue for wrong shared allowances, reboot,
 non-cooperating writers and worker death after readiness remain blocked. Installed
