@@ -1,6 +1,20 @@
 # Work resume handoff
 
-## Current boundary: chrony per-packet rejection diagnosis after main failure
+## Current repair: candidate-bound CI and kernel receive timestamps
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+Main remains `f025ff39bf9d67b4a501b7f214ec95a8aa7bd3e5`; its regression `37192146307` failed the time fixture. PR #194's first diagnostic head `bfec3186dac40d2a3dc35f7f169ceef987f4aca2` passed 21/21 regression jobs but failed runtime `37192519684` because that smoke inspected older main. These failures are retained, not reclassified or rerun unchanged.
+
+The repair changes only the CI smoke entry point: resolve the current Actions run, pin file reads to its SHA, and require actual successful regression/UI workflow results at the same SHA, event, branch, repository, workflow ID and path. It waits at most ten minutes for pending/missing siblings; any completed failure blocks immediately. It does not wait on itself, accept old green main, ignore failure, or return success on timeout. The standalone legacy main-health bridge and strict hosted four-workflow/main-drift verifier are unchanged. On main push, the smoke now waits for that same main commit, removing the earlier timing race. Candidate verification is not a claim that the old main is healthy or that hosted execution is authorized.
+
+The synthetic NTP server now places Linux SO_TIMESTAMPNS_NEW kernel receive time in T2, instead of the time Python returns from recvfrom. This corrects accounting of socket queue/process scheduling time: it belongs to server residence T3-T2, which NTP subtracts from RTT. Reject missing/duplicate/malformed/truncated timestamp controls, without userspace fallback. A CI-only queued-packet control checks the actual receive field against the kernel timestamp after a deliberate 25ms dequeue delay. Existing source preferences, chrony filters, packet validation, fresh-sample requirements, all deadlines and fifteen acceptance records remain unchanged. Raw packet-rejection logs remain enabled. Historical failed-main packet rejection is still not retrospectively proven; successful CI alone cannot establish that all runner jitter is fixed.
+
+Local validation: 10 chrony tests, 9 candidate-CI tests (including real BoundRuntime success/blocking), 4 legacy bridge tests and 15 strict SHA bridge tests pass. CI acceptance of this repair is pending; record exact head/run results and merge receipt in PR #194. Do not merge unless all applicable workflows succeed. If time acceptance fails again, inspect the new timestamp control and raw measurement evidence before changing anything; no blind retry or threshold relaxation.
+
+No live host, phone, AWS, SSH or credential operation. All runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF. PR #193's worker-loss last-check gap and first live installation remain unqualified; they are separate from this repair.
+
+## Previous diagnostic boundary: chrony per-packet rejection after main failure
 
 Updated: 2026-10-04 (Asia/Tokyo).
 

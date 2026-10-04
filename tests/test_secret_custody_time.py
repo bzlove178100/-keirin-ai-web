@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import shutil
 import socket
 import stat
@@ -26,6 +27,42 @@ t, raw = r.t, r.raw
 TABLE, LINK, KEY = "kc_time", "kc_time_link", "time"
 FAMILIES = ((4, "ip", "192.0.2."), (6, "ip6", "2001:db8:1::"))
 ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C", "LC_ALL": "C"}
+# Linux SO_TIMESTAMPNS_NEW: fixed two signed 64-bit fields, including on time32.
+RX_TIMESTAMP = 64
+
+
+def received_packet(sock):
+    data, ancillary, flags, source = sock.recvmsg(513, socket.CMSG_SPACE(16))
+    if flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC):
+        raise ValueError("NTP_RX_TRUNCATED")
+    stamps = [value for level, kind, value in ancillary
+              if level == socket.SOL_SOCKET and kind == RX_TIMESTAMP]
+    if len(stamps) != 1 or len(stamps[0]) != 16:
+        raise ValueError("NTP_KERNEL_RX_TIMESTAMP_REQUIRED")
+    seconds, nanos = struct.unpack("=qq", stamps[0])
+    if seconds <= 0 or not 0 <= nanos < 1000000000:
+        raise ValueError("NTP_KERNEL_RX_TIMESTAMP_INVALID")
+    return data, source, seconds + nanos / 1000000000
+
+
+def timestamp_control():
+    """CI-only queued datagram proves processing delay is server residence time."""
+    guard()
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver, socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:
+        receiver.setsockopt(socket.SOL_SOCKET, RX_TIMESTAMP, 1)
+        receiver.settimeout(1)
+        receiver.bind(("192.0.2.1", 0))
+        request = bytes([0x23]) + bytes(39) + stamp(time.time())
+        sender.sendto(request, receiver.getsockname())
+        assert select.select([receiver], [], [], 1)[0]
+        time.sleep(0.025)
+        data, _, received = received_packet(receiver)
+        dequeued = time.time()
+        response = reply(data, "good", received)
+        assert data == request and response[32:40] == stamp(received)
+        assert 0.020 <= dequeued - received < 1
+        print("TIME_KERNEL_RX_CONTROL", json.dumps({"queue_seconds": dequeued - received,
+              "receive_field_matches_kernel": True}), flush=True)
 
 
 def guard():
@@ -57,6 +94,7 @@ class Server:
         self.mode, self.requests, self.responses, self.bad, self.error = "good", 0, 0, 0, None
         af = socket.AF_INET6 if ":" in address else socket.AF_INET
         self.sock = stack.enter_context(socket.socket(af, socket.SOCK_DGRAM))
+        self.sock.setsockopt(socket.SOL_SOCKET, RX_TIMESTAMP, 1)
         if af == socket.AF_INET6:
             self.sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
         self.sock.bind((address, 123))
@@ -65,8 +103,7 @@ class Server:
     def serve(self):
         try:
             while True:
-                data, source = self.sock.recvfrom(513)
-                received = time.time()
+                data, source, received = received_packet(self.sock)
                 with self.lock:
                     self.requests += 1
                     if self.requests > 512:
@@ -351,6 +388,7 @@ def kernel():
         t.run("sysctl", "-qw", "net.ipv6.conf.host0.accept_ra=0")
         t.setup("host0", t.MAC_HOST, ("1",))
         assert t.rpc(proc, "setup")
+        timestamp_control()
         for _, _, prefix in FAMILIES:
             for suffix in ("2", "3", "9"):
                 probe(prefix + suffix)
@@ -450,6 +488,31 @@ def kernel():
 
 
 class Tests(unittest.TestCase):
+    def test_kernel_receive_time_excludes_delayed_userspace_processing(self):
+        request = bytes([0x23]) + bytes(39) + stamp(1700000000.0)
+        sock = Mock()
+        sock.recvmsg.return_value = (request, [(socket.SOL_SOCKET, RX_TIMESTAMP,
+            struct.pack("=qq", 1700000000, 100000000))], 0, ("192.0.2.1", 12345))
+        with patch.object(time, "time", return_value=1700000000.6):
+            data, _, received = received_packet(sock)
+            response = reply(data, "good", received)
+        self.assertEqual(response[32:40], stamp(1700000000.1))
+        self.assertEqual(response[40:48], stamp(1700000000.6))
+        # The 0.5s dequeue delay is now T3-T2, subtracted from NTP RTT.
+        self.assertAlmostEqual(1700000000.6 - received, 0.5)
+
+    def test_receive_timestamp_missing_duplicate_malformed_or_truncated_rejected(self):
+        good = (socket.SOL_SOCKET, RX_TIMESTAMP, struct.pack("=qq", 1700000000, 0))
+        sock = Mock()
+        for controls, flags in (([], 0), ([good, good], 0), ([good], socket.MSG_TRUNC),
+                ([good], socket.MSG_CTRUNC), ([(socket.SOL_SOCKET, RX_TIMESTAMP, b"short")], 0),
+                ([(socket.SOL_SOCKET, RX_TIMESTAMP, struct.pack("=qq", 1, 1000000000))], 0),
+                ([(socket.SOL_SOCKET, RX_TIMESTAMP, struct.pack("=qq", -1, 0))], 0)):
+            with self.subTest(controls=controls, flags=flags):
+                sock.recvmsg.return_value = (bytes(48), controls, flags, ("192.0.2.1", 1))
+                with self.assertRaises(ValueError):
+                    received_packet(sock)
+
     def test_probe_accepts_only_expected_denial_and_requires_positive_reply(self):
         with patch.object(socket, "socket") as factory:
             sock = factory.return_value.__enter__.return_value
