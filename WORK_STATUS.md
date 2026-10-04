@@ -1,6 +1,16 @@
 # Work status
 
-## Current boundary: DNS observation reconciliation and first-install review
+## Current boundary: isolated real resolver cache and source switching
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #187 merged at `2cf71d9acae31fb444503fbea77c55a9ea03206a`. Final head `c4b04fed4121cdcadf52c391455c5bd4684dee54` passed all five workflows and seventeen regression jobs (`37171989540`). Dependency job `111346644090` passed fourteen comparison tests, ten reader tests and the separate Ubuntu reader check. This continuation rechecked merged/closed status, final workflows and matching clean local/remote main.
+
+The new CI fixture runs actual systemd-resolved and a private D-Bus daemon in a dedicated mount/network environment with generated read-only configuration and private runtime. It queries the actual stub, measures A/AAAA cache hits and real TTL expiry using upstream events, tests upstream truncation/TCP fallback and stub TCP, composes controller-death restoration with the same resolver, and changes private per-link DNS to an unapproved source without changing firewall rules. Require actual DNSEx readback, bounded failure and output drops with no unapproved server receipt, approved-source return, administration survival and full cleanup. Eighteen acceptance records and the new eighteenth mandatory regression job are required. Five local resolver tests plus five DNS and six shared recovery tests pass (16 total); real CI is pending. See [resolver cache review](SECRET_CUSTODY_RESOLVED_CACHE_REVIEW.md). All five workflows and eighteen regression jobs on the final head remain the merge gate; exact final evidence belongs in the PR.
+
+This uses explicit private SetLinkDNS, not actual DHCP-to-resolved delivery or NSS integration. No production DNS, cache, transport or initial installation is qualified. Next: actual isolated DHCP-provided DNS changes and generation/identity-bound observation, including interrupted collection. Initial restricted installation, independent rescue for wrong shared allowances, reboot, non-cooperating writers and worker death after readiness remain blocked. Do not repeat accepted phone evidence. Installed Ubuntu DHCPv6 remains unqualified. No phone/AWS/SSH/live host/credential action; H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: DNS observation reconciliation and first-install review
 
 Updated: 2026-10-04 (Asia/Tokyo).
 
