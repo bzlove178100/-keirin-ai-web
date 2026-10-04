@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("dhcp_dns", Path(__file__).with_name("test_secret_custody_dhcp_dns.py"))
 h = importlib.util.module_from_spec(SPEC)
@@ -18,17 +18,22 @@ def guard():
     r.guard()
 
 
-def denied(proc, res, expected):
-    # A completed earlier timeout may have left an upstream transaction alive.
-    # Require actual drain and a new output drop, never cached failure evidence.
-    d.wait_for(lambda: res.active_transactions() == 0, 15, res.check)
+def denied(proc, res, expected, kind, active):
+    # A UDP client's timeout does not cancel the resolver's retrying query.
+    # Use A before restoration and a distinct AAAA after it. Require one NEW
+    # transaction, not a coalesced old query or a cached failure.
+    assert (kind, active) in ((1, 0), (28, 1))
+    assert res.active_transactions() == active
     res.call("FlushCaches")
     before = t.rpc(proc, "dns_events", d.ALTERNATE)
     drops = d.raw.counters("inet", d.TABLE)["dns_output_deny"]
-    z.query(success=False)
+    z.query(kind=kind, success=False)
+    after = res.active_transactions()
+    assert after == active + 1, "NEW_DENIED_TRANSACTION_REQUIRED"
     assert d.raw.counters("inet", d.TABLE)["dns_output_deny"] > drops
     assert t.rpc(proc, "dns_events", d.ALTERNATE) == before
     assert r.shape(KEY) == expected and t.rpc(proc, "check")
+    print("DENIED_TRANSACTION", "A" if kind == 1 else "AAAA", active, after, flush=True)
 
 
 class Recovery:
@@ -73,7 +78,7 @@ class Recovery:
             decision = h.compare.compare(initial["report"], observed["report"])
             assert decision["decision"] == "CHANGE_REVIEW_REQUIRED", decision
             assert not any(decision[k] for k in ("qualification", "mutation", "apply_allowed", "freshness_verified"))
-            denied(proc, res, candidate)
+            denied(proc, res, candidate, 1, 0)
             assert t.exchange(old) and not (path / "result").exists()
             print("PASS DHCP_DNS_RENEWED_UNAPPROVED_SOURCE_DENIED_WHILE_CONTROLLER_DEAD", flush=True)
 
@@ -85,7 +90,7 @@ class Recovery:
         assert h.dns_values(res) == h.expected_dns(res, d.ALTERNATE)
         print("PASS DHCP_DNS_PID1_TWO_TABLE_RESTORE_REVOKES_OLD_NEW_QUALIFICATION", flush=True)
 
-        denied(proc, res, maintenance)
+        denied(proc, res, maintenance, 28, 1)
         assert not t.exchange(old) and not t.reaches(d.PRIMARY, 443)
         print("PASS DHCP_DNS_UNAPPROVED_SOURCE_STAYS_DENIED_AFTER_RESTORE", flush=True)
         epoch = t.rpc(proc, "change", d.PRIMARY)
@@ -139,6 +144,18 @@ class Tests(unittest.TestCase):
                 f"delete table inet {d.TABLE}\ndelete table netdev {d.LINK_TABLE}\n"))
         with self.assertRaises(ValueError):
             r.profile(KEY, "open")
+
+    def test_post_restore_denial_requires_distinct_new_transaction(self):
+        for after in (1, 2):
+            res = Mock()
+            res.active_transactions.side_effect = [1, after]
+            with patch.object(z, "query") as query, patch.object(t, "rpc", side_effect=[[], [], True]), patch.object(d.raw, "counters", side_effect=[{"dns_output_deny": 3}, {"dns_output_deny": 4}]), patch.object(r, "shape", return_value="maintenance"):
+                if after == 1:
+                    with self.assertRaisesRegex(AssertionError, "NEW_DENIED_TRANSACTION_REQUIRED"):
+                        denied(None, res, "maintenance", 28, 1)
+                else:
+                    denied(None, res, "maintenance", 28, 1)
+                query.assert_called_once_with(kind=28, success=False)
 
 
 if __name__ == "__main__":

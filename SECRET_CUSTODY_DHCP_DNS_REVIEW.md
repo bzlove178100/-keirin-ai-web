@@ -115,22 +115,30 @@ Six additional acceptance records are required:
 3. PID 1 restores both tables, reports RESTORE_MAINTENANCE and cleans up its unit.
    Old/new qualification is denied while administration survives. The unapproved
    DHCP DNS remains configured: firewall restoration did not overwrite it.
-4. After actual pending-transaction drain and private cache flush, a fresh query
-   to that still-configured source is denied again with a new drop and no receipt.
+4. The first denied A transaction is still pending. Flush only private cache,
+   issue a distinct AAAA and require active count 1→2, a new output drop and no
+   upstream receipt. A repeated/coalesced old query is insufficient evidence.
 5. A new real DHCP renewal returns the approved source. Require fresh A/AAAA
    answers, matching selected facts, the same daemon identities and administration.
 6. The base suite then completes killed/mixed observation rejection, another real
    changed-source denial/return, lease expiry and cleanup under the restored policy.
 
-Drain waits observe actual TransactionStatistics with a fifteen-second bound;
-private cache flush does not substitute for drain. The first changed-source
+After the actual approved-source return, drain observes TransactionStatistics
+with the existing fifteen-second bound; private cache flush does not substitute
+for drain. No early drain is assumed while an unapproved source stays configured. The first changed-source
 assertions must complete while the candidate profile is still active and before
 the worker result exists. This proves the exercised event order, not simultaneous
 DHCP mutation and firewall restoration inside one kernel transaction.
 
-Three new, five DHCP DNS, six shared recovery and six resolver tests pass locally
-(20 total), plus git diff --check. Real composition CI is pending; all five
+Four new, five DHCP DNS, six shared recovery and six resolver tests pass locally
+(21 total), plus git diff --check. Corrected real composition CI is pending; all five
 final-head workflows and nineteen regression jobs remain mandatory before merge.
+
+### Initial composition failure and changed acceptance
+
+Initial head `c23e575df48f5d068b840aae52e9286293088ed2`, regression `37179257704`, job `111368290742`, passed all twelve standalone records plus fresh queries after controller death, actual changed-DNS denial under qualification and PID 1 restoration with old/new qualification denial. It then failed while waiting fifteen seconds for all transactions to disappear with the unapproved DNS still configured. The retained journal explicitly shows timeout/retry and TCP fallback for transaction 48673 at 14:14:56 JST; a one-second UDP client timeout did not cancel the resolver's continuing work. The earlier source-return drain result does not apply while the source stays blocked. The correction keeps the original A denial, requires its one pending transaction after restoration, then issues distinct AAAA and requires actual active count 1→2 plus a new output drop and no peer receipt. This prevents coalesced/cached failure from being accepted without assuming premature drain. After actual DHCP return to the approved source, the original fifteen-second zero-transaction bound and fresh A/AAAA answer requirements remain. A new local negative test rejects unchanged active count; four composition tests pass (21 total with reused suites). No firewall/client deadline was relaxed and no daemon restart or blind rerun is used. Corrected real CI remains pending.
+
+Primary upstream v255 review: [resolved-dns-transaction.c](https://github.com/systemd/systemd/blob/v255/src/resolve/resolved-dns-transaction.c), blob `696fce532a41f98fb36c679b62f5576b58fe626f`, retries on timeout and TCP connection failure. [resolved-dns-stub.c](https://github.com/systemd/systemd/blob/v255/src/resolve/resolved-dns-stub.c), blob `259f82eff4e81d8610d28061837b5a202a4c3e34`, explicitly destroys queries for a closed TCP stub stream; a UDP client timeout does not supply that stream-close signal. Runtime counters, denial and successful approved return still require the corrected installed-binary CI evidence.
 
 ## Remaining boundary
 
