@@ -483,3 +483,13 @@ jobs:
         run: /usr/bin/python3 -I -B tests/test_secret_custody_recovery_context.py
       - name: Verify actual interface replacement and worker loss around final readiness
         run: sudo -n env KC_RECOVERY_CONTEXT_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_recovery_context.py --systemd
+
+  custody-qualification-lease:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test kernel lease scope, ownership and isolation
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_qualification_lease.py
+      - name: Verify expiry despite combined worker/controller loss and stale apply
+        run: sudo -n env KC_QUALIFICATION_LEASE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_qualification_lease.py --systemd

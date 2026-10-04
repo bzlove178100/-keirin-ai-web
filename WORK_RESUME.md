@@ -1,10 +1,24 @@
 # Work resume handoff
 
-## Current repair: candidate-bound CI and kernel receive timestamps
+## Current slice: kernel-enforced qualification expiry after process loss
 
 Updated: 2026-10-04 (Asia/Tokyo).
 
-Main remains `f025ff39bf9d67b4a501b7f214ec95a8aa7bd3e5`; its regression `37192146307` failed the time fixture. PR #194's first diagnostic head `bfec3186dac40d2a3dc35f7f169ceef987f4aca2` passed 21/21 regression jobs but failed runtime `37192519684` because that smoke inspected older main. These failures are retained, not reclassified or rerun unchanged.
+Start from main `e05c17ddaa9fbff58db951db8f509c3fe17b07e3` (PR #194 merged). Final PR and main each passed all five workflows and 21 regression jobs; main regression `37208709975`, runtime `37208709982`, time job `111455278843` (15 records). Main tree `193b044fbe37e2441b135ee7e707f45eda14f8be` matched the accepted PR tree. CI candidate/main dependency repair is complete. The historical chrony rejection cause remains unproven; use raw evidence if it recurs, no blind rerun.
+
+PR #193 showed the remaining final-check race: worker SIGKILL just after readiness plus controller SIGKILL can leave qualification active indefinitely. A new pure review renderer now installs a separate, fixed synthetic inet/netdev guard BEFORE readiness. Timed set membership allows only the fixed IPv4/IPv6 peer TCP/443 while an eight-second kernel lease exists. Every packet is gated, including established TCP. The existing candidate/restore transactions do not own those tables. create-table semantics refuse installation replay while the guards exist; no packet-path update, renewal API, flowtable or broad established bypass is present. The one-minute GC interval intentionally exceeds the lease, so traffic expiry cannot depend on prompt garbage collection.
+
+The new mandatory CI job exercises four separate private namespaces: normal PID 1 restoration; worker death immediately after final readiness followed by candidate apply/controller death; a controller held until AFTER the lease expires before applying; and MAC drift causing worker fail-stop. Require dual-family old/new qualification denial, preserved old/new administration, unchanged unrelated table, unchanged guard handles, refused rearming and two stale candidate replays which cannot reopen access. Existing unguarded negative controls remain mandatory, accurately demonstrating why repeated readiness checks alone are insufficient. The parent observes expiry without mutating nft; its later replay/cleanup is explicitly not recovery.
+
+Local: four lease renderer/isolation tests plus eight existing context tests pass; diff check clean. Actual kernel acceptance is not yet claimed. All five workflows and now 22 regression jobs must succeed before merge. Exact head, kernel records and merge/main receipts belong in the PR for this slice.
+
+This is an unactivated synthetic guard implementation, not a live firewall installer or permission grant. Expiry revokes the temporary transport allowance; it does not restore table shape, repair a broken management route or establish SSH authentication. Current proof is fixed static peers and the existing dual-family time firewall profile. Other profiles/dynamic DHCP/RA/rescue composition, first live installation, reboot/suspend persistence, same-ifindex reuse and arbitrary privileged guard deletion/rearming remain unqualified. Next qualify the guarded installation/ownership path and required dynamic dependencies before any live proposal. No phone/AWS/SSH/credential operation; all production/runtime/provider/DB/data-fetch/scheduler/report gates stay OFF.
+
+## Completed repair: candidate-bound CI and kernel receive timestamps
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+At the start of that repair main was `f025ff39bf9d67b4a501b7f214ec95a8aa7bd3e5`; its regression `37192146307` failed the time fixture. PR #194's first diagnostic head `bfec3186dac40d2a3dc35f7f169ceef987f4aca2` passed 21/21 regression jobs but failed runtime `37192519684` because that smoke inspected older main. These failures are retained, not reclassified or rerun unchanged.
 
 The repair changes only the CI smoke entry point: resolve the current Actions run, pin file reads to its SHA, and require actual successful regression/UI workflow results at the same SHA, event, branch, repository, workflow ID and path. It waits at most ten minutes for pending/missing siblings; any completed failure blocks immediately. It does not wait on itself, accept old green main, ignore failure, or return success on timeout. The standalone legacy main-health bridge and strict hosted four-workflow/main-drift verifier are unchanged. On main push, the smoke now waits for that same main commit, removing the earlier timing race. Candidate verification is not a claim that the old main is healthy or that hosted execution is authorized.
 
