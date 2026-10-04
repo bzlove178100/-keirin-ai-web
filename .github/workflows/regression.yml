@@ -345,6 +345,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test PMTU isolation guards and real error checksums
         run: /usr/bin/python3 -I -B tests/test_secret_custody_pmtu.py
+      - name: Test PMTU recovery isolation guards
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_pmtu_recovery.py
       - name: Prepare packet offload controls in disposable CI
         run: |
           sudo -n apt-get update -qq
@@ -353,6 +355,8 @@ jobs:
         # Fresh host/router/peer namespaces; only fixed documentation networks.
         # Real kernel errors, same-flow recovery, forged-error and data denial.
         run: sudo -n env KC_PMTU_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_pmtu.py --kernel
+      - name: Verify routed PMTU after independent restricted restoration
+        run: sudo -n env KC_PMTU_CI=1 KC_DHCP_CI=1 KC_DYNAMIC_RECOVERY_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_pmtu_recovery.py --systemd
 
   custody-dynamic-recovery:
     runs-on: ubuntu-24.04

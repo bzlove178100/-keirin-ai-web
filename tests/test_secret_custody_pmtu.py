@@ -284,7 +284,7 @@ def empty():
     assert all("metainfo" in x for x in json.loads(t.run(t.NFT, "-j", "list", "ruleset").stdout)["nftables"])
 
 
-def run_case(version):
+def run_case(version, recovery=None):
     guard()
     family(version)
     empty()
@@ -311,6 +311,7 @@ def run_case(version):
         assert t.reaches(peer, 443) and t.reaches(peer, 22)
         print(f"PASS IPv{version}_ROUTED_UNFILTERED_POSITIVE_CONTROLS", flush=True)
         t.nft(policy(version))
+        prepared = recovery.prepare(version) if recovery is not None else None
         with ExitStack() as stack:
             tap = raw.packet_socket(stack, "host0", raw.ETH_ALL, socket.SOCK_RAW)
             tap.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)
@@ -321,6 +322,9 @@ def run_case(version):
             assert not t.reaches(peer, 443)
             initial = state(bulk, version)
             assert initial["socket_mtu"] == initial["tcp_pmtu"] == 1500 and initial["snd_mss"] > MTU
+            if recovery is not None:
+                phase = "independent-recovery"
+                recovery.exercise(version, stack, admin, bulk, prepared)
             quotes = []
             for data in captures(tap):
                 v, offset, proto, src, dst, length = ip_fields(data)
@@ -393,6 +397,8 @@ def run_case(version):
             assert not t.reaches(peer, 443)
             assert counts()["inet_data_deny"] > denied_before
             print(f"PASS IPv{version}_SAME_FLOW_RECOVERY_PMTU_MSS_WIRE_SIZE_AND_DENIAL", json.dumps({"initial": initial, "final": final, "received_bytes": len(received), "max_wire_ip_length": max(sizes)}), flush=True)
+            if recovery is not None:
+                recovery.verify(version, prepared)
     except BaseException:
         print("PMTU_FAILURE", version, phase, file=sys.stderr)
         print(t.run(t.IP, "-" + str(version), "route", "get", peer, success=False).stdout[:2000].decode(), file=sys.stderr)

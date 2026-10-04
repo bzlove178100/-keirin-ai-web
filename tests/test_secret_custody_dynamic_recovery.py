@@ -46,6 +46,8 @@ def tables(version):
         return (("inet", d.TABLE), ("netdev", d.LINK_TABLE))
     if version in (6, "dhcp6"):
         return (("inet", v.TABLE), ("netdev", v.LINK))
+    if version in ("pmtu4", "pmtu6"):
+        return (("inet", "kc_pmtu"), ("netdev", "kc_pmtu_link"))
     raise ValueError("FIXED_IP_FAMILY_REQUIRED")
 
 
@@ -56,9 +58,15 @@ def profile(version, mode):
     result = d.policy() + d.link_policy() if version == 4 else v.policies()
     if version == "dhcp6":
         result = module("dhcp6_profile", "test_secret_custody_dhcpv6.py").policies()
+    ip, host, peer = ("ip", d.CLIENT, d.PRIMARY) if version == 4 else ("ip6", v.CLIENT, v.REMOTE)
+    if version in ("pmtu4", "pmtu6"):
+        pmtu = module("pmtu_profile", "test_secret_custody_pmtu.py")
+        family = 4 if version == "pmtu4" else 6
+        result = pmtu.policy(family)
+        addresses = pmtu.ADDRESSES[family]
+        ip, host, peer = "ip" if family == 4 else "ip6", addresses[0], addresses[3]
     if mode == "maintenance":
         return result
-    ip, host, peer = ("ip", d.CLIENT, d.PRIMARY) if version == 4 else ("ip6", v.CLIENT, v.REMOTE)
     inet, link = owned[0][1], owned[1][1]
     # Insert before default-denial rules in BOTH layers. No broad established
     # allowance: the fixed qualification tuple is removed in its entirety.
@@ -576,9 +584,9 @@ if __name__ == "__main__":
         print("RESULT SYNTHETIC_DYNAMIC_RECOVERY_OK_NO_LIVE_APPLY", flush=True)
     elif len(args) == 2 and args[0] == "--peer" and args[1] in ("4", "6"):
         peer(int(args[1]))
-    elif len(args) == 3 and args[0] == "--worker" and args[2] in ("4", "6", "dhcp6"):
-        worker(args[1], "dhcp6" if args[2] == "dhcp6" else int(args[2]))
-    elif len(args) == 4 and args[0] == "--controller" and args[2] in ("4", "6", "dhcp6") and args[3] in ("before", "after"):
-        controller(args[1], "dhcp6" if args[2] == "dhcp6" else int(args[2]), args[3])
+    elif len(args) == 3 and args[0] == "--worker" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6"):
+        worker(args[1], int(args[2]) if args[2] in ("4", "6") else args[2])
+    elif len(args) == 4 and args[0] == "--controller" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6") and args[3] in ("before", "after"):
+        controller(args[1], int(args[2]) if args[2] in ("4", "6") else args[2], args[3])
     else:
         unittest.main(verbosity=2)
