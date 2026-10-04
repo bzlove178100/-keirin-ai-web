@@ -1,6 +1,18 @@
 # Work status
 
-## Current boundary: chrony source selection without host clock control
+## Current boundary: DNS observation reconciliation and first-install review
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #186 merged at `82e6a4f65b479cc85798b1ba94af6c71771e3ef1`. Final head `0cf7e7b53cb7263977bd642cd943db3899a76a5a` passed all five workflows and seventeen regression jobs (`37167335331`); final time job `111332909527` reproduced all fifteen acceptance records. This continuation rechecked the merged PR, final workflows and matching clean local/remote main.
+
+This slice adds a pure comparison of selected private dependency-reader facts. Existing-parser synthetic inputs test resolved/networkd agreement, endpoint addition/removal/change, provider/interface change, default-port representation, unknown/incomplete data and output redaction. Matching observations never authorize endpoints or establish freshness. All decisions retain qualification/mutation/apply/freshness gates false; there is no host reader invocation, policy renderer or apply adapter. Fourteen new comparison tests plus ten existing reader tests pass locally (24 total). The comparison tests are mandatory in the existing dependency CI job; all five final-head workflows and seventeen regression jobs remain the merge gate. Exact final results and merge receipt belong in the PR.
+
+The [DNS reconciliation and first-install review](SECRET_CUSTODY_DNS_RECONCILIATION_REVIEW.md) separates implemented comparison from proposed real-resolver and first-install acceptance. No current report has trustworthy freshness, atomic collection or effective resolver-transport/routing coverage. No live resolver or initial maintenance installation has become qualified. A separately restricted rescue profile and a recovery path demonstrated under deliberately wrong candidate allowances are prerequisites; a timer restoring the same wrong allowance is insufficient. No automatic unfiltered rollback or broader access is introduced.
+
+Next: isolate a real resolver with private IPC/config/runtime, then verify client-path queries, cache/TTL behavior, changed DHCP DNS and denial without widening rules. First-install independent rescue, reboot, non-cooperating writers and worker death after readiness remain blocked. Do not repeat the accepted phone reader observation. Installed Ubuntu DHCPv6 remains unqualified. No phone/AWS/SSH/live host/credential operation; H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: chrony source selection without host clock control
 
 Updated: 2026-10-04 (Asia/Tokyo).
 
