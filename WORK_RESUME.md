@@ -1,6 +1,37 @@
 # Work resume handoff
 
-## Current boundary: recovery context binding and worker loss at final readiness
+## Current repair: candidate-bound CI and kernel receive timestamps
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+Main remains `f025ff39bf9d67b4a501b7f214ec95a8aa7bd3e5`; its regression `37192146307` failed the time fixture. PR #194's first diagnostic head `bfec3186dac40d2a3dc35f7f169ceef987f4aca2` passed 21/21 regression jobs but failed runtime `37192519684` because that smoke inspected older main. These failures are retained, not reclassified or rerun unchanged.
+
+The repair changes only the CI smoke entry point: resolve the current Actions run, pin file reads to its SHA, and require actual successful regression/UI workflow results at the same SHA, event, branch, repository, workflow ID and path. It waits at most ten minutes for pending/missing siblings; any completed failure blocks immediately. It does not wait on itself, accept old green main, ignore failure, or return success on timeout. The standalone legacy main-health bridge and strict hosted four-workflow/main-drift verifier are unchanged. On main push, the smoke now waits for that same main commit, removing the earlier timing race. Candidate verification is not a claim that the old main is healthy or that hosted execution is authorized.
+
+The synthetic NTP server now places Linux SO_TIMESTAMPNS_NEW kernel receive time in T2, instead of the time Python returns from recvfrom. This corrects accounting of socket queue/process scheduling time: it belongs to server residence T3-T2, which NTP subtracts from RTT. Reject missing/duplicate/malformed/truncated timestamp controls, without userspace fallback. A CI-only queued-packet control checks the actual receive field against the kernel timestamp after a deliberate 25ms dequeue delay. Existing source preferences, chrony filters, packet validation, fresh-sample requirements, all deadlines and fifteen acceptance records remain unchanged. Raw packet-rejection logs remain enabled. Historical failed-main packet rejection is still not retrospectively proven; successful CI alone cannot establish that all runner jitter is fixed.
+
+Local validation: 10 chrony tests, 9 candidate-CI tests (including real BoundRuntime success/blocking), 4 legacy bridge tests and 15 strict SHA bridge tests pass. Code head `cdbc510f38d7b3b3dc15c49dffd04e20f797446f` (tree `473df2f65a71d842170fb0de787a96f318c29cb3`) passed all five workflows: regression `37207894470` (21/21 jobs), UI `37207894486`, runtime `37207894447`, AWS offline `37207894418`, PostgreSQL `37207894420`. Runtime job `111452832524` completed at 23:09:34 JST and explicitly verified this same SHA using regression/UI run IDs above while old main remained failed. Thus the candidate/main dependency defect is repaired in actual CI. Final documentation-head CI and merge/post-merge receipts are recorded in PR #194. Do not merge unless all applicable workflows succeed. If time acceptance fails again, inspect the new timestamp control and raw measurement evidence before changing anything; no blind retry or threshold relaxation.
+
+
+Time job `111452833052` passed all fifteen records at 23:05:48 JST. The independent receive-time control measured 0.0251536369 seconds of actual queue residence and confirmed the emitted T2 equals kernel receipt. Fresh accepted deltas (primary, alternate) were IPv4 silent (4,4), IPv4 origin (4,4), IPv6 silent (4,5), IPv6 origin (4,4). Delay-deviation rejections still appeared in raw logs, without failing acceptance. This fixes a measured timestamp-accounting defect; it does not eliminate genuine TX/path jitter or prove the exact rejected subtest in the historical failed main. No filter/deadline change or identical rerun.
+
+No live host, phone, AWS, SSH or credential operation. All runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF. PR #193's worker-loss last-check gap and first live installation remain unqualified; they are separate from this repair.
+
+## Previous diagnostic boundary: chrony per-packet rejection after main failure
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #193 merged/closed at `f025ff39bf9d67b4a501b7f214ec95a8aa7bd3e5` after final head `22fdb1ae49e189d30228bcf0d273790f009e186c` passed all five workflows and twenty-one regression jobs (`37191720165`). Context job `111405131196` reproduced all fifteen identity/worker-loss records; the last-check gap remains explicitly unqualified. Local/remote main and the tested tree matched after merge.
+
+The later main push regression `37192146307`, time job `111406414809`, FAILED at 18:27:09 JST in IPv4 origin-prime preparation. Primary RX/valid/good changed 20/20/17 to 31/31/20: eleven valid packets but only three new accepted measurements, below the unchanged four-measurement requirement within twelve seconds. Alternate changed 28/28/23 to 40/40/35. Primary remained selected and both sources were reachable with poll 0. Earlier controller/restoration and silent-primary failover assertions passed. Main acceptance is not complete and the successful PR acceptance is not a substitute for this failed later run. No identical rerun was requested.
+
+The last ntpdata NTP tests were all 1; they do not retain every earlier response's rejection bits. Chrony 4.5 official source confirms that accepted-count increments depend on additional maximum-delay, delay-ratio, delay-deviation/quantile and loop tests. The precise failed subtest is still unknown. Shared-runner scheduling and the Python server's userspace receive timestamp are hypotheses, not confirmed causes.
+
+The follow-up adds rawmeasurements logging only inside the existing private unprivileged clockless client, a bounded parser restricted to the two synthetic peers, per-source test-bit-group counts and a sixteen-record tail in preparation/failure evidence. No packet contents, source preference, sampling threshold, poll rate, delay filter or deadline is changed. Eight chrony unit tests pass. Changed-condition CI will retain information absent from the failed main run; success still requires the original fifteen records/four preparations, and a failure must be investigated from actual raw test bits. Do not repeat identical reruns or widen acceptance filters.
+
+The legacy runtime smoke reads the latest completed MAIN CI, so it may correctly block this PR while main regression is failed. Do not relabel that failure as success, bypass the verification step or infer production readiness. Keep any diagnostic PR unmerged unless its applicable integration gate is satisfied. No live/phone/AWS/SSH/credential operation; all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates OFF. First installation and combined worker/controller-loss recovery remain unqualified.
+
+## Previous completed slice: recovery context binding and worker loss at final readiness
 
 Updated: 2026-10-04 (Asia/Tokyo).
 
