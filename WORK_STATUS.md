@@ -1,6 +1,16 @@
 # Work status
 
-## Current boundary: fixed DNS transport through independent recovery
+## Current boundary: chrony source selection without host clock control
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #185 merged at `1e534bed3cb3b27720cbd5385942e2e59be208da`. Final head `1ed064012fd25d6fdf15668e6445face7f8d356a` passed all five workflows and sixteen regression jobs (`37165380672`); final DNS job `111327095363` reproduced all sixteen acceptance records. This continuation rechecked the merge, exact final workflows and matching clean local/remote main. Fixed DNS evidence remains accepted with its recorded limits.
+
+The new isolated time fixture uses real chronyd with `-x` and uid/gid 65534, empty capability sets/bounding set and NoNewPrivs. It extracts the Ubuntu chrony package into an owned CI directory without package installation or service scripts; version and executable hashes are recorded. Only two fixed synthetic NTP sources per family are approved. Require primary selection, new accepted measurements after controller SIGKILL and after PID 1 two-table restoration, automatic alternate selection when the primary becomes silent or sends wrong originate timestamps, primary return, and denial of an unapproved source/TCP transport. The same client and administration socket persist across recovery. Read actual chronyc selection/reach and accepted-measurement counters, not just UDP receipt. Four NTP/report/guard and six shared recovery tests pass; CI is pending. See [time recovery review](SECRET_CUSTODY_TIME_RECOVERY_REVIEW.md). All five final-head workflows and seventeen regression jobs are required before merge.
+
+No host clock setting, host time-service installation/configuration, external time server, NTS/cryptographic authentication, accuracy/UTC traceability, DNS discovery or combined DHCP/RA/DNS/PMTU lifecycle is qualified. Next: resolver integration/discovery and first restricted maintenance installation/recovery design. Nine observed live time entries do not become an approved allowlist. Installed Ubuntu DHCPv6 remains unqualified. Worker death after readiness, non-cooperating root writers, reboot and wrong shared allowlists remain unresolved. No phone/AWS/SSH/live host/credential action; H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: fixed DNS transport through independent recovery
 
 Updated: 2026-10-04 (Asia/Tokyo).
 
