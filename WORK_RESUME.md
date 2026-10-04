@@ -1,6 +1,20 @@
 # Work resume handoff
 
-## Current boundary: recovery context binding and worker loss at final readiness
+## Current boundary: chrony per-packet rejection diagnosis after main failure
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #193 merged/closed at `f025ff39bf9d67b4a501b7f214ec95a8aa7bd3e5` after final head `22fdb1ae49e189d30228bcf0d273790f009e186c` passed all five workflows and twenty-one regression jobs (`37191720165`). Context job `111405131196` reproduced all fifteen identity/worker-loss records; the last-check gap remains explicitly unqualified. Local/remote main and the tested tree matched after merge.
+
+The later main push regression `37192146307`, time job `111406414809`, FAILED at 18:27:09 JST in IPv4 origin-prime preparation. Primary RX/valid/good changed 20/20/17 to 31/31/20: eleven valid packets but only three new accepted measurements, below the unchanged four-measurement requirement within twelve seconds. Alternate changed 28/28/23 to 40/40/35. Primary remained selected and both sources were reachable with poll 0. Earlier controller/restoration and silent-primary failover assertions passed. Main acceptance is not complete and the successful PR acceptance is not a substitute for this failed later run. No identical rerun was requested.
+
+The last ntpdata NTP tests were all 1; they do not retain every earlier response's rejection bits. Chrony 4.5 official source confirms that accepted-count increments depend on additional maximum-delay, delay-ratio, delay-deviation/quantile and loop tests. The precise failed subtest is still unknown. Shared-runner scheduling and the Python server's userspace receive timestamp are hypotheses, not confirmed causes.
+
+The follow-up adds rawmeasurements logging only inside the existing private unprivileged clockless client, a bounded parser restricted to the two synthetic peers, per-source test-bit-group counts and a sixteen-record tail in preparation/failure evidence. No packet contents, source preference, sampling threshold, poll rate, delay filter or deadline is changed. Eight chrony unit tests pass. Changed-condition CI will retain information absent from the failed main run; success still requires the original fifteen records/four preparations, and a failure must be investigated from actual raw test bits. Do not repeat identical reruns or widen acceptance filters.
+
+The legacy runtime smoke reads the latest completed MAIN CI, so it may correctly block this PR while main regression is failed. Do not relabel that failure as success, bypass the verification step or infer production readiness. Keep any diagnostic PR unmerged unless its applicable integration gate is satisfied. No live/phone/AWS/SSH/credential operation; all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates OFF. First installation and combined worker/controller-loss recovery remain unqualified.
+
+## Previous completed slice: recovery context binding and worker loss at final readiness
 
 Updated: 2026-10-04 (Asia/Tokyo).
 
