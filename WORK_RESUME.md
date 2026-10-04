@@ -1,6 +1,20 @@
 # Work resume handoff
 
-## Current boundary: caller-bound observation restart and stale-result rejection
+## Current boundary: restricted rescue independent of wrong primary allowances
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #191 is merged/closed at `dfbb572a7f101b3f979951b085bc93395444393f`. Final head `72597b36c6ae7e27cfa216c0262f10845257198b` passed all five workflows and nineteen regression jobs (`37188298011`); DHCP DNS job `111394917716` reproduced all 37 records. This continuation rechecked the merge, final workflows and matching clean local/remote main. Accepted phone and observation evidence is not repeated.
+
+The new fixed CI rescue profile uses a second static-address/static-neighbor veth for exact peer TCP/22 in both directions, with default-drop inet/netdev protection. It is independent of the exercised primary administration/DHCP/DNS allowance fault, not out-of-band from the kernel, namespace or owned tables. Candidate and ordinary fallback deliberately share incorrect primary peer addresses. A negative control requires both profiles to break existing/new primary administration and fresh DNS while the separate path survives. The separately fixed rescue material is not derived from either corrupted profile or discovered endpoints.
+
+The existing independently supervised PID 1 worker retains its 22-second monotonic deadline and atomic two-table restoration. The controller dies by SIGKILL. Real networkd renewal/rebinding output must increment a dedicated drop counter and not reach the synthetic server; primary administration/DNS must fail while the rescue path still works. After exact restricted rescue restoration, require new DHCP ACK, actual lease/DNSEx, fresh A/AAAA including TCP, primary administration, unchanged daemon identities/unrelated table and revocation of old/new qualification. A second case lowers the separate rescue link after readiness; shape restoration and primary recovery must still occur, but unavailable rescue transport must yield BLOCKED/RESCUE_PATH_UNAVAILABLE with all gates false. No link repair or permission expansion is performed automatically.
+
+Four new local tests plus six shared recovery, five DHCP DNS and four composition tests pass (19 total); git diff --check passes. A twentieth mandatory regression job requires fifteen real-kernel records across available/broken rescue cases. Actual CI acceptance is pending. All five final-head workflows and twenty regression jobs must pass before integration; exact evidence and merge receipt belong in the PR. See [restricted rescue review](SECRET_CUSTODY_RESTRICTED_RESCUE_REVIEW.md).
+
+This starts from a pretested restricted CI anchor; initial installation from the live unfiltered baseline remains unqualified. TCP echo is administration transport evidence, not SSH authentication. No live second interface, rescue route, source approval or independent host recovery exists by implication. Persistent installation/reboot, worker death after readiness, stale interface/boot identity, non-cooperating writers, combined DHCPv6/RA/route faults and rescue-path repair remain outside scope. Next: bind recovery readiness to boot/interface identities and exercise worker loss after readiness before considering first-install rehearsal. No phone/AWS/SSH/live host/credential operation; H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: caller-bound observation restart and stale-result rejection
 
 Updated: 2026-10-04 (Asia/Tokyo).
 
