@@ -78,3 +78,13 @@ A private-netns control queues a datagram, waits 25ms after readability, and req
 Reference: https://docs.kernel.org/networking/timestamping.html (SO_TIMESTAMPNS_NEW and __kernel_timespec). This is a fixture timestamp correction, not proof of production clock accuracy or a retrospective explanation of every historical rejection.
 
 Code-head acceptance: `cdbc510f38d7b3b3dc15c49dffd04e20f797446f`, regression `37207894470`, time job `111452833052`, fifteen PASS records at 23:05:48 JST. Kernel queue control measured 25.1536ms and matched T2. All four fresh phases passed original requirements; raw delay-deviation rejections remain observable. Final integration receipts are in PR #194.
+
+## Bounded healthy-phase acquisition after recurrence
+
+Head da5c78bb98d1f8f6c5a40a8757d4d33405cdda69, job 111457986448, failed origin-prime at 23:33:12 JST. Raw data directly records eight primary and five alternate delay-deviation rejections. Late diagnostics show +4/+7 accepted samples; this cannot retroactively satisfy the earlier timed predicate. Kernel RX accounting is corrected, but real timing variance remains.
+
+Before each healthy silent/origin preparation, issue once per fixed peer `chronyc burst 4/16` through the existing private socket. This asks chrony to collect four accepted samples with at most sixteen burst attempts. Keep default filters and required four-new-good predicate; additionally require no active burst before fault injection. The twelve-second wait, normal poll 0, all failure-phase deadlines, source selection and invalid-origin checks remain. No sample-history reset, clock control, retries-until-green or filter relaxation. Two tests cover command scope/rejection and idle parsing; existing freshness negatives remain. Acceptance requires actual original fifteen records with `burst_finished=true` in all four preparation logs.
+
+Official command contract: https://chrony-project.org/doc/4.5/chronyc.html (burst). Chrony 4.5 ntp_core.c decrements burst good count only for good_packet and bounds burst interval by one quarter of normal polling; successful completion returns to normal online mode. This is changed acquisition, not a guarantee that every response will pass.
+
+Bounded-acquisition code acceptance: head `1f4f4bd34ec10200fea82b528a5062163c5fdff3`, job `111459213731`, fifteen records at 23:40:42 JST. All four phases recorded +4/+4 new accepted samples and burst_finished=true while actual delay-deviation rejection continued. No filter/deadline relaxation or identical retry. Final CI/integration receipts are in PR #195.
