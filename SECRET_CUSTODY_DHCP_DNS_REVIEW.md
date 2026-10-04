@@ -90,10 +90,53 @@ Code head `7638dcc6000d9921752333caf3f0f6b4293a23c8`, regression `37178001953`, 
 
 Exact final-head workflow/job results and merge receipt belong in PR #189.
 
+## Independent restricted recovery composition
+
+The subsequent fixture `test_secret_custody_dhcp_dns_recovery.py` reuses the full
+standalone lifecycle with an explicit recovery hook. The standalone twelve-record
+run remains mandatory, followed by a separate fresh namespace for the composed
+run in the same CI job. Job timeout increases from five to seven minutes for the
+additional lifecycle; client deadlines and daemon/worker bounds are unchanged.
+
+The fixed `dhcp-dns` profile uses exactly the standalone maintenance policy. Its
+qualification variant adds only the primary peer TCP/443 tuple in both tables.
+The worker and controller recognize this explicit profile; recovery continues to
+require known two-table shape, independent PID 1 supervision and atomic replacement.
+No general established-connection allowance or observed-source permission is added.
+
+Six additional acceptance records are required:
+
+1. After controller SIGKILL, the qualification socket works and real stub A/AAAA
+   including TCP client transport produce fresh approved upstream events.
+2. Before the independent deadline, real DHCP renewal changes lease/DNSEx to the
+   unapproved source. Actual collection requires review with all gates false;
+   fresh query fails, output drops increase and the unapproved upstream receives
+   nothing. Qualification and old/new administration still work.
+3. PID 1 restores both tables, reports RESTORE_MAINTENANCE and cleans up its unit.
+   Old/new qualification is denied while administration survives. The unapproved
+   DHCP DNS remains configured: firewall restoration did not overwrite it.
+4. After actual pending-transaction drain and private cache flush, a fresh query
+   to that still-configured source is denied again with a new drop and no receipt.
+5. A new real DHCP renewal returns the approved source. Require fresh A/AAAA
+   answers, matching selected facts, the same daemon identities and administration.
+6. The base suite then completes killed/mixed observation rejection, another real
+   changed-source denial/return, lease expiry and cleanup under the restored policy.
+
+Drain waits observe actual TransactionStatistics with a fifteen-second bound;
+private cache flush does not substitute for drain. The first changed-source
+assertions must complete while the candidate profile is still active and before
+the worker result exists. This proves the exercised event order, not simultaneous
+DHCP mutation and firewall restoration inside one kernel transaction.
+
+Three new, five DHCP DNS, six shared recovery and six resolver tests pass locally
+(20 total), plus git diff --check. Real composition CI is pending; all five
+final-head workflows and nineteen regression jobs remain mandatory before merge.
+
 ## Remaining boundary
 
-DHCPv6 DNS, NSS, production observation, simultaneous route/RA/PMTU lifecycle and
-combined DHCP DNS changes with controller-death restoration are not qualified.
+DHCPv6 DNS, NSS, production observation and simultaneous route/RA/PMTU lifecycle
+are not qualified. Combined DHCP DNS changes with controller-death restoration
+have a new CI acceptance fixture above; actual results are pending.
 The earlier eighteen-record resolved recovery fixture remains mandatory. Initial
 restricted installation, independent rescue for wrong shared allowances, reboot,
 non-cooperating writers and worker death after readiness remain blocked. Installed

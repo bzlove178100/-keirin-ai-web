@@ -1,6 +1,18 @@
 # Work status
 
-## Current boundary: actual DHCPv4 DNS delivery and interrupted observation
+## Current boundary: DHCP DNS changes across independent restricted recovery
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #189 merged at `d68820cd22d848267f5060497ba54b0378d7b1a0`. Final head `8fb75fe66e6f39cc2330fc47c190c1868593be7c` passed all five workflows and nineteen regression jobs (`37178146385`); DHCP DNS job `111364997322` reproduced twelve acceptance records, and resolver job `111364997370` reproduced eighteen. This continuation rechecked merged/closed state, final workflows and matching clean local/remote main.
+
+This slice composes the real private networkd/resolved DHCP DNS fixture with the independent PID 1 recovery worker. A fixed `dhcp-dns` profile restores the exact DHCP DNS maintenance tables, including TCP DNS and excluding unused NTP. Require fresh stub answers after controller SIGKILL, then an actual DHCP renewal to the unapproved DNS source while qualification remains active. Actual observations must require review with all gates false; new DNS output drops and unchanged upstream events prove denial. Independent two-table restoration must revoke old/new TCP qualification while preserving administration and the unchanged DNS configuration. Require a fresh denial after restoration, then actual DHCP renewal back to the approved source, fresh answers and unchanged daemon identities. The complete original twelve-record observation/expiry suite continues under the restored policy. Six added composition records plus the twelve base records are mandatory; the original standalone run remains a separate mandatory step in the same nineteenth job.
+
+Three new, five DHCP DNS, six shared recovery and six resolver tests pass locally (20 total); git diff --check passes. Actual composition CI is pending. All five final-head workflows and nineteen regression jobs remain required before integration. See [DHCP DNS review](SECRET_CUSTODY_DHCP_DNS_REVIEW.md); exact final evidence and merge receipt belong in the PR.
+
+This does not prove that DHCP mutation and firewall restoration occur in the same kernel transaction, or qualify production observation/freshness, DHCPv6 DNS, NSS, observer restart/reuse with changed daemon identities, independent rescue for wrong shared allowances, first restricted installation, reboot, non-cooperating writers or recovery-worker death after readiness. Next: bind observation restart/reuse to the expected daemon identities and reject stale completed/partial results; keep the first-install/rescue boundary explicit. Accepted phone evidence stays accepted. No phone/AWS/SSH/live host/credential operation; H2a and all runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gates remain OFF.
+
+## Previous completed slice: actual DHCPv4 DNS delivery and interrupted observation
 
 Updated: 2026-10-04 (Asia/Tokyo).
 

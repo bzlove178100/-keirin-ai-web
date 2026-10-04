@@ -133,6 +133,9 @@ def peer():
             elif op == "flush_neighbors":
                 t.run(t.IP, "neigh", "flush", "dev", "peer0")
                 result = True
+            elif op == "qualification_listener":
+                t.listen(stack, d.PRIMARY, 443)
+                result = True
             else:
                 raise RuntimeError("FIXED_OPERATION_REQUIRED")
             assert all(s.error is None for s in servers.values())
@@ -286,7 +289,7 @@ def accepted(proc, epoch, address):
     return any(e["epoch"] == epoch and e["answered"] and e["kind"] == "renew" and e["dns"] == address for e in t.rpc(proc, "events"))
 
 
-def kernel():
+def kernel(recovery=None):
     guard()
     z.y.empty()
     print("KERNEL", os.uname().release, flush=True)
@@ -315,6 +318,7 @@ def kernel():
         print("PASS DHCP_DNS_UNFILTERED_BOTH_UPSTREAMS", flush=True)
         t.nft(policy())
         shape = r.shape(4)
+        prepared = recovery.prepare() if recovery else None
         with ExitStack() as stack:
             t.listen(stack, "0.0.0.0", 22)
             res = stack.enter_context(z.resolver(dhcp=True))
@@ -337,6 +341,8 @@ def kernel():
             z.query(kind=28, tcp=True)
             assert len(t.rpc(proc, "dns_events", d.PRIMARY)) >= before + 2
             print("PASS DHCP_CONFIGURED_STUB_A_AAAA_AND_TCP", flush=True)
+            if recovery:
+                recovery.exercise(stack, proc, res, initial, prepared)
 
             with collector(res, pause=True) as (child, path, _):
                 child.kill()
@@ -401,6 +407,8 @@ def kernel():
             assert before == {ip: t.rpc(proc, "dns_events", ip) for ip in before}
             check()
             print("PASS LEASE_EXPIRY_WITHDRAWS_DNS_ADDRESS_ROUTE_AND_BLOCKS_REVIEW", flush=True)
+            if recovery:
+                recovery.verify_expired(prepared)
         print("PASS DHCP_RESOLVED_BUS_PROCESSES_CGROUP_AND_PRIVATE_FILES_CLEANED", flush=True)
     finally:
         proc.terminate()
