@@ -83,9 +83,12 @@ Primary upstream v255 source inspected through the GitHub API:
   binaries by SHA-256 and record package version/kernel; upstream source alone is
   not evidence of installed behavior.
 
-Five new rejection/message tests and six resolver tests pass locally. Actual CI
-results are pending. The new nineteenth regression job and all five final-head
-workflows are mandatory before merge; exact run/head/merge receipts go in the PR.
+Five new, six resolver, fourteen comparison and five DHCP tests pass locally
+(30 total), plus `git diff --check`.
+
+Code head `7638dcc6000d9921752333caf3f0f6b4293a23c8`, regression `37178001953`, new job `111364577877`, passed all twelve acceptance records and `SYNTHETIC_DHCP_DNS_OBSERVATION_OK_NO_LIVE_APPLY` at 04:48:17 UTC on October 4 (13:48 JST). Installed systemd is `255.4-1ubuntu8.17`, kernel `6.17.0-1022-azure`; networkd SHA-256 `12e65fbae70b7cf17a84299c5323eb0735309c2891d3caea321a4ad2093f8c19`, resolved `5e694042ba4bad6c29584334eeb5b06c6abdab17a84d96718dd286e41bff322d`, dbus-daemon `8c479f1fcddfd6693c736ce541da0955f6752834bdeeef4b928e27f5e974c247`. Real acquisition, origin agreement, stub A/AAAA/TCP, SIGKILL partial rejection, renewal-during-collection rejection, unapproved-source denial without widening, approved return with unchanged daemon identities/admin, expiry withdrawal and full cleanup passed. Four completed collection windows were 24.878015, 23.923450, 24.856132 and 23.621945 milliseconds; three had matching selected facts and the expired observation was blocked as EMPTY_RESOLVER_SET. The separate resolver job `111364577855` also reproduced all eighteen previous acceptance records. Other workflows/jobs were still running when this targeted evidence was recorded; all five final-head workflows and nineteen regression jobs remain the merge gate. No failure/retry occurred in this code-head acceptance.
+
+Exact final-head workflow/job results and merge receipt belong in PR #189.
 
 ## Remaining boundary
 
