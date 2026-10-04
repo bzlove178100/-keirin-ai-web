@@ -7,6 +7,7 @@ from contextlib import ExitStack, contextmanager
 import copy
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import select
@@ -18,6 +19,7 @@ import tempfile
 import threading
 import time
 import unittest
+import uuid
 from unittest.mock import patch
 
 
@@ -119,9 +121,11 @@ def shape(version):
     return [table_shape(family, name) for family, name in tables(version)]
 
 
-def transition(version, expected, mode):
+def transition(version, expected, mode, verify=None):
     if shape(version) != expected:
         raise RuntimeError("OWNED_TABLES_CHANGED_STOP")
+    if verify is not None:
+        verify()
     # One nft transaction covers both inet and netdev; never sequential calls.
     t.nft(replacement(version, mode))
 
@@ -131,9 +135,54 @@ def process_start(pid):
     return Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()[19]
 
 
+def recovery_context(version):
+    tables(version)
+    boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    if str(uuid.UUID(boot)) != boot:
+        raise ValueError("BOOT_ID_REQUIRED")
+    interfaces = {}
+    for name in (("host0", "rescue0") if version == "rescue" else ("host0",)):
+        output = t.run(t.IP, "-j", "-d", "link", "show", "dev", name).stdout
+        if len(output) > 16384:
+            raise ValueError("INTERFACE_REPORT_BOUND")
+        rows = json.loads(output)
+        if len(rows) != 1:
+            raise ValueError("ONE_FIXED_INTERFACE_REQUIRED")
+        link = rows[0]
+        if (link["ifname"] != name or type(link["ifindex"]) is not int or link["ifindex"] <= 0
+                or link["link_type"] != "ether" or link["linkinfo"]["info_kind"] != "veth"
+                or not isinstance(link["address"], str) or len(link["address"]) != 17):
+            raise ValueError("FIXED_VETH_IDENTITY_REQUIRED")
+        interfaces[name] = {"ifindex": link["ifindex"], "address": link["address"],
+                            "kind": link["linkinfo"]["info_kind"]}
+    # Address/route/lease, MTU and administrative up/down are intentionally not
+    # identity: existing dynamic and broken-rescue-path tests exercise them.
+    return {"boot": boot, "netns": os.readlink("/proc/self/ns/net"), "interfaces": interfaces}
+
+
+def binding(data):
+    attempt = data["attempt"]
+    if not isinstance(attempt, str) or len(attempt) != 32 or uuid.UUID(hex=attempt).hex != attempt:
+        raise ValueError("RECOVERY_ATTEMPT_REQUIRED")
+    return {"attempt": attempt, "version": data["version"], "context": data["context"]}
+
+
+def require_context(data):
+    try:
+        if recovery_context(data["version"]) == data["context"]:
+            return
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError):
+        pass
+    raise RuntimeError("RECOVERY_CONTEXT_CHANGED_STOP")
+
+
 def readiness(path, data):
-    ready = json.loads((path / "ready").read_text())
-    if ready["deadline"] - time.monotonic() < 2:
+    report = (path / "ready").read_text()
+    if len(report) > 16384:
+        raise RuntimeError("READINESS_REPORT_BOUND")
+    ready = json.loads(report)
+    if (type(ready["deadline"]) not in (int, float) or not math.isfinite(ready["deadline"])
+            or ready["deadline"] - time.monotonic() < 2):
         raise RuntimeError("WATCHDOG_NOT_ARMED")
     try:
         fd = os.pidfd_open(ready["pid"])
@@ -148,6 +197,9 @@ def readiness(path, data):
         raise RuntimeError("WATCHDOG_DEAD_BEFORE_APPLY") from exc
     finally:
         os.close(fd)
+    if ready.get("binding") != binding(data):
+        raise RuntimeError("READINESS_BINDING_MISMATCH")
+    require_context(data)
 
 
 def worker(value, version):
@@ -160,21 +212,29 @@ def worker(value, version):
         raise RuntimeError("INDEPENDENT_SUPERVISOR_AND_NAMESPACE_REQUIRED")
     maintenance, candidate = data["maintenance"], data["candidate"]
     with w.locked(path):
+        require_context(data)
         if shape(version) != maintenance:
             raise RuntimeError("MAINTENANCE_ANCHOR_REQUIRED")
         deadline = time.monotonic() + WINDOWS[data["window"]]
-        ready = {"pid": os.getpid(), "start": process_start(os.getpid()), "deadline": deadline}
+        ready = {"pid": os.getpid(), "start": process_start(os.getpid()), "deadline": deadline,
+                 "binding": binding(data)}
         temporary = path / "ready.tmp"
         temporary.write_text(json.dumps(ready))
         temporary.replace(path / "ready")
     while time.monotonic() < deadline:
         time.sleep(max(0, min(0.05, deadline - time.monotonic())))
     with w.locked(path):
-        result = w.decide(shape(version), maintenance, candidate)
-        if result == "RESTORE_MAINTENANCE":
-            transition(version, candidate, "maintenance")
-            if shape(version) != maintenance:
-                raise RuntimeError("FALLBACK_READBACK_MISMATCH")
+        try:
+            require_context(data)
+            result = w.decide(shape(version), maintenance, candidate)
+            if result == "RESTORE_MAINTENANCE":
+                transition(version, candidate, "maintenance", verify=lambda: require_context(data))
+                if shape(version) != maintenance:
+                    raise RuntimeError("FALLBACK_READBACK_MISMATCH")
+        except RuntimeError as error:
+            if str(error) != "RECOVERY_CONTEXT_CHANGED_STOP":
+                raise
+            result = "STOP_RECOVERY_CONTEXT_CHANGED"
         temporary = path / "result.tmp"
         temporary.write_text(result)
         temporary.replace(path / "result")
@@ -192,7 +252,7 @@ def controller(value, version, mode):
     with w.locked(path):
         readiness(path, data)
         if mode == "after":
-            transition(version, data["maintenance"], "qualification")
+            transition(version, data["maintenance"], "qualification", verify=lambda: readiness(path, data))
             if shape(version) != data["candidate"]:
                 raise RuntimeError("CANDIDATE_READBACK_MISMATCH")
     (path / "applied").write_text(mode)
@@ -211,6 +271,7 @@ def armed(version, maintenance, candidate, window="short"):
         (path / "lock").touch(mode=0o600)
         (path / "expected.json").write_text(json.dumps({
             "version": version, "window": window, "netns": os.readlink("/proc/self/ns/net"),
+            "attempt": uuid.uuid4().hex, "context": recovery_context(version),
             "maintenance": maintenance, "candidate": candidate}))
         (path / "expected.json").chmod(0o600)
         t.run("/usr/bin/systemd-run", "--quiet", "--unit=" + unit,
