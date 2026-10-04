@@ -17,7 +17,7 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("recovery", Path(__file__).with_name("test_secret_custody_dynamic_recovery.py"))
 r = importlib.util.module_from_spec(SPEC)
@@ -211,13 +211,17 @@ class Client:
         assert len(result.stdout) < 4096
         return sources(result.stdout.decode(), self.prefix)
 
-    def ntpstats(self, suffix):
+    def ntpdata(self, suffix):
         self.check()
         result = t.run(str(self.ctl), "-n", "-h", str(self.directory / "command.sock"), "ntpdata", self.prefix + suffix)
         assert len(result.stdout) < 4096
         fields = dict(line.split(":", 1) for line in result.stdout.decode().splitlines() if ":" in line)
         fields = {key.strip(): value.strip() for key, value in fields.items()}
         assert fields["Remote address"].split()[0] == self.prefix + suffix
+        return fields
+
+    def ntpstats(self, suffix):
+        fields = self.ntpdata(suffix)
         return {key: int(fields[key]) for key in ("Total RX", "Total valid RX", "Total good RX")}
 
     def selected(self, suffix):
@@ -230,7 +234,7 @@ def fresh_sources(before, after, state, primary):
             and after[ip]["Total good RX"] >= before[ip]["Total good RX"] + 4 for ip in before))
 
 
-def selection_wait(clock, proc, phase, predicate, timeout, check):
+def selection_wait(clock, proc, phase, predicate, timeout, check, baseline=None):
     """One source-state read per predicate; retain bounded failure evidence."""
     latest = {}
     def ready():
@@ -240,9 +244,15 @@ def selection_wait(clock, proc, phase, predicate, timeout, check):
     try:
         r.d.wait_for(ready, timeout, check)
     except BaseException:
-        print("TIME_SELECTION_DIAGNOSTIC", json.dumps({"phase": phase, "sources": latest,
-            "client": {clock.prefix + s: clock.ntpstats(s) for s in ("2", "3")},
-            "server": {clock.prefix + s: t.rpc(proc, "counts", clock.prefix + s) for s in ("2", "3")}}), flush=True)
+        def sample(read):
+            try:
+                return read()
+            except Exception as error:
+                return {"diagnostic_error": type(error).__name__}
+        print("TIME_SELECTION_DIAGNOSTIC", json.dumps({"phase": phase, "sources": latest, "baseline": baseline,
+            "client": {clock.prefix + s: sample(lambda: clock.ntpstats(s)) for s in ("2", "3")},
+            "last_ntpdata": {clock.prefix + s: sample(lambda: clock.ntpdata(s)) for s in ("2", "3")},
+            "server": {clock.prefix + s: sample(lambda: t.rpc(proc, "counts", clock.prefix + s)) for s in ("2", "3")}}), flush=True)
         raise
 
 
@@ -337,7 +347,9 @@ def kernel():
                     old = stack.enter_context(t.connect(prefix + "2", 443))
                     assert t.exchange(old)
                     before = clock.ntpstats("2")["Total good RX"]
-                    r.d.wait_for(lambda: clock.ntpstats("2")["Total good RX"] > before and clock.selected("2"), 3, check)
+                    selection_wait(clock, proc, "post-controller-sample", lambda state:
+                        clock.ntpstats("2")["Total good RX"] > before and state[prefix + "2"]["state"] == "*"
+                        and state[prefix + "2"]["reach"] > 0, 3, check, baseline={prefix + "2": {"Total good RX": before}})
                     assert not (path / "result").exists()
                     print(f"PASS IPv{version}_CHRONY_FRESH_SAMPLES_AFTER_CONTROLLER_SIGKILL", flush=True)
                     r.d.wait_for(lambda: (path / "result").exists(), 10, check)
@@ -345,7 +357,9 @@ def kernel():
                 assert r.shape(KEY) == maintenance and not t.exchange(old)
                 assert not t.reaches(prefix + "2", 443) and t.reaches(prefix + "2", 22)
                 before = clock.ntpstats("2")["Total good RX"]
-                r.d.wait_for(lambda: clock.ntpstats("2")["Total good RX"] >= before + 2 and clock.selected("2"), 5, check)
+                selection_wait(clock, proc, "post-restore-samples", lambda state:
+                    clock.ntpstats("2")["Total good RX"] >= before + 2 and state[prefix + "2"]["state"] == "*"
+                    and state[prefix + "2"]["reach"] > 0, 5, check, baseline={prefix + "2": {"Total good RX": before}})
                 print(f"PASS IPv{version}_CHRONY_SAME_CLIENT_POST_RESTORE_SAMPLES_AND_DENIAL", flush=True)
                 for mode in ("silent", "origin"):
                     # Selection can reuse retained samples. Require fresh good
@@ -354,7 +368,7 @@ def kernel():
                     def primed(state):
                         current = {prefix + s: clock.ntpstats(s) for s in ("2", "3")}
                         return fresh_sources(baseline, current, state, prefix + "2")
-                    selection_wait(clock, proc, mode + "-prime", primed, 12, check)
+                    selection_wait(clock, proc, mode + "-prime", primed, 12, check, baseline=baseline)
                     print("TIME_FRESH_PHASE", version, mode, json.dumps({"before": baseline,
                           "after": {prefix + s: clock.ntpstats(s) for s in ("2", "3")}, "sources": clock.state()}), flush=True)
                     before = t.rpc(proc, "mode", prefix + "2", mode)
@@ -466,6 +480,21 @@ class Tests(unittest.TestCase):
             self.assertEqual(fresh_sources(before, after, state, "primary"), expected)
         state["alternate"]["reach"] = 0
         self.assertFalse(fresh_sources(before, after, state, "primary"))
+
+    def test_preparation_failure_retains_baseline_and_last_ntpdata(self):
+        clock = Mock(prefix="192.0.2.")
+        clock.ntpstats.return_value = {"Total good RX": 13}
+        clock.ntpdata.return_value = {"NTP tests": "111 111 1111", "Total good RX": "13"}
+        baseline = {"192.0.2.2": {"Total good RX": 10}}
+        for error in (None, RuntimeError("diagnostic-read-failed")):
+            clock.ntpdata.side_effect = error
+            with patch.object(r.d, "wait_for", side_effect=RuntimeError("original-deadline")), patch.object(t, "rpc", return_value={}), patch("builtins.print") as output:
+                with self.assertRaisesRegex(RuntimeError, "original-deadline"):
+                    selection_wait(clock, None, "origin-prime", lambda _: False, 12, lambda: None, baseline)
+                diagnostic = json.loads(output.call_args.args[1])
+            self.assertEqual(diagnostic["baseline"], baseline)
+            self.assertEqual(diagnostic["last_ntpdata"]["192.0.2.2"],
+                {"diagnostic_error": "RuntimeError"} if error else clock.ntpdata.return_value)
 
 
 if __name__ == "__main__":

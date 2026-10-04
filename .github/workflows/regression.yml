@@ -457,3 +457,17 @@ jobs:
         run: sudo -n env KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_DNS_CI=1 KC_RESOLVED_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dhcp_dns_recovery.py --systemd
       - name: Reject stale observations across collector and private daemon replacement
         run: sudo -n env KC_DHCP_DNS_CI=1 KC_RESOLVED_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_observer_restart.py --systemd
+
+  custody-restricted-rescue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test restricted rescue failure decisions and profile scope
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_restricted_rescue.py
+      - name: Install query client in disposable CI
+        run: |
+          sudo -n apt-get update -qq
+          sudo -n apt-get install -y --no-install-recommends bind9-dnsutils
+      - name: Verify independent restricted rescue and blocked broken-path outcome
+        run: sudo -n env KC_RESTRICTED_RESCUE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_DNS_CI=1 KC_RESOLVED_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_restricted_rescue.py --systemd

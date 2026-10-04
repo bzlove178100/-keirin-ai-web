@@ -42,7 +42,7 @@ def guard():
 
 
 def tables(version):
-    if version in (4, "dhcp-dns"):
+    if version in (4, "dhcp-dns", "rescue"):
         return (("inet", d.TABLE), ("netdev", d.LINK_TABLE))
     if version in (6, "dhcp6"):
         return (("inet", v.TABLE), ("netdev", v.LINK))
@@ -59,6 +59,8 @@ def profile(version, mode):
     owned = tables(version)
     if mode not in ("maintenance", "qualification"):
         raise ValueError("FIXED_PROFILE_REQUIRED")
+    if version == "rescue":
+        return module("rescue_profile", "test_secret_custody_restricted_rescue.py").policy(mode)
     if version == "dns":
         return module("dns_profile", "test_secret_custody_dns.py").policy(mode)
     if version == "time":
@@ -594,9 +596,9 @@ if __name__ == "__main__":
         print("RESULT SYNTHETIC_DYNAMIC_RECOVERY_OK_NO_LIVE_APPLY", flush=True)
     elif len(args) == 2 and args[0] == "--peer" and args[1] in ("4", "6"):
         peer(int(args[1]))
-    elif len(args) == 3 and args[0] == "--worker" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "dhcp-dns"):
+    elif len(args) == 3 and args[0] == "--worker" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "dhcp-dns", "rescue"):
         worker(args[1], int(args[2]) if args[2] in ("4", "6") else args[2])
-    elif len(args) == 4 and args[0] == "--controller" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "dhcp-dns") and args[3] in ("before", "after"):
+    elif len(args) == 4 and args[0] == "--controller" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "dhcp-dns", "rescue") and args[3] in ("before", "after"):
         controller(args[1], int(args[2]) if args[2] in ("4", "6") else args[2], args[3])
     else:
         unittest.main(verbosity=2)

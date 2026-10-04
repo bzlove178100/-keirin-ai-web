@@ -128,6 +128,8 @@ def peer():
                 result = t.exchange(old)
             elif op == "check":
                 result = t.exchange(old) and t.reaches(d.CLIENT, 22, d.PRIMARY)
+            elif op == "admin_state":
+                result = {"old": t.exchange(old), "new": t.reaches(d.CLIENT, 22, d.PRIMARY)}
             elif op == "expired":
                 result = not t.reaches(d.CLIENT, 22, d.PRIMARY)
             elif op == "flush_neighbors":
