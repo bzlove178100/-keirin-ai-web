@@ -1,6 +1,20 @@
 # Work status
 
-## Current boundary: restricted rescue independent of wrong primary allowances
+## Current boundary: recovery context binding and worker loss at final readiness
+
+Updated: 2026-10-04 (Asia/Tokyo).
+
+PR #192 merged/closed at `25b1bb6b65df1a36fa3a56f927592f9674afbe36`. Final head `d2328adce5dd05f1bfd9d549c533467d6201a102` passed all five workflows and twenty regression jobs (`37190265015`); post-merge main also passed all five workflows and twenty jobs (`37190575050`), plus Pages. Main rescue job `111401692696` and time job `111401692694` each passed fifteen records without a rerun. This continuation rechecked remote main, merged PR, successful main jobs and the clean matching local main. Accepted phone evidence is not repeated.
+
+The shared dynamic CI recovery worker now binds the expected attempt/profile to actual boot/netns and fixed interface name/ifindex/MAC/veth kind (host0, plus rescue0 for rescue). The controller verifies that binding and actual context at preflight and again after table comparison immediately before apply. The PID 1 worker verifies context before readiness and before deadline restoration. Changed, missing or unreadable context stops without overwriting current tables. Dynamic address/route/lease, MTU and link up/down remain outside identity so the existing dynamic and broken-path cases retain their original meaning. All original 5/22-second worker windows, 35-second unit bound and protocol assertions remain.
+
+The new twenty-first job requires fifteen records across five fresh process/netns cases: stable restoration/revocation; same-name/same-MAC interface replacement rejected by a changed real ifindex; post-apply MAC drift stopped without replacement; worker SIGKILL after first readiness caught by the final check; and worker SIGKILL just after the final check followed by candidate installation/controller death. The last case must observe no restoration beyond the original deadline and real old/new qualification still active, reporting BLOCKED/WORKER_LOST_RECOVERY_UNVERIFIED. Identity-drift fail-stop similarly can leave qualification active. These are explicit unresolved operational boundaries, not successful recovery. Every authorization/review gate remains false, and the parent's later teardown is not recovery evidence.
+
+Eight new, six shared recovery, six rescue and seven chrony tests pass locally (27 total); actual kernel acceptance is pending. All five final-head workflows and twenty-one regression jobs are required before integration. See [recovery context review](SECRET_CUSTODY_RECOVERY_CONTEXT_REVIEW.md). Exact code/final-head evidence and merge receipt belong in the PR.
+
+Boot changes and stale attempts are synthetic negative tests; actual machine reboot, same-index/MAC reuse and arbitrary root writers are not qualified. Repeated point-in-time checks do not close the last-check/commit gap. Next: design separately enforced qualification expiry or recovery that remains effective after worker/controller loss, and test that combined failure before first live installation. Historical chrony sample-rejection causes remain unproven; use retained diagnostics if they recur. No phone/AWS/SSH/live-host/credential operation; H2a and every runtime/provider/credential/prediction/DB-write/data-fetch/scheduler/report gate remain OFF.
+
+## Previous completed slice: restricted rescue independent of wrong primary allowances
 
 Updated: 2026-10-04 (Asia/Tokyo).
 

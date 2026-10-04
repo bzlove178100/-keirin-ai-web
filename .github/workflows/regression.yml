@@ -471,3 +471,13 @@ jobs:
           sudo -n apt-get install -y --no-install-recommends bind9-dnsutils
       - name: Verify independent restricted rescue and blocked broken-path outcome
         run: sudo -n env KC_RESTRICTED_RESCUE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_DNS_CI=1 KC_RESOLVED_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_restricted_rescue.py --systemd
+
+  custody-recovery-context:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test recovery context binding and blocked failure outcomes
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_recovery_context.py
+      - name: Verify actual interface replacement and worker loss around final readiness
+        run: sudo -n env KC_RECOVERY_CONTEXT_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_recovery_context.py --systemd
