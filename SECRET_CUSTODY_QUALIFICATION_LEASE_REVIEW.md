@@ -75,3 +75,9 @@ remain necessary controls, not indications that all legacy profiles gained expir
 Next qualify the guarded installation and ownership path with required dynamic
 dependencies before proposing any live apply. All runtime/provider/credential/
 prediction/DB/data-fetch/scheduler/report gates remain OFF.
+
+## Initial failure and corrected fixture setup
+
+Head da5c78bb98d1f8f6c5a40a8757d4d33405cdda69, lease job 111457986532: first three cases passed fifteen records; MAC drift then failed administration before expiry. Linux v6.17 NETDEV_CHANGEADDR flushes the host ARP/ND neighbors, including permanent entries. The prior fixture updated only peer mappings. Corrected setup verifies local mappings disappeared, restores the original fixed static peer mappings, and updates the peer for the changed host MAC before measuring lease behavior. This explicit test setup is not claimed as automatic network repair. The real MAC remains changed, so the worker must still fail-stop.
+
+Primary sources: https://github.com/torvalds/linux/blob/v6.17/net/ipv4/arp.c , https://github.com/torvalds/linux/blob/v6.17/net/ipv6/ndisc.c , https://github.com/torvalds/linux/blob/v6.17/net/core/neighbour.c .

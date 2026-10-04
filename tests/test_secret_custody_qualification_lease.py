@@ -153,6 +153,15 @@ def case(name):
                 assert all(not t.reaches(p + "9", 443) for p in PREFIXES)
                 if name == "identity-drift":
                     t.run(t.IP, "link", "set", "host0", "address", c.CHANGED_MAC)
+                    # NETDEV_CHANGEADDR flushes even permanent ARP/ND entries.
+                    # Re-establish the static fixture transport deliberately;
+                    # the changed MAC still causes the worker's context stop.
+                    neighbours = json.loads(t.run(t.IP, "-j", "neigh", "show", "dev", "host0").stdout)
+                    assert not any(n["dst"] in (p + "2" for p in PREFIXES) for n in neighbours)
+                    print("LEASE_MAC_CHANGE_FLUSHED_STATIC_NEIGHBOURS", json.dumps(neighbours), flush=True)
+                    for flag, prefix in (("-4", PREFIXES[0]), ("-6", PREFIXES[1])):
+                        t.run(t.IP, flag, "neigh", "replace", prefix + "2", "lladdr", t.MAC_PEER,
+                              "nud", "permanent", "dev", "host0")
                     assert t.rpc(proc, "changed_mac")
                 print("PASS LEASE_CONTROLLER_DEAD_FAULT_APPLIED", name, flush=True)
                 # Keep attempting traffic while time passes: established traffic

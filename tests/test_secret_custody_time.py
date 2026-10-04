@@ -261,6 +261,20 @@ class Client:
         fields = self.ntpdata(suffix)
         return {key: int(fields[key]) for key in ("Total RX", "Total valid RX", "Total good RX")}
 
+    def prepare_samples(self):
+        self.check()
+        # One bounded acquisition per healthy preparation, never a CI retry or
+        # filter change. chronyd still requires its own full good-packet tests.
+        for suffix in ("2", "3"):
+            result = t.run(str(self.ctl), "-n", "-h", str(self.directory / "command.sock"),
+                           "burst", "4/16", self.prefix + suffix)
+            assert result.stdout.strip() == b"200 OK", "BURST_REQUEST_REJECTED"
+
+    def sampling_idle(self):
+        self.check()
+        result = t.run(str(self.ctl), "-n", "-h", str(self.directory / "command.sock"), "activity")
+        return burst_idle(result.stdout.decode())
+
     def measurements(self):
         path = self.directory / "measurements.log"
         if not path.exists():
@@ -277,6 +291,15 @@ class Client:
 def fresh_sources(before, after, state, primary):
     return (state[primary]["state"] == "*" and all(state[ip]["reach"] > 0
             and after[ip]["Total good RX"] >= before[ip]["Total good RX"] + 4 for ip in before))
+
+
+def burst_idle(text):
+    if len(text) > 4096:
+        raise ValueError("ACTIVITY_REPORT_BOUND")
+    counts = re.findall(r"^(\d+) sources doing burst \(return to (online|offline)\)$", text, re.M)
+    if len(counts) != 2 or {kind for _, kind in counts} != {"online", "offline"}:
+        raise ValueError("ACTIVITY_BURST_STATES_REQUIRED")
+    return all(int(value) == 0 for value, _ in counts)
 
 
 def measurement_summary(text, prefix):
@@ -433,13 +456,15 @@ def kernel():
                     # Selection can reuse retained samples. Require fresh good
                     # measurements from BOTH sources before each fault phase.
                     baseline = {prefix + s: clock.ntpstats(s) for s in ("2", "3")}
+                    clock.prepare_samples()
                     def primed(state):
                         current = {prefix + s: clock.ntpstats(s) for s in ("2", "3")}
-                        return fresh_sources(baseline, current, state, prefix + "2")
+                        return fresh_sources(baseline, current, state, prefix + "2") and clock.sampling_idle()
                     selection_wait(clock, proc, mode + "-prime", primed, 12, check, baseline=baseline)
                     print("TIME_FRESH_PHASE", version, mode, json.dumps({"before": baseline,
                           "after": {prefix + s: clock.ntpstats(s) for s in ("2", "3")}, "sources": clock.state(),
-                          "raw_measurements": clock.measurements()}), flush=True)
+                          "raw_measurements": clock.measurements(), "acquisition": "one-burst-4/16-per-source",
+                          "burst_finished": clock.sampling_idle()}), flush=True)
                     before = t.rpc(proc, "mode", prefix + "2", mode)
                     selection_wait(clock, proc, mode + "-failover", lambda state:
                         state[prefix + "3"]["state"] == "*" and state[prefix + "3"]["reach"] > 0
@@ -488,6 +513,25 @@ def kernel():
 
 
 class Tests(unittest.TestCase):
+    def test_bounded_burst_targets_only_fixed_sources_and_rejects_failure(self):
+        for prefix in ("192.0.2.", "2001:db8:1::"):
+            clock = Client(Mock(), Path("/private"), Path("/chronyc"), prefix)
+            with patch.object(clock, "check"), patch.object(t, "run", return_value=Mock(stdout=b"200 OK\n")) as run:
+                clock.prepare_samples()
+                self.assertEqual([call.args[-3:] for call in run.call_args_list],
+                                 [("burst", "4/16", prefix + "2"), ("burst", "4/16", prefix + "3")])
+            with patch.object(clock, "check"), patch.object(t, "run", return_value=Mock(stdout=b"501 Not authorised\n")):
+                with self.assertRaisesRegex(AssertionError, "BURST_REQUEST_REJECTED"):
+                    clock.prepare_samples()
+
+    def test_fault_phase_requires_burst_finished_not_just_good_count(self):
+        idle = "200 OK\n2 sources online\n0 sources doing burst (return to online)\n0 sources doing burst (return to offline)\n"
+        self.assertTrue(burst_idle(idle))
+        self.assertFalse(burst_idle(idle.replace("0 sources doing burst (return to online)", "1 sources doing burst (return to online)")))
+        for text in ("", idle + "0 sources doing burst (return to online)\n", "x" * 4097):
+            with self.assertRaises(ValueError):
+                burst_idle(text)
+
     def test_kernel_receive_time_excludes_delayed_userspace_processing(self):
         request = bytes([0x23]) + bytes(39) + stamp(1700000000.0)
         sock = Mock()
