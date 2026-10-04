@@ -9,6 +9,7 @@ import pwd
 import shutil
 import signal
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -158,6 +159,11 @@ def fingerprint(path):
     return (str(p.resolve()), st.st_dev, st.st_ino, hashlib.sha256(p.read_bytes()).hexdigest())
 
 
+def ensure_directory(path):
+    path.mkdir(exist_ok=True)
+    assert stat.S_ISDIR(path.lstat().st_mode), "REAL_RUNTIME_DIRECTORY_REQUIRED"
+
+
 def child():
     private_guard()
     Path("/run/kc-sys").mkdir()
@@ -165,7 +171,7 @@ def child():
     t.run("mount", "--bind", "/run/kc-sys", "/sys")
     t.run("mount", "-o", "remount,bind,ro", "/sys")
     Path("/run/dbus").mkdir()
-    Path("/run/systemd").mkdir()
+    ensure_directory(Path("/run/systemd"))
     processes = []
     def stop(*_):
         raise SystemExit(0)
@@ -432,6 +438,20 @@ def kernel():
 
 
 class Tests(unittest.TestCase):
+    def test_existing_real_runtime_directory_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "runtime"
+            ensure_directory(path)
+            ensure_directory(path)
+            link = Path(directory) / "link"
+            link.symlink_to(path)
+            with self.assertRaisesRegex(AssertionError, "REAL_RUNTIME_DIRECTORY_REQUIRED"):
+                ensure_directory(link)
+            regular = Path(directory) / "file"
+            regular.write_text("fixture")
+            with self.assertRaises(FileExistsError):
+                ensure_directory(regular)
+
     def test_host_namespace_refused_before_commands(self):
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}), patch.object(os, "geteuid", return_value=0), patch.object(os, "readlink", return_value="same"), patch.object(t, "run") as run:
             with self.assertRaises(RuntimeError):

@@ -40,9 +40,13 @@ For each upstream family, use a fresh resolver process and fixed numeric peers:
 
 Both sources must answer direct pre-restriction control queries. Eighteen PASS
 records are required: baseline, eight per family and final network cleanup.
-Five local packet/result/isolation tests pass. Actual CI acceptance is pending;
+Six local packet/result/isolation/runtime tests pass. Actual CI acceptance is pending;
 all five workflows and eighteen regression jobs on the final head are mandatory.
 Exact tested head, run/job IDs and merge receipt belong in the PR.
+
+## Initial failure and correction
+
+Initial head `51bcca67c3d792ff0666580ff1d3ab91a4178654`, regression `37174153597`, resolver job `111353154685`, passed direct upstream baseline then stopped before daemon startup: `/run/systemd` already existed in the private runtime and exclusive mkdir raised FileExistsError. The private mount/runtime/config guards had passed. The fixture now accepts an existing real directory after lstat, but rejects symlinks/files; a real temporary-filesystem regression covers these cases. Six resolver plus eleven reused tests pass (17 total). No isolation guard, deadline or network assertion was relaxed. Corrected real-resolver CI is pending.
 
 ## Scope and remaining work
 
