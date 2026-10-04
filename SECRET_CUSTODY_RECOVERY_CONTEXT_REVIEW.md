@@ -58,9 +58,15 @@ chrony tests pass locally (27 total). Tests reject stale/legacy attempt bindings
 changed boot/netns/index/MAC/kind, missing/unreadable context, nonfinite deadlines,
 and final-check failure before mutation. Actual reboot and PID reuse are not
 performed. A twenty-first mandatory regression job requires all fifteen records.
-Real CI acceptance is pending; all five final-head workflows and twenty-one
+Code-head real CI acceptance passed below; all five final-head workflows and twenty-one
 regression jobs are required before merge. Exact results and merge receipt belong
 in the PR and subsequent handoff.
+
+## Observed code-head evidence
+
+Code head `cf623fd4fc106eaa0640ba2a3180734aa07dea75` (tree `10341d9f5eea121e4e08e1d61136ccaf6ef2f73e`), regression `37191566578`, context job `111404653037`, passed all fifteen records on its first execution, with `SYNTHETIC_RECOVERY_CONTEXT_OK_LAST_CHECK_GAP_UNQUALIFIED` at 2026-10-04 18:15:59 JST. The real same-name/same-MAC replacement changed ifindex 3 to 5 and was refused without table overwrite. Stable context restored/revoked old/new qualification and preserved administration. Post-apply MAC drift stopped restoration while actual qualification remained active. Worker loss after the first check was rejected before apply; loss after the final check allowed candidate installation/controller SIGKILL, then showed no recovery result after the original deadline plus one second and still-working old/new qualification. Both unsafe outcomes were explicitly BLOCKED with all authorization flags false. Each case cleaned up the worker/controller/peer, private files, links and owned tables, preserving the unrelated table until fixture teardown. Kernel `6.17.0-1022-azure`; no code-head retry or deadline relaxation.
+
+The changed shared helper also passed the existing restricted rescue job on this code head; other protocol jobs were still completing when this evidence was recorded. All five workflows and twenty-one regression jobs on the final documentation head remain the integration gate. Exact final results and merge receipt belong in PR #193. This evidence demonstrates the last-check gap; it does not repair it or qualify first live installation.
 
 ## Remaining boundary and next step
 
