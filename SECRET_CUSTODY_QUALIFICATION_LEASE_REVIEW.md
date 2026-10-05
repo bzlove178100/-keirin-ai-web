@@ -1,5 +1,41 @@
 # Kernel qualification lease — unactivated synthetic implementation
 
+## Worker restart and process pause (2026-10-05)
+
+A reused worker invocation could overwrite readiness and rebase its restoration
+deadline while the base policy remained maintenance. The pre-change worker was
+replayed locally with mocked identity/clock and no commands: the same preparation
+accepted PID 101/deadline 122 and then PID 202/deadline 222. This demonstrates the
+control-flow defect only; it is not historical evidence of a real systemd restart.
+
+The first worker now exclusively creates worker.claim in the existing private
+attempt directory before readiness. Its PID/start/binding must match controller
+readiness. An existing or partially written claim blocks any second worker before
+new readiness or a new deadline. Claim removal is only observing-fixture teardown;
+it is not automatic recovery, requalification or authority to renew the guard.
+
+A separate mandatory CI step adds three fresh private namespaces. Before/after
+apply, actual SIGKILL and explicit systemd restart must be rejected by the claim
+while the original guard is still live. Stale readiness cannot apply, byte-for-byte
+preparation/readiness/claim remain unchanged, and old/new IPv4/IPv6 qualification
+expires while management survives. Worker loss is not reported as restoration.
+For SIGSTOP/SIGCONT, the same worker stays stopped through kernel guard expiry and
+its original 22-second deadline; after continuation it restores maintenance within
+four seconds without resetting either readiness or the guard. All three cases
+require unchanged guard handles/unrelated rules and complete owned cleanup. The
+existing 35 lease records plus 15 new records remain mandatory; 26 regression jobs.
+
+This is process restart/pause only. [systemctl restart](https://github.com/systemd/systemd/blob/main/man/systemctl.xml)
+explicitly stops/starts a unit; an automatic Restart=no policy is not a single-use
+application receipt. [Linux clock documentation](https://cdn.kernel.org/doc/html/latest/core-api/timekeeping.html)
+distinguishes suspend-excluding MONOTONIC from suspend-including BOOTTIME. No host
+suspend/reboot was performed and no post-suspend packet-denial guarantee follows
+from SIGSTOP evidence. Boot-ID mismatch already has mocked refusal coverage; actual
+reboot/persistence remains unqualified. The /run claim is not durable across reboot
+and does not resist privileged deletion. Next examine suspend-aware admission and
+evidence invalidation in isolation, retaining the host-level expiry limitation.
+All activation gates remain OFF. Exact final-head and main receipts belong in PR.
+
 ## Restricted rescue composition (2026-10-05)
 
 The explicit `rescue-lease` profile reuses the fixed DHCPv4 guard tuple while

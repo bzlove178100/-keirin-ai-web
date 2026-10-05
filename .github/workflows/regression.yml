@@ -549,6 +549,8 @@ jobs:
         run: /usr/bin/python3 -I -B tests/test_secret_custody_qualification_lease.py
       - name: Verify expiry despite combined worker/controller loss and stale apply
         run: sudo -n env KC_QUALIFICATION_LEASE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_qualification_lease.py --systemd
+      - name: Refuse consumed recovery attempts and resume the same paused worker
+        run: sudo -n env KC_RECOVERY_RESTART_CI=1 KC_QUALIFICATION_LEASE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_qualification_lease.py --restart-systemd
 
   custody-dynamic-qualification-lease:
     runs-on: ubuntu-24.04

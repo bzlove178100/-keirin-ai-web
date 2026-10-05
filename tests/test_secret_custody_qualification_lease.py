@@ -8,6 +8,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from unittest.mock import patch
@@ -26,6 +27,7 @@ r, t, d = c.r, c.t, c.d
 lease = module("lease", HERE.parent / "review/secret_custody_qualification_lease.py")
 CASES = ("normal", "worker-loss", "delayed-apply", "identity-drift",
          "guarded-normal", "guarded-missing", "guarded-changed", "guarded-expired", "guarded-recreated")
+RESTART_CASES = ("restart-before", "restart-after", "paused-worker")
 PREFIXES = ("192.0.2.", "2001:db8:1::")
 UNRELATED = "kc_lease_unrelated"
 
@@ -34,6 +36,81 @@ def guard():
     r.guard()
     if os.environ.get("KC_QUALIFICATION_LEASE_CI") != "1":
         raise RuntimeError("QUALIFICATION_LEASE_CI_OPT_IN_REQUIRED")
+
+
+def restart_guard():
+    guard()
+    if os.environ.get("KC_RECOVERY_RESTART_CI") != "1":
+        raise RuntimeError("RECOVERY_RESTART_CI_OPT_IN_REQUIRED")
+
+
+def restart_case(name, maintenance, candidate, administration, stack):
+    restart_guard()
+    with r.armed("time-lease", maintenance, candidate, "lifecycle") as (path, unit):
+        seen = time.monotonic()
+        ready = json.loads((path / "ready").read_text())
+        data = json.loads((path / "expected.json").read_text())
+        original = {f: (path / f).read_bytes() for f in ("ready", "worker.claim", "expected.json")}
+        handles = guard_handles()
+        r.readiness(path, data)
+        print("PASS RESTART_BOUND_LIVE_GUARD_AND_SINGLE_WORKER_CLAIM", name, flush=True)
+        old = []
+        if name != "restart-before":
+            r.invoke_controller(path, "time-lease", "after")
+            old = [stack.enter_context(t.connect(p + "2", 443)) for p in PREFIXES]
+            assert all(t.exchange(s) for s in old) and all(t.reaches(p + "2", 443) for p in PREFIXES)
+        applied = (path / "applied").read_bytes() if (path / "applied").exists() else None
+        if name == "paused-worker":
+            t.run("/usr/bin/systemctl", "kill", "--signal=SIGSTOP", unit)
+            d.wait_for(lambda: "State:\tT" in Path(f'/proc/{ready["pid"]}/status').read_text(), 2)
+            assert r.process_start(ready["pid"]) == ready["start"]
+            print("PASS WORKER_PROCESS_STOPPED_NOT_HOST_SUSPEND", name, flush=True)
+        else:
+            t.run("/usr/bin/systemctl", "kill", "--signal=SIGKILL", unit)
+            d.wait_for(lambda: t.run("/usr/bin/systemctl", "show", unit, "--property=MainPID", "--value").stdout == b"0\n", 2)
+            assert not Path(f'/proc/{ready["pid"]}').exists()
+            # Type=exec may report a successful exec before the worker refuses.
+            t.run("/usr/bin/systemctl", "restart", unit, success=False)
+            def refused():
+                state = t.run("/usr/bin/systemctl", "show", unit, "--property=MainPID,ActiveState,ExecMainStatus").stdout
+                return all(v in state.splitlines() for v in (b"MainPID=0", b"ActiveState=failed", b"ExecMainStatus=1"))
+            d.wait_for(refused, 3)
+            log = t.run("/usr/bin/journalctl", "--no-pager", "-u", unit, "-n", "30").stdout
+            assert b"WORKER_ATTEMPT_ALREADY_USED" in log, log[-2000:]
+            # Prove replay was refused while the original guard was still live,
+            # not merely because it had already expired or rules had changed.
+            r.require_lease(data)
+            rejected = subprocess.run([sys.executable, "-I", "-B", r.__file__, "--controller", str(path), "time-lease", "after"],
+                                      capture_output=True, timeout=4)
+            assert rejected.returncode != 0 and b"WATCHDOG_DEAD" in rejected.stderr, rejected.stderr[-1500:]
+            assert ((path / "applied").read_bytes() if (path / "applied").exists() else None) == applied
+            print("PASS WORKER_RESTART_REFUSED_LIVE_LEASE_OLD_READINESS_CANNOT_APPLY", name, flush=True)
+        assert all((path / f).read_bytes() == value for f, value in original.items())
+        d.wait_for(lambda: time.monotonic() > seen + lease.SECONDS + .2, 12, administration)
+        assert r.shape("time") == (maintenance if name == "restart-before" else candidate)
+        assert not (path / "result").exists()
+        if name == "paused-worker":
+            assert "State:\tT" in Path(f'/proc/{ready["pid"]}/status').read_text()
+            assert r.process_start(ready["pid"]) == ready["start"]
+        assert all(not t.exchange(s) for s in old) and all(not t.reaches(p + "2", 443) for p in PREFIXES)
+        administration()
+        assert guard_handles() == handles
+        print("PASS RESTART_OLD_NEW_IPV4_IPV6_EXPIRED_ADMIN_PRESERVED", name, flush=True)
+        if name == "paused-worker":
+            d.wait_for(lambda: time.monotonic() > ready["deadline"] + .2, 16, administration)
+            assert "State:\tT" in Path(f'/proc/{ready["pid"]}/status').read_text()
+            assert not (path / "result").exists() and r.shape("time") == candidate
+            t.run("/usr/bin/systemctl", "kill", "--signal=SIGCONT", unit)
+            assert r.w.await_file(path / "result", 4) == "RESTORE_MAINTENANCE"
+            assert r.shape("time") == maintenance
+            print("PASS SAME_WORKER_RESUME_AFTER_ORIGINAL_DEADLINE_RESTORES_WITHOUT_REARM", name, flush=True)
+        else:
+            assert not Path(f'/proc/{ready["pid"]}').exists() and not (path / "result").exists()
+            print("PASS RESTART_REFUSAL_DOES_NOT_CLAIM_MAINTENANCE_RECOVERY", name, flush=True)
+        assert all((path / f).read_bytes() == value for f, value in original.items())
+        assert guard_handles() == handles and all(not t.reaches(p + "2", 443) for p in PREFIXES)
+        administration()
+    assert not path.exists() and not Path(f'/proc/{ready["pid"]}').exists()
 
 
 def peer():
@@ -122,8 +199,10 @@ def guarded_case(name, maintenance, candidate, administration):
 
 def case(name):
     guard()
+    if name in RESTART_CASES:
+        restart_guard()
     parent = os.environ.get("LEASE_CASE_PARENT_NETNS")
-    if name not in CASES or not parent or parent == os.readlink("/proc/self/ns/net"):
+    if name not in CASES + RESTART_CASES or not parent or parent == os.readlink("/proc/self/ns/net"):
         raise RuntimeError("DISTINCT_LEASE_CASE_NAMESPACE_REQUIRED")
     r.empty()
     try:
@@ -153,6 +232,10 @@ def case(name):
                 assert all(t.reaches(p + "2", 22) for p in PREFIXES)
             administration()
             assert all(not t.reaches(p + "2", 443) for p in PREFIXES)
+            if name in RESTART_CASES:
+                restart_case(name, maintenance, candidate, administration, stack)
+                assert r.table_shape("inet", UNRELATED) == unrelated
+                return
             if name.startswith("guarded-"):
                 guarded_case(name, maintenance, candidate, administration)
                 assert r.table_shape("inet", UNRELATED) == unrelated
@@ -235,22 +318,68 @@ def case(name):
         t.run(t.IP, "link", "del", "host0", success=False)
         for family, table in (*r.tables("time"), *lease.TABLES, ("inet", UNRELATED)):
             t.nft(f"delete table {family} {table}\n", success=False)
+        if name in RESTART_CASES:
+            r.empty()
+            print("PASS RESTART_PROCESSES_LINKS_RULES_CLAIM_AND_PRIVATE_FILES_CLEANED", name, flush=True)
     r.empty()
     print("PASS LEASE_CASE_PROCESSES_LINKS_TABLES_PRIVATE_FILES_CLEANED", name, flush=True)
 
 
-def kernel():
+def kernel(restarts=False):
     guard()
+    if type(restarts) is not bool:
+        raise ValueError("FIXED_RESTART_MODE_REQUIRED")
+    if restarts:
+        restart_guard()
     r.empty()
     print("KERNEL", os.uname().release, flush=True)
-    for name in CASES:
+    for name in RESTART_CASES if restarts else CASES:
         subprocess.run(["unshare", "--net", sys.executable, "-I", "-B", __file__, "--case", name],
             env=dict(os.environ, LEASE_CASE_PARENT_NETNS=os.readlink("/proc/self/ns/net")), timeout=40, check=True)
         r.empty()
-    print("RESULT SYNTHETIC_KERNEL_LEASE_REVOKED_NO_LIVE_APPLY", flush=True)
+    print("RESULT SYNTHETIC_" + ("RECOVERY_RESTART" if restarts else "KERNEL_LEASE_REVOKED") + "_NO_LIVE_APPLY", flush=True)
 
 
 class Tests(unittest.TestCase):
+    def test_restart_requires_explicit_opt_in_before_commands(self):
+        with patch(__name__ + ".guard"), patch.dict(os.environ, {"KC_RECOVERY_RESTART_CI": "0"}), patch.object(t, "run") as run:
+            with self.assertRaisesRegex(RuntimeError, "RECOVERY_RESTART_CI_OPT_IN_REQUIRED"):
+                kernel(True)
+            with self.assertRaisesRegex(ValueError, "FIXED_RESTART_MODE_REQUIRED"):
+                kernel("yes")
+            run.assert_not_called()
+
+    def test_second_worker_cannot_replace_readiness_or_rebase_deadline(self):
+        with tempfile.TemporaryDirectory() as value:
+            path = Path(value)
+            (path / "lock").touch()
+            data = {"version": "time-lease", "netns": "fixture", "window": "lifecycle", "attempt": "a" * 32,
+                    "context": {}, "maintenance": [], "candidate": ["candidate"]}
+            (path / "expected.json").write_text(json.dumps(data))
+            with patch.object(r, "guard"), patch.object(r.w, "directory", return_value=path), patch.object(os, "getppid", return_value=1), patch.object(os, "readlink", return_value="fixture"), patch.object(r, "require_context"), patch.object(r, "require_lease"), patch.object(r, "shape", return_value=[]), patch.object(r, "process_start", return_value="start"), patch.object(t, "nft") as mutate:
+                with patch.object(os, "getpid", return_value=101), patch.object(time, "monotonic", side_effect=[100, 100, 130, 130]):
+                    r.worker(value, "time-lease")
+                original = {f: (path / f).read_bytes() for f in ("ready", "worker.claim", "result")}
+                with patch.object(os, "getpid", return_value=202), patch.object(time, "monotonic", return_value=200):
+                    with self.assertRaisesRegex(RuntimeError, "WORKER_ATTEMPT_ALREADY_USED"):
+                        r.worker(value, "time-lease")
+                self.assertEqual(original, {f: (path / f).read_bytes() for f in original})
+                self.assertEqual(json.loads(original["ready"])["deadline"], 122)
+                mutate.assert_not_called()
+
+    def test_missing_partial_or_other_worker_claim_cannot_authorize_readiness(self):
+        ready = {"pid": 101, "start": "one", "binding": {"attempt": "a"}, "deadline": 20}
+        with tempfile.TemporaryDirectory() as value:
+            path = Path(value)
+            with self.assertRaisesRegex(RuntimeError, "WORKER_CLAIM_MISMATCH"):
+                r.require_worker_claim(path, ready)
+            for content in ("", "{", json.dumps({"pid": 202, "start": "two", "binding": ready["binding"]})):
+                (path / "worker.claim").write_text(content)
+                with self.assertRaisesRegex(RuntimeError, "WORKER_CLAIM_MISMATCH"):
+                    r.require_worker_claim(path, ready)
+                with self.assertRaisesRegex(RuntimeError, "WORKER_ATTEMPT_ALREADY_USED"):
+                    r.claim_worker(path, {"attempt": "a" * 32, "version": "time", "context": {}})
+
     def sample_reports(self):
         reports = []
         for family, table in lease.TABLES:
@@ -344,6 +473,8 @@ class Tests(unittest.TestCase):
 if __name__ == "__main__":
     if sys.argv[1:] == ["--systemd"]:
         kernel()
+    elif sys.argv[1:] == ["--restart-systemd"]:
+        kernel(True)
     elif sys.argv[1:] == ["--peer"]:
         peer()
     elif len(sys.argv) == 3 and sys.argv[1] == "--case":
