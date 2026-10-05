@@ -493,3 +493,13 @@ jobs:
         run: /usr/bin/python3 -I -B tests/test_secret_custody_qualification_lease.py
       - name: Verify expiry despite combined worker/controller loss and stale apply
         run: sudo -n env KC_QUALIFICATION_LEASE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_qualification_lease.py --systemd
+
+  custody-dynamic-qualification-lease:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test fixed dynamic guard profiles and admission boundary
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_dynamic_lease.py
+      - name: Verify kernel expiry and late recovery preserve DHCP and RA lifecycles
+        run: sudo -n env KC_DYNAMIC_LEASE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dynamic_lease.py --systemd

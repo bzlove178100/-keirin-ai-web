@@ -97,3 +97,10 @@ An explicit CI-only `time-lease` profile now requires fixed guard installation b
 This trusts successful fixed installation and assumes no concurrent privileged writer during installation/readback. It is not independent semantic attestation of arbitrary existing tables. Same-handle element recreation by root, post-read privileged edits, reboot/suspend and dynamic profiles remain unqualified; kernel expiry still covers final-check/commit process-loss races only while the guard is intact.
 
 Head `aa73bae115810b392a83fcde50057ff840175d3a`, regression `37248051381`, job `111569789198`: all 35 records passed (original 20, five guarded cases × three) at 2026-10-05 09:36:01 JST. The same head's existing time job `111569789371` failed IPv4 origin-prime with +3 primary accepted samples against required +4 and raw delay-deviation rejections. This blocks merge despite targeted guard acceptance; see WORK_RESUME.md and PR #196. A documentation rerun is not evidence of a timing repair.
+
+
+## Dynamic guarded profiles (2026-10-05, acceptance pending)
+
+The renderer accepts only fixed `time`, `dhcp4` and `ra6` profiles. DHCPv4 uses 192.0.2.10→192.0.2.2; RA uses 2001:db8:6::10→2001:db8:7::2. Each single-family profile keeps separate inet/netdev guard tables, eight-second timed TCP/443 membership and unconditional remaining TCP/443 drop, with no dynamic endpoint adoption or rearming. The guard does not decide DHCP/RA/ARP/ND permissions: the unchanged underlying restricted profile does. Explicit `dhcp4-lease` and `ra6-lease` admission paths require this profile's receipt and snapshot.
+
+The new job observes kernel expiry while a 22-second worker still waits and candidate tables remain, then requires that the same worker restore maintenance despite the expired lease. DHCP renew/rebind, periodic RA route refresh, dynamic ARP/ND, management preservation and legitimate RA route expiry are measured. This extends synthetic composition; it is not a live installer or proof of arbitrary addressing changes. Original unguarded negative controls and static lease jobs remain mandatory. Exact acceptance is recorded in the PR and work records.
