@@ -35,6 +35,7 @@ d, t, raw = v.d, v.t, v.raw
 w = module("watchdog", "test_secret_custody_network_watchdog.py")
 UNRELATED = "kc_dynamic_unrelated"
 WINDOWS = {"short": 5, "lifecycle": 22}
+GUARDED = {"time-lease": ("time", "time"), "dhcp4-lease": (4, "dhcp4"), "ra6-lease": (6, "ra6")}
 
 
 def guard():
@@ -44,13 +45,14 @@ def guard():
 
 
 def tables(version):
+    version = GUARDED.get(version, (version, None))[0]
     if version in (4, "dhcp-dns", "rescue"):
         return (("inet", d.TABLE), ("netdev", d.LINK_TABLE))
     if version in (6, "dhcp6"):
         return (("inet", v.TABLE), ("netdev", v.LINK))
     if version == "dns":
         return (("inet", "kc_dns"), ("netdev", "kc_dns_link"))
-    if version in ("time", "time-lease"):
+    if version == "time":
         return (("inet", "kc_time"), ("netdev", "kc_time_link"))
     if version in ("pmtu4", "pmtu6"):
         return (("inet", "kc_pmtu"), ("netdev", "kc_pmtu_link"))
@@ -58,6 +60,7 @@ def tables(version):
 
 
 def profile(version, mode):
+    version = GUARDED.get(version, (version, None))[0]
     owned = tables(version)
     if mode not in ("maintenance", "qualification"):
         raise ValueError("FIXED_PROFILE_REQUIRED")
@@ -65,7 +68,7 @@ def profile(version, mode):
         return module("rescue_profile", "test_secret_custody_restricted_rescue.py").policy(mode)
     if version == "dns":
         return module("dns_profile", "test_secret_custody_dns.py").policy(mode)
-    if version in ("time", "time-lease"):
+    if version == "time":
         return module("time_profile", "test_secret_custody_time.py").policy(mode)
     result = d.policy() + d.link_policy() if version == 4 else v.policies()
     if version == "dhcp6":
@@ -191,10 +194,10 @@ def lease_reports():
 
 
 def require_lease(data):
-    if data["version"] == "time-lease":
+    if data["version"] in GUARDED:
         try:
             reports = lease_reports()
-            lease_module().require(data.get("qualification_guard"), binding(data), reports, time.monotonic())
+            lease_module().require(data.get("qualification_guard"), binding(data), reports, time.monotonic(), GUARDED[data["version"]][1])
         except (RuntimeError, ValueError, KeyError, TypeError) as exc:
             raise RuntimeError("QUALIFICATION_GUARD_REQUIRED") from exc
 
@@ -297,14 +300,14 @@ def armed(version, maintenance, candidate, window="short"):
             "version": version, "window": window, "netns": os.readlink("/proc/self/ns/net"),
             "attempt": uuid.uuid4().hex, "context": recovery_context(version),
             "maintenance": maintenance, "candidate": candidate}
-        if version == "time-lease":
+        if version in GUARDED:
             lease = lease_module()
             # Fixed create transaction must succeed: never adopt an old guard.
             started = time.monotonic()
-            t.nft(lease.install(data["context"]["interfaces"]["host0"]["ifindex"]))
+            t.nft(lease.install(data["context"]["interfaces"]["host0"]["ifindex"], GUARDED[version][1]))
             data["qualification_guard"] = {
                 "binding": binding(data), "deadline": started + lease.SECONDS,
-                "snapshot": lease.snapshot(lease_reports())}
+                "snapshot": lease.snapshot(lease_reports(), GUARDED[version][1])}
             require_lease(data)
         (path / "expected.json").write_text(json.dumps(data))
         (path / "expected.json").chmod(0o600)
@@ -691,9 +694,9 @@ if __name__ == "__main__":
         print("RESULT SYNTHETIC_DYNAMIC_RECOVERY_OK_NO_LIVE_APPLY", flush=True)
     elif len(args) == 2 and args[0] == "--peer" and args[1] in ("4", "6"):
         peer(int(args[1]))
-    elif len(args) == 3 and args[0] == "--worker" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "time-lease", "dhcp-dns", "rescue"):
+    elif len(args) == 3 and args[0] == "--worker" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "time-lease", "dhcp4-lease", "ra6-lease", "dhcp-dns", "rescue"):
         worker(args[1], int(args[2]) if args[2] in ("4", "6") else args[2])
-    elif len(args) == 4 and args[0] == "--controller" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "time-lease", "dhcp-dns", "rescue") and args[3] in ("before", "after"):
+    elif len(args) == 4 and args[0] == "--controller" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "time-lease", "dhcp4-lease", "ra6-lease", "dhcp-dns", "rescue") and args[3] in ("before", "after"):
         controller(args[1], int(args[2]) if args[2] in ("4", "6") else args[2], args[3])
     else:
         unittest.main(verbosity=2)
