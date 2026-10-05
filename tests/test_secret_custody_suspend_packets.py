@@ -38,6 +38,7 @@ def archive(files):
                'dev/console': (b'', stat.S_IFCHR | 0o600, 5, 1),
                'dev/null': (b'', stat.S_IFCHR | 0o666, 1, 3),
                'dev/urandom': (b'', stat.S_IFCHR | 0o444, 1, 9),
+               'dev/stdin': (b'/proc/self/fd/0', stat.S_IFLNK | 0o777, 0, 0),
                'module-config': (b'', stat.S_IFDIR | 0o755, 0, 0)}
     for name, (content, mode) in files.items():
         path = Path(name)
@@ -252,7 +253,7 @@ def run_vm():
 
 class Tests(unittest.TestCase):
     def test_archive_supplies_guest_random_and_null_device_nodes(self):
-        data, offset, devices = gzip.decompress(archive({})), 0, {}
+        data, offset, devices, links = gzip.decompress(archive({})), 0, {}, {}
         while True:
             header = data[offset:offset + 110]
             self.assertEqual(header[:6], b'070701')
@@ -262,8 +263,10 @@ class Tests(unittest.TestCase):
             offset = (offset + fields[11] + 3) & ~3
             if name == 'TRAILER!!!': break
             if stat.S_ISCHR(fields[1]): devices[name] = (fields[9], fields[10])
+            if stat.S_ISLNK(fields[1]): links[name] = data[offset:offset + fields[6]]
             offset = (offset + fields[6] + 3) & ~3
         self.assertEqual(devices, {'dev/console': (5, 1), 'dev/null': (1, 3), 'dev/urandom': (1, 9)})
+        self.assertEqual(links, {'dev/stdin': b'/proc/self/fd/0'})
 
     def test_guest_startup_failure_preserves_bounded_preceding_diagnostics(self):
         lines = Mock()

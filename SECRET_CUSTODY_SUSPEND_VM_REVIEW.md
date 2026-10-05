@@ -12,6 +12,8 @@ Second packet job `111759564417` built the image and booted the guest, then PID 
 
 Third job `111761887414` resolved the startup cause: `_Py_HashRandomization_Init` could not obtain random numbers before Python initialization. The initramfs omitted /dev/urandom; add fixed guest character nodes for urandom (1:9) and null (1:3), without copying host entropy or disabling Python hash randomization. These are synthetic experiment runtime inputs, not cryptographic-entropy qualification. Review also found that the peer inherited the original sysfs mount; use socket.if_nameindex() to inspect the actual current network namespace, retaining the exact lo/peer0 and lo/host0 assertions. Kernel sysfs-tagging documentation explains the mount-specific namespace view: https://cdn.kernel.org/doc/html/latest/networking/sysfs-tagging.html . Packet/S3/clock gates remain unchanged; actual packets remain pending.
 
+Fourth job `111763147950` now booted Python, loaded modules, isolated the peer, and measured all four unfiltered startup connections successfully. It then stopped at the first nft input transaction because nft -f - opens /dev/stdin, which the minimal image lacked. Add only the fixed guest /dev/stdin -> /proc/self/fd/0 symlink and verify its cpio payload; it resolves in the guest-mounted proc and exposes no host file. No guard was installed in this failed attempt, so it does not measure expiry. The next changed CI must pass the actual rule installation and subsequent packet controls.
+
 The foundation below completed in PR #204; it remains a separate mandatory job.
 The new experiment runs two fresh guests using the same diskless/no-NIC QEMU
 command. Inside each guest only, a veth connects a distinct peer network namespace.
