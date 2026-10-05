@@ -18,7 +18,7 @@ import sysconfig
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('vm', HERE / 'test_secret_custody_suspend_vm.py')
@@ -125,9 +125,16 @@ def command(path):
 
 def record(lines, event, mode, boot, timeout=30):
     deadline = time.monotonic() + timeout
+    diagnostic = []
     while True:
-        text = lines.line(deadline)
+        try:
+            text = lines.line(deadline)
+        except Exception:
+            print('PACKET_GUEST_DIAGNOSTIC ' + '\n'.join(diagnostic)[-4000:], flush=True)
+            raise
+        diagnostic.append(text[-512:]); diagnostic = diagnostic[-32:]
         if text.startswith(('PACKET_FAIL', 'VM_FAIL')) or 'Kernel panic' in text:
+            print('PACKET_GUEST_DIAGNOSTIC ' + '\n'.join(diagnostic)[-4000:], flush=True)
             raise RuntimeError(text)
         if not text.startswith('PACKET_RECORD '): continue
         row = json.loads(text[len('PACKET_RECORD '):])
@@ -242,6 +249,15 @@ def run_vm():
 
 
 class Tests(unittest.TestCase):
+    def test_guest_startup_failure_preserves_bounded_preceding_diagnostics(self):
+        lines = Mock()
+        lines.line.side_effect = ['old' * 3000, 'ImportError: missing packaged library', 'Kernel panic: init exited']
+        with patch('builtins.print') as printed, self.assertRaisesRegex(RuntimeError, 'Kernel panic'):
+            record(lines, 'startup_unprotected', 'awake', 'boot')
+        message = printed.call_args.args[0]
+        self.assertIn('ImportError: missing packaged library', message)
+        self.assertLessEqual(len(message), 4024)
+
     def sample(self, packets):
         before = {'boot': 'a', 'marker': 1, 'monotonic': 101., 'boottime': 101., 'lease_start': {'monotonic': 100., 'boottime': 100.}}
         after = {'boot': 'a', 'marker': 1, 'monotonic': 101.1, 'boottime': 113.1, 'probe_finished_monotonic': 102.,

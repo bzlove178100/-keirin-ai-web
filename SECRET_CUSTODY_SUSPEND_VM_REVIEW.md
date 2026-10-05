@@ -8,6 +8,8 @@ module assumption and require the actual counter-bearing nft rule installation
 and live snapshot to succeed. Dependency failures now preserve stderr. No timing
 or packet requirement is relaxed; a new commit, not an unchanged rerun, tests this.
 
+Second packet job `111759564417` built the image and booted the guest, then PID 1 exited with status 1 before packet evidence. The old parser discarded non-record stderr/console lines, so the underlying Python startup cause is NOT yet known. Preserve a bounded pre-failure console tail (32 lines/4000 characters), with a regression for preceding import errors. Local chroot reproduction was refused by this environment (operation not permitted), not treated as a guest result. The next changed CI must identify the startup cause before any success claim; packet and timing conditions are unchanged.
+
 The foundation below completed in PR #204; it remains a separate mandatory job.
 The new experiment runs two fresh guests using the same diskless/no-NIC QEMU
 command. Inside each guest only, a veth connects a distinct peer network namespace.
