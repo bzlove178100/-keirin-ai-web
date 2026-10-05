@@ -1,5 +1,32 @@
 # Kernel qualification lease — unactivated synthetic implementation
 
+## Restricted rescue composition (2026-10-05)
+
+The explicit `rescue-lease` profile reuses the fixed DHCPv4 guard tuple while
+retaining the distinct rescue policy. Both host0 and rescue0 identity bind the
+prepared receipt and worker. A guarded alias must never omit rescue0 from the
+context; local tests require rescue-only index/MAC drift to stop recovery.
+
+A new mandatory job runs available and broken static rescue paths in separate
+private namespaces. With primary administration, real DHCP and DNS deliberately
+denied after controller death, the original eight-second guard must revoke old
+and new TCP/443 while candidate rules and the same 22-second worker remain.
+The available TCP/22 rescue path must survive expiry; bringing rescue0 down must
+remain an unavailable path despite subsequent successful table restoration.
+The same worker restores maintenance without guard renewal. Actual DHCP ACK,
+fresh upstream A/AAAA and primary administration must return in the same private
+daemons, while wrong rescue source/port remains denied and guard handles survive
+through the final verdict. Owned cleanup removes all guards and private resources.
+The original unguarded controls remain mandatory; regression now has 26 jobs.
+Exact final-head and main-push receipts belong in the PR, not inferred from local
+tests. BLOCKED/RESCUE_PATH_UNAVAILABLE cannot be promoted by table shape alone.
+
+This is a same-kernel synthetic second veth and TCP echo, not an authenticated
+out-of-band SSH channel. Restart/boot/suspend evidence invalidation, privileged
+guard tampering, arbitrary endpoint changes and first live installation remain
+open. The next safe slice examines evidence invalidation in isolation without
+rebooting/suspending a live host. All activation gates remain OFF.
+
 ## Real chrony composition (2026-10-05)
 
 The existing prepared `time-lease` boundary now has a mandatory real chrony

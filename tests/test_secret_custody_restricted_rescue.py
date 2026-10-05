@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 import unittest
 from unittest.mock import patch
 
@@ -21,13 +22,23 @@ z, r, d, t = h.z, h.r, h.d, h.t
 HOST, PEER, OTHER = "198.51.100.1", "198.51.100.2", "198.51.100.3"
 HOST_MAC, PEER_MAC = "02:00:00:00:02:01", "02:00:00:00:02:02"
 UNRELATED = "kc_rescue_unrelated"
+lease = r.lease_module()
 
 
-def guard():
+def guard(guarded=False):
     h.guard()
     r.guard()
     if os.environ.get("KC_RESTRICTED_RESCUE_CI") != "1":
         raise RuntimeError("RESTRICTED_RESCUE_CI_OPT_IN_REQUIRED")
+    if type(guarded) is not bool:
+        raise ValueError("FIXED_RESCUE_GUARD_MODE_REQUIRED")
+    if guarded and os.environ.get("KC_RESCUE_LEASE_CI") != "1":
+        raise RuntimeError("RESCUE_LEASE_CI_OPT_IN_REQUIRED")
+
+
+def guard_handles():
+    return [[(kind, item["handle"]) for row in report["nftables"] for kind, item in row.items()
+             if kind in ("table", "chain", "rule", "set")] for report in r.lease_reports()]
 
 
 def policy(mode):
@@ -159,10 +170,11 @@ def dhcp_progress(before, after):
             and any(after[key] > before[key] for key in ("inet", "netdev")))
 
 
-def case(broken):
-    guard()
+def case(broken, guarded=False):
+    guard(guarded)
     z.y.empty()
-    label = "BROKEN" if broken else "AVAILABLE"
+    label = ("GUARDED_" if guarded else "") + ("BROKEN" if broken else "AVAILABLE")
+    key = "rescue-lease" if guarded else "rescue"
     try:
         with ExitStack() as stack:
             main, rescue = spawn(stack, h.__file__), spawn(stack, __file__)
@@ -207,13 +219,20 @@ def case(broken):
                     fresh(main, res)
                     assert t.rpc(main, "open")
 
-                with r.armed("rescue", maintenance, candidate, "lifecycle") as (path, _):
-                    worker_pid = json.loads((path / "ready").read_text())["pid"]
+                with r.armed(key, maintenance, candidate, "lifecycle") as (path, _):
+                    seen = time.monotonic()
+                    worker = json.loads((path / "ready").read_text())
+                    worker_pid = worker["pid"]
+                    expected = json.loads((path / "expected.json").read_text())
+                    assert set(expected["context"]["interfaces"]) == {"host0", "rescue0"}
+                    assert worker["binding"] == r.binding(expected)
+                    if guarded:
+                        handles = guard_handles()
                     assert t.reaches(PEER, 22, HOST) and t.rpc(rescue, "check") == {"old": True, "new": True}
-                    r.invoke_controller(path, "rescue", "after")
+                    r.invoke_controller(path, key, "after")
                     assert r.shape("rescue") == candidate
                     old = stack.enter_context(t.connect(d.PRIMARY, 443))
-                    assert t.exchange(old)
+                    assert t.exchange(old) and t.reaches(d.PRIMARY, 443)
                     epoch = t.rpc(main, "change", d.PRIMARY)
                     count = dhcp_drops()
                     denied(main, res, 1)
@@ -226,9 +245,26 @@ def case(broken):
                     if broken:
                         t.run(t.IP, "link", "set", "rescue0", "down")
                         assert not t.reaches(PEER, 22, HOST)
+                    if guarded:
+                        # Read-only observation while the original worker still
+                        # owns its 22-second restoration window. No rearm/reset.
+                        d.wait_for(lambda: time.monotonic() > seen + lease.SECONDS + .2, 12, res.check)
+                        assert r.shape("rescue") == candidate and not (path / "result").exists()
+                        assert r.process_start(worker_pid) == worker["start"]
+                        assert not t.exchange(old) and not t.reaches(d.PRIMARY, 443)
+                        transport = t.rpc(rescue, "check")
+                        assert transport == {"old": not broken, "new": not broken}
+                        assert t.reaches(PEER, 22, HOST) == (not broken)
+                        assert guard_handles() == handles
+                        assert h.stamp(res)["processes"] == original
+                        assert r.recovery_context(key) == expected["context"]
+                        print("PASS RESCUE_KERNEL_EXPIRY_WITH_CANDIDATE_LIVE_WORKER_AND_EXACT_PATH", label, flush=True)
                     d.wait_for(lambda: (path / "result").exists(), 25, res.check)
                     result = (path / "result").read_text()
                     assert result == "RESTORE_MAINTENANCE" and r.shape("rescue") == maintenance
+                    if guarded:
+                        assert guard_handles() == handles
+                        print("PASS RESCUE_PID1_RESTORE_AFTER_KERNEL_EXPIRY_WITHOUT_REARM", label, flush=True)
                 assert not path.exists() and not Path(f"/proc/{worker_pid}").exists()
                 revoked = not t.exchange(old) and not t.reaches(d.PRIMARY, 443)
                 assert revoked
@@ -250,19 +286,22 @@ def case(broken):
                 assert not any(decision[k] for k in ("qualification", "mutation", "apply_allowed", "freshness_verified"))
                 assert t.rpc(rescue, "other") == {"source": False, "port": False}
                 assert not t.reaches(PEER, 2222, HOST)
+                if guarded:
+                    assert guard_handles() == handles and not t.reaches(d.PRIMARY, 443)
+                    print("PASS RESCUE_GUARD_PRESERVED_THROUGH_DHCP_DNS_RETURN_AND_PATH_VERDICT", label, flush=True)
                 print("PASS RESCUE_VERDICT", label, json.dumps(decision, sort_keys=True), flush=True)
             print("PASS RESCUE_PRIVATE_DAEMONS_RUNTIME_AND_CGROUP_CLEANED", label, flush=True)
     finally:
         for interface in ("host0", "rescue0"):
             t.run(t.IP, "link", "del", interface, success=False)
-        for family, name in (*r.tables("rescue"), ("inet", UNRELATED)):
+        for family, name in (*r.tables("rescue"), ("inet", UNRELATED), *(lease.TABLES if guarded else ())):
             t.nft(f"delete table {family} {name}\n", success=False)
     z.y.empty()
     print("PASS RESCUE_PEERS_LINKS_AND_OWNED_RULES_CLEANED", label, flush=True)
 
 
-def kernel():
-    guard()
+def kernel(guarded=False):
+    guard(guarded)
     z.y.empty()
     print("KERNEL", os.uname().release, flush=True)
     for binary in (z.NETWORKD, z.DAEMON, z.BUS_DAEMON):
@@ -270,19 +309,20 @@ def kernel():
     for name in ("available", "broken"):
         # t.listen's daemon accept threads can outlive a context close. Give
         # each case its own process/netns and reap it before reusing port 22.
-        subprocess.run(["unshare", "--net", sys.executable, "-I", "-B", __file__, "--case", name],
+        subprocess.run(["unshare", "--net", sys.executable, "-I", "-B", __file__,
+                        "--guarded-case" if guarded else "--case", name],
             env=dict(os.environ, RESCUE_CASE_PARENT_NETNS=os.readlink("/proc/self/ns/net")),
             timeout=120, check=True)
         z.y.empty()
-    print("RESULT SYNTHETIC_RESTRICTED_RESCUE_OK_NO_LIVE_APPLY", flush=True)
+    print("RESULT SYNTHETIC_" + ("GUARDED_" if guarded else "") + "RESTRICTED_RESCUE_OK_NO_LIVE_APPLY", flush=True)
 
 
-def child_case(name):
-    guard()
+def child_case(name, guarded=False):
+    guard(guarded)
     parent = os.environ.get("RESCUE_CASE_PARENT_NETNS")
     if name not in ("available", "broken") or not parent or parent == os.readlink("/proc/self/ns/net"):
         raise RuntimeError("DISTINCT_RESCUE_CASE_NAMESPACE_REQUIRED")
-    case(name == "broken")
+    case(name == "broken", guarded)
 
 
 class Tests(unittest.TestCase):
@@ -303,6 +343,14 @@ class Tests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "DISTINCT_RESCUE_CASE_NAMESPACE_REQUIRED"):
                 child_case("available")
             launch.assert_not_called()
+
+    def test_guarded_mode_needs_separate_opt_in_before_commands(self):
+        with patch.object(h, "guard"), patch.object(r, "guard"), patch.dict(os.environ, {"KC_RESTRICTED_RESCUE_CI": "1", "KC_RESCUE_LEASE_CI": "0"}), patch.object(t, "run") as run:
+            with self.assertRaisesRegex(RuntimeError, "RESCUE_LEASE_CI_OPT_IN_REQUIRED"):
+                kernel(True)
+            with self.assertRaisesRegex(ValueError, "FIXED_RESCUE_GUARD_MODE_REQUIRED"):
+                kernel("yes")
+            run.assert_not_called()
 
     def test_each_missing_proof_blocks_despite_shape_restoration(self):
         values = ["RESTORE_MAINTENANCE", True, True, True, True]
@@ -336,6 +384,10 @@ class Tests(unittest.TestCase):
         self.assertEqual(r.profile("rescue", "maintenance"), good)
         self.assertEqual(r.profile("rescue", "qualification"), bad)
         self.assertEqual(r.tables("rescue"), r.tables(4))
+        self.assertEqual(r.profile("rescue-lease", "maintenance"), good)
+        self.assertEqual(r.profile("rescue-lease", "qualification"), bad)
+        self.assertEqual(r.tables("rescue-lease"), r.tables("rescue"))
+        self.assertEqual(r.GUARDED["rescue-lease"], ("rescue", "dhcp4"))
         with self.assertRaises(ValueError):
             policy("unfiltered")
 
@@ -343,9 +395,13 @@ class Tests(unittest.TestCase):
 if __name__ == "__main__":
     if sys.argv[1:] == ["--systemd"]:
         kernel()
+    elif sys.argv[1:] == ["--guarded-systemd"]:
+        kernel(True)
     elif sys.argv[1:] == ["--peer"]:
         peer()
     elif len(sys.argv) == 3 and sys.argv[1] == "--case":
         child_case(sys.argv[2])
+    elif len(sys.argv) == 3 and sys.argv[1] == "--guarded-case":
+        child_case(sys.argv[2], True)
     else:
         unittest.main(verbosity=2)

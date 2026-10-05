@@ -514,6 +514,22 @@ jobs:
       - name: Verify independent restricted rescue and blocked broken-path outcome
         run: sudo -n env KC_RESTRICTED_RESCUE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_DNS_CI=1 KC_RESOLVED_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_restricted_rescue.py --systemd
 
+  custody-restricted-rescue-lease:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test guarded rescue admission and both interface identities
+        run: |
+          /usr/bin/python3 -I -B tests/test_secret_custody_restricted_rescue.py
+          /usr/bin/python3 -I -B tests/test_secret_custody_recovery_context.py
+      - name: Install query client in disposable CI
+        run: |
+          sudo -n apt-get update -qq
+          sudo -n apt-get install -y --no-install-recommends bind9-dnsutils
+      - name: Verify kernel expiry with available and broken restricted rescue
+        run: sudo -n env KC_RESCUE_LEASE_CI=1 KC_RESTRICTED_RESCUE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_DNS_CI=1 KC_RESOLVED_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_restricted_rescue.py --guarded-systemd
+
   custody-recovery-context:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
