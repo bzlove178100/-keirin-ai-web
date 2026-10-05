@@ -33,9 +33,11 @@ def guard():
 
 
 def archive(files):
-    """Fixed-builder regular files plus console, never host filesystem mounts."""
+    """Fixed-builder files and guest devices, never host filesystem mounts."""
     entries = {'dev': (b'', stat.S_IFDIR | 0o755, 0, 0),
                'dev/console': (b'', stat.S_IFCHR | 0o600, 5, 1),
+               'dev/null': (b'', stat.S_IFCHR | 0o666, 1, 3),
+               'dev/urandom': (b'', stat.S_IFCHR | 0o444, 1, 9),
                'module-config': (b'', stat.S_IFDIR | 0o755, 0, 0)}
     for name, (content, mode) in files.items():
         path = Path(name)
@@ -249,6 +251,20 @@ def run_vm():
 
 
 class Tests(unittest.TestCase):
+    def test_archive_supplies_guest_random_and_null_device_nodes(self):
+        data, offset, devices = gzip.decompress(archive({})), 0, {}
+        while True:
+            header = data[offset:offset + 110]
+            self.assertEqual(header[:6], b'070701')
+            fields = [int(header[i:i + 8], 16) for i in range(6, 110, 8)]
+            offset += 110
+            name = data[offset:offset + fields[11] - 1].decode()
+            offset = (offset + fields[11] + 3) & ~3
+            if name == 'TRAILER!!!': break
+            if stat.S_ISCHR(fields[1]): devices[name] = (fields[9], fields[10])
+            offset = (offset + fields[6] + 3) & ~3
+        self.assertEqual(devices, {'dev/console': (5, 1), 'dev/null': (1, 3), 'dev/urandom': (1, 9)})
+
     def test_guest_startup_failure_preserves_bounded_preceding_diagnostics(self):
         lines = Mock()
         lines.line.side_effect = ['old' * 3000, 'ImportError: missing packaged library', 'Kernel panic: init exited']

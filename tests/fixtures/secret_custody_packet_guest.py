@@ -23,13 +23,18 @@ def run(*args, input=None):
     return result.stdout
 
 
+def interfaces():
+    # Query this process network namespace, not the inherited sysfs mount.
+    return sorted(name for _, name in socket.if_nameindex())
+
+
 def clocks():
     return {'monotonic': time.monotonic(), 'boottime': time.clock_gettime(time.CLOCK_BOOTTIME)}
 
 
 def emit(event, **values):
     row = dict(event=event, boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
-               interfaces=sorted(p.name for p in Path('/sys/class/net').iterdir()),
+               interfaces=interfaces(),
                marker=int(Path('/run/probe.marker').exists()), **values)
     print('PACKET_RECORD ' + json.dumps(row), flush=True)
 
@@ -48,7 +53,7 @@ def peer(control):
     if control.recv(16) != b'setup\n':
         raise RuntimeError('PEER_SETUP_REQUIRED')
     setup('peer0', 2)
-    if sorted(p.name for p in Path('/sys/class/net').iterdir()) != ['lo', 'peer0']:
+    if interfaces() != ['lo', 'peer0']:
         raise RuntimeError('FIXED_PEER_INTERFACES_REQUIRED')
     servers, clients = [], []
     for address in PEERS:
@@ -142,7 +147,7 @@ def require(values, expected):
 def main():
     if (os.getpid() != 1 or os.geteuid() != 0 or ' kc_packet_probe=1 ' not in Path('/proc/cmdline').read_text()
             or Path('/sys/class/dmi/id/sys_vendor').read_text().strip() != 'QEMU'
-            or sorted(p.name for p in Path('/sys/class/net').iterdir()) != ['lo']):
+            or interfaces() != ['lo']):
         raise RuntimeError('FIXED_PACKET_GUEST_REQUIRED')
     mode = sys.stdin.readline(16).strip()
     if mode not in ('awake', 'suspend'):
@@ -232,7 +237,7 @@ def main():
             subprocess.run([NFT, 'delete', 'table', family, name], capture_output=True, timeout=5)
         subprocess.run([IP, 'link', 'del', 'host0'], capture_output=True, timeout=5)
     remaining = [r for r in json.loads(run(NFT, '-j', 'list', 'ruleset'))['nftables'] if 'metainfo' not in r]
-    if remaining or Path(f'/proc/{pid}').exists() or sorted(p.name for p in Path('/sys/class/net').iterdir()) != ['lo']:
+    if remaining or Path(f'/proc/{pid}').exists() or interfaces() != ['lo']:
         raise RuntimeError('GUEST_CLEANUP_REQUIRED')
     emit('done', mode=mode, outcome=outcome, activation_allowed=False, **clocks())
     while True: time.sleep(1) # PID 1 remains alive until its owned VM is reaped.
