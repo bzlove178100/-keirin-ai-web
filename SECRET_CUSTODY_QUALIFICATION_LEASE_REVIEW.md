@@ -1,5 +1,30 @@
 # Kernel qualification lease — unactivated synthetic implementation
 
+## Real chrony composition (2026-10-05)
+
+The existing prepared `time-lease` boundary now has a mandatory real chrony
+client case for each family in a distinct private namespace. The original
+unguarded fifteen-record job stays mandatory. Eight-second kernel expiry must
+deny old/new qualification while candidate rules and the same 22-second worker
+remain. After expiry, both approved sources must provide two fresh good samples
+within five seconds, with primary selection and existing/new management intact.
+The same capability-free client continues through late maintenance restoration,
+silent and wrong-origin failover, actual rejection, approved return and denial
+of unapproved sources/transports. Guard handles stay unchanged until teardown.
+
+This new continuity check does not relax the existing four-good-sample fault
+preparation, completed burst, interleaved/kernel RX/TX requirements or the
+3/5/12/35/20-second sample/preparation/failover/return bounds. No old samples,
+one-peer-only progress or fallback to an unguarded run can pass the guarded case.
+One new CI job brings regression to 25 mandatory jobs. Exact final-head and main
+receipts belong in the PR. Local tests alone do not prove kernel behavior.
+
+Clients and servers retain nobody, zero capabilities, NoNewPrivs and `-x -U`;
+the host clock is never changed. Same-clock synthetic sources do not qualify
+external UTC accuracy, NTS, real credentials or a live host. Restricted rescue
+under the guard, arbitrary endpoint changes, reboot/suspend, privileged guard
+tampering and first live installation remain open. All activation gates stay OFF.
+
 ## DHCPv6 composition (2026-10-05)
 
 The explicit `dhcp6-lease` profile uses the same fixed IPv6 qualification tuple
