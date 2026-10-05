@@ -1,6 +1,12 @@
 # Disposable guest suspend/boot foundation — no live activation
 
-## Packet experiment added after the foundation (2026-10-05)
+## Measured packet outcome (2026-10-05)
+
+Measured result: **BLOCKED_SUSPEND_EXPIRY_GAP**, not suspend qualification. Packet job `111764224176`, regression run `37310432870`, candidate `9846be0336da33b6d2f11781328b59a6a190ed17`, passed all nine experiment records on 2026-10-05 at 21:36:30 JST. The awake control denied all four old/new IPv4/IPv6 qualification probes while all four management probes survived. After actual S3, all four qualification probes still succeeded, without refresh or any preceding post-resume nft read/write. From original installation to first post-resume clock sampling, boottime advanced 11.145488332 seconds; all explicit probes completed within 0.295390938 monotonic seconds of installation. Suspend-window monotonic advanced 0.036644628 seconds and boottime 10.896148706 seconds. Original rules/handles and sentinel remained unchanged; later ordinary awake expiry denied all qualification probes while management survived. Both guest/peer/image/channel/process cleanups completed. Kernel `6.17.0-1022-azure` and QEMU binary/input hashes are in the job and PR #205. This is measured behavior of these exact inputs, not a claim about all kernels or live systems.
+
+Next: preserve BLOCKED and investigate a kernel-enforced deadline or closed boundary that accounts for suspend before a live proposal. Userspace boottime admission alone cannot revoke packets already admitted by the surviving guard. Closed startup ordering and authenticated external management remain unqualified. Final-head five-workflow/28-job and independent main-push integration receipts belong in https://github.com/bzlove178100/-keirin-ai-web/pull/205 ; the measured candidate receipt above does not substitute for them. All activation gates remain OFF.
+
+## Packet experiment and diagnosed setup failures
 
 The first packet CI attempt stopped before VM launch: job 111758239014 failed
 while resolving an assumed standalone nft_counter module. Remove that standalone
@@ -56,7 +62,9 @@ clock implementation. Closed-policy startup ordering, external authenticated
 management, arbitrary endpoints, privileged edits and live installation remain
 unqualified. All activation gates remain OFF.
 
-The new mandatory CI job builds a static C PID 1 and a minimal initramfs containing
+## Original foundation from PR #204
+
+The original mandatory CI job builds a static C PID 1 and a minimal initramfs containing
 only that program and its initial console. An unprivileged Python supervisor runs
 QEMU TCG with the disposable runner's installed kernel copied as read-only input.
 The manifest prints the actual kernel release, kernel/initramfs/QEMU SHA-256 and
@@ -110,11 +118,11 @@ documents disabling default NICs/devices/config and the syscall sandbox.
 [Linux sleep-state documentation](https://docs.kernel.org/admin-guide/pm/sleep-states.html)
 describes selecting deep suspend through mem_sleep before requesting mem.
 
-Next, add an internal fixed-address peer and positive/negative packet controls,
+The original next step was to add an internal fixed-address peer and positive/negative packet controls,
 then observe qualification and management packets immediately after S3 before any
 userspace policy refresh. Record original kernel set/rule identity and elapsed
 clocks, and compare with ordinary awake expiry. Separately test startup with and
-without the intended closed policy before enabling a guest link. This is future
-work; the current job neither constructs that policy nor proves its behavior.
+without the intended closed policy before enabling a guest link. The packet portion is now measured above; closed startup policy ordering remains future
+work and is not proved by either job.
 All production/runtime/provider/credential/prediction/DB/data-fetch/scheduler/report
 gates remain OFF.
