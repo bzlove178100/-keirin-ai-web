@@ -1,5 +1,15 @@
 # Work status
 
+## Chrony peer repair: changed-condition acceptance (2026-10-05)
+
+PR #196 now replaces only healthy approved synthetic NTP responses with four real chronyd 4.5 server processes (one per address/family). Clients request interleaved mode, so actual kernel TX timestamps can be returned on the next exchange. Both client and server run as nobody with no capabilities, NoNewPrivs and `-x -U`; each server binds only its fixed peer address, permits only the fixture host, and uses local stratum 1 without an upstream. Only the private peer namespace permits unprivileged port 123. Same host clock remains a synthetic reference, not external UTC qualification. Silent/wrong-origin fault injection explicitly stops the primary server and hands its socket to the bounded fault peer; return restarts the server, never the client or its sample history. Unapproved-source counters remain real packet-server counters; approved-peer counters now count fault traffic only. EOF/SIGTERM cleanup reaps server children and removes private directories.
+
+The old basic-mode Python server placed T3 before the kernel send; RX repair and burst acquisition could not correct that TX approximation. The exact timing of the historical rejected packets was not captured, so do not claim their per-packet TX delay is proven. The new implementation removes the approximation from healthy measurements and explicitly requires interleaved client reports plus positive server kernel RX/TX counters. Filters, four fresh good samples from both peers, one burst 4/16, twelve-second preparation and original 3/5/35/20-second sample/failover/return deadlines are unchanged.
+
+Code head `b1528692be0385cdbd626377ed857ae09137f052`, tree `e6acff5e906c79c7e5f64dbed9d5f6460422dfc3`, regression `37248568514`: time job `111571313613` passed all fifteen records at 09:44:15 JST. Each of four preparation phases confirmed both clients interleaved and both servers actually using kernel RX/TX. Primary/alternate kernel TX counts: v4 silent 15/15, v4 origin 4/28, v6 silent 16/15, v6 origin 4/29. Lease job `111571313723` passed all 35 records at 09:44:23 JST. Local thirteen time + six lease + six shared + eight context tests passed (33). Final head additionally asserts successful peer exit after cleanup; full final-head and main-push five-workflow/22-job receipts belong in PR #196. Until those receipts pass, no merge or live activation. Previous failed head and diagnosis remain below as history.
+
+Next after integration: qualify guard restoration after expiry and required dynamic network dependencies before any live proposal; boot/suspend/first live install remain unqualified. No phone/AWS/credential steps. All activation gates remain OFF.
+
 ## Current slice: require a prepared kernel guard before qualification
 
 Updated: 2026-10-05 (Asia/Tokyo). Base main `a44280a77c1d0d0a44285dae29065c5c67d094c6` is PR #195; its five main workflows and 22 regression jobs succeeded. Previous slice below remains historical evidence.

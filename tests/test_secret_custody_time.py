@@ -131,7 +131,6 @@ class Server:
             self.error = type(exc).__name__
 
 
-
 def no_clock_args(daemon, version, config):
     return ["/usr/bin/setpriv", "--reuid=65534", "--regid=65534", "--clear-groups",
             "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--no-new-privs",
@@ -226,6 +225,7 @@ class ChronyServer:
             return dict(self.counts)
         with self.fault.lock:
             return {key: self.counts[key] + getattr(self.fault, key) for key in self.counts}
+
 
 def policy(mode="maintenance"):
     if mode not in ("maintenance", "qualification"):
@@ -637,6 +637,7 @@ def kernel():
         for family, name in (("inet", TABLE), ("netdev", LINK)):
             t.nft(f"delete table {family} {name}\n", success=False)
         empty()
+        assert proc.returncode == 0, "TIME_PEER_OR_SERVER_CLEANUP_FAILED"
     print("PASS TIME_PEER_LINKS_AND_RULES_CLEANED", flush=True)
     print("RESULT SYNTHETIC_TIME_RECOVERY_OK_NO_CLOCK_OR_LIVE_APPLY", flush=True)
 
