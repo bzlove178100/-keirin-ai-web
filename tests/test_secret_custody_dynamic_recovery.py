@@ -50,7 +50,7 @@ def tables(version):
         return (("inet", v.TABLE), ("netdev", v.LINK))
     if version == "dns":
         return (("inet", "kc_dns"), ("netdev", "kc_dns_link"))
-    if version == "time":
+    if version in ("time", "time-lease"):
         return (("inet", "kc_time"), ("netdev", "kc_time_link"))
     if version in ("pmtu4", "pmtu6"):
         return (("inet", "kc_pmtu"), ("netdev", "kc_pmtu_link"))
@@ -65,7 +65,7 @@ def profile(version, mode):
         return module("rescue_profile", "test_secret_custody_restricted_rescue.py").policy(mode)
     if version == "dns":
         return module("dns_profile", "test_secret_custody_dns.py").policy(mode)
-    if version == "time":
+    if version in ("time", "time-lease"):
         return module("time_profile", "test_secret_custody_time.py").policy(mode)
     result = d.policy() + d.link_policy() if version == 4 else v.policies()
     if version == "dhcp6":
@@ -176,6 +176,28 @@ def require_context(data):
     raise RuntimeError("RECOVERY_CONTEXT_CHANGED_STOP")
 
 
+
+def lease_module():
+    spec = importlib.util.spec_from_file_location(
+        "qualification_lease", Path(__file__).resolve().parents[1] / "review/secret_custody_qualification_lease.py")
+    result = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(result)
+    return result
+
+
+def lease_reports():
+    return [json.loads(t.run(t.NFT, "-j", "list", "table", family, name).stdout)
+            for family, name in lease_module().TABLES]
+
+
+def require_lease(data):
+    if data["version"] == "time-lease":
+        try:
+            reports = lease_reports()
+            lease_module().require(data.get("qualification_guard"), binding(data), reports, time.monotonic())
+        except (RuntimeError, ValueError, KeyError, TypeError) as exc:
+            raise RuntimeError("QUALIFICATION_GUARD_REQUIRED") from exc
+
 def readiness(path, data):
     report = (path / "ready").read_text()
     if len(report) > 16384:
@@ -200,6 +222,7 @@ def readiness(path, data):
     if ready.get("binding") != binding(data):
         raise RuntimeError("READINESS_BINDING_MISMATCH")
     require_context(data)
+    require_lease(data)
 
 
 def worker(value, version):
@@ -215,6 +238,7 @@ def worker(value, version):
         require_context(data)
         if shape(version) != maintenance:
             raise RuntimeError("MAINTENANCE_ANCHOR_REQUIRED")
+        require_lease(data)
         deadline = time.monotonic() + WINDOWS[data["window"]]
         ready = {"pid": os.getpid(), "start": process_start(os.getpid()), "deadline": deadline,
                  "binding": binding(data)}
@@ -269,10 +293,20 @@ def armed(version, maintenance, candidate, window="short"):
     unit = path.name + ".service"
     try:
         (path / "lock").touch(mode=0o600)
-        (path / "expected.json").write_text(json.dumps({
+        data = {
             "version": version, "window": window, "netns": os.readlink("/proc/self/ns/net"),
             "attempt": uuid.uuid4().hex, "context": recovery_context(version),
-            "maintenance": maintenance, "candidate": candidate}))
+            "maintenance": maintenance, "candidate": candidate}
+        if version == "time-lease":
+            lease = lease_module()
+            # Fixed create transaction must succeed: never adopt an old guard.
+            started = time.monotonic()
+            t.nft(lease.install(data["context"]["interfaces"]["host0"]["ifindex"]))
+            data["qualification_guard"] = {
+                "binding": binding(data), "deadline": started + lease.SECONDS,
+                "snapshot": lease.snapshot(lease_reports())}
+            require_lease(data)
+        (path / "expected.json").write_text(json.dumps(data))
         (path / "expected.json").chmod(0o600)
         t.run("/usr/bin/systemd-run", "--quiet", "--unit=" + unit,
               "--property=Type=exec", "--property=Restart=no", "--property=RuntimeMaxSec=35",
@@ -657,9 +691,9 @@ if __name__ == "__main__":
         print("RESULT SYNTHETIC_DYNAMIC_RECOVERY_OK_NO_LIVE_APPLY", flush=True)
     elif len(args) == 2 and args[0] == "--peer" and args[1] in ("4", "6"):
         peer(int(args[1]))
-    elif len(args) == 3 and args[0] == "--worker" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "dhcp-dns", "rescue"):
+    elif len(args) == 3 and args[0] == "--worker" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "time-lease", "dhcp-dns", "rescue"):
         worker(args[1], int(args[2]) if args[2] in ("4", "6") else args[2])
-    elif len(args) == 4 and args[0] == "--controller" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "dhcp-dns", "rescue") and args[3] in ("before", "after"):
+    elif len(args) == 4 and args[0] == "--controller" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "time-lease", "dhcp-dns", "rescue") and args[3] in ("before", "after"):
         controller(args[1], int(args[2]) if args[2] in ("4", "6") else args[2], args[3])
     else:
         unittest.main(verbosity=2)

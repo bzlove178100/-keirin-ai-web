@@ -1,5 +1,16 @@
 # Work status
 
+## Current slice: require a prepared kernel guard before qualification
+
+Updated: 2026-10-05 (Asia/Tokyo). Base main `a44280a77c1d0d0a44285dae29065c5c67d094c6` is PR #195; its five main workflows and 22 regression jobs succeeded. Previous slice below remains historical evidence.
+
+The new explicit CI-only `time-lease` profile prepares the fixed guard with create-table semantics before starting the independent worker. It seals both table readbacks, retaining handles and all policy fields, and binds the receipt to the attempt/boot/netns/interface context. A conservative eight-second deadline starts before install and never refreshes. Worker readiness publication and both controller readiness checks require a live member, unchanged receipt/snapshot and at least two seconds on that original deadline. Missing, altered, recreated or expired guard stops before candidate mutation. Restore to maintenance deliberately does not require an unexpired guard. Legacy unguarded negative controls remain mandatory.
+
+Local six lease, six shared recovery and eight context tests passed. The existing real-kernel lease CI job now additionally exercises healthy guarded apply/restore and missing/changed/expired/recreated guard refusal with maintenance/admin preservation. Actual CI acceptance is pending; do not describe this slice as kernel-verified until its logs pass. No live installation or activation. All production/runtime/provider/credential/DB/data-fetch/scheduler/report gates remain OFF.
+
+The receipt is trusted fixed-installer readback, not a cryptographic attestation or protection against arbitrary root writers. Kernel set expiry remains essential after the last read; checks cannot remove the final-read/commit race. Expiry positivity is checked without assuming a JSON time unit; the admission deadline is the original userspace monotonic bound, not a refreshed kernel countdown. Same-handle privileged member recreation is not qualified. Reboot/suspend, dynamic dependency composition, first live installation and authenticated management access remain open. Exact CI/head/merge receipts will be retained in the PR.
+
+
 ## Current slice: kernel-enforced qualification expiry after process loss
 
 Updated: 2026-10-04 (Asia/Tokyo).
