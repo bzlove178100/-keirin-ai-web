@@ -163,7 +163,8 @@ def recovery_context(version):
                             "kind": link["linkinfo"]["info_kind"]}
     # Address/route/lease, MTU and administrative up/down are intentionally not
     # identity: existing dynamic and broken-rescue-path tests exercise them.
-    return {"boot": boot, "netns": os.readlink("/proc/self/ns/net"), "interfaces": interfaces}
+    return {"boot": boot, "netns": os.readlink("/proc/self/ns/net"),
+            "time_ns": os.readlink("/proc/self/ns/time"), "interfaces": interfaces}
 
 
 def binding(data):
@@ -200,9 +201,32 @@ def require_lease(data):
     if data["version"] in GUARDED:
         try:
             reports = lease_reports()
-            lease_module().require(data.get("qualification_guard"), binding(data), reports, time.monotonic(), GUARDED[data["version"]][1])
+            lease_module().require(data.get("qualification_guard"), binding(data), reports,
+                                   time.monotonic(), GUARDED[data["version"]][1], boottime_now=boottime())
         except (RuntimeError, ValueError, KeyError, TypeError) as exc:
             raise RuntimeError("QUALIFICATION_GUARD_REQUIRED") from exc
+
+
+def boottime():
+    """Mandatory suspend-inclusive clock; no wall/monotonic fallback."""
+    try:
+        value = time.clock_gettime(time.CLOCK_BOOTTIME)
+        if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+            raise ValueError("INVALID_BOOTTIME")
+        return value
+    except (AttributeError, OSError, ValueError) as exc:
+        raise RuntimeError("SUSPEND_AWARE_CLOCK_REQUIRED") from exc
+
+
+def recovery_remaining(ready):
+    try:
+        mono, boot = time.monotonic(), boottime()
+        deadlines = (ready["deadline"], ready["boottime_deadline"])
+        if any(type(v) not in (int, float) or not math.isfinite(v) for v in (*deadlines, mono, boot)):
+            raise ValueError("FINITE_DEADLINES_REQUIRED")
+        return min(deadlines[0] - mono, deadlines[1] - boot)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("WATCHDOG_NOT_ARMED") from exc
 
 
 def claim_worker(path, data):
@@ -236,8 +260,7 @@ def readiness(path, data):
     if len(report) > 16384:
         raise RuntimeError("READINESS_REPORT_BOUND")
     ready = json.loads(report)
-    if (type(ready["deadline"]) not in (int, float) or not math.isfinite(ready["deadline"])
-            or ready["deadline"] - time.monotonic() < 2):
+    if recovery_remaining(ready) < 2:
         raise RuntimeError("WATCHDOG_NOT_ARMED")
     try:
         fd = os.pidfd_open(ready["pid"])
@@ -274,13 +297,19 @@ def worker(value, version):
         if shape(version) != maintenance:
             raise RuntimeError("MAINTENANCE_ANCHOR_REQUIRED")
         require_lease(data)
+        # Sample BOOTTIME first so a suspend between clock reads cannot grant
+        # a fresh full window after resume. Neither deadline is ever rebased.
+        boot_deadline = boottime() + WINDOWS[data["window"]]
         deadline = time.monotonic() + WINDOWS[data["window"]]
-        ready = dict(owner, deadline=deadline)
+        ready = dict(owner, deadline=deadline, boottime_deadline=boot_deadline)
         temporary = path / "ready.tmp"
         temporary.write_text(json.dumps(ready))
         temporary.replace(path / "ready")
-    while time.monotonic() < deadline:
-        time.sleep(max(0, min(0.05, deadline - time.monotonic())))
+    while True:
+        remaining = recovery_remaining(ready)
+        if remaining <= 0:
+            break
+        time.sleep(min(0.05, remaining))
     with w.locked(path):
         try:
             require_context(data)
@@ -334,10 +363,12 @@ def armed(version, maintenance, candidate, window="short"):
         if version in GUARDED:
             lease = lease_module()
             # Fixed create transaction must succeed: never adopt an old guard.
+            started_boot = boottime()
             started = time.monotonic()
             t.nft(lease.install(data["context"]["interfaces"]["host0"]["ifindex"], GUARDED[version][1]))
             data["qualification_guard"] = {
                 "binding": binding(data), "deadline": started + lease.SECONDS,
+                "boottime_deadline": started_boot + lease.SECONDS,
                 "snapshot": lease.snapshot(lease_reports(), GUARDED[version][1])}
             require_lease(data)
         (path / "expected.json").write_text(json.dumps(data))
@@ -709,7 +740,7 @@ class Tests(unittest.TestCase):
             path = Path(value)
             with self.assertRaises(FileNotFoundError):
                 readiness(path, {})
-            (path / "ready").write_text(json.dumps({"deadline": time.monotonic() + 10, "pid": 1234}))
+            (path / "ready").write_text(json.dumps({"deadline": time.monotonic() + 10, "boottime_deadline": boottime() + 10, "pid": 1234}))
             with patch.object(os, "pidfd_open", side_effect=ProcessLookupError):
                 with self.assertRaisesRegex(RuntimeError, "WATCHDOG_DEAD_BEFORE_APPLY"):
                     readiness(path, {})

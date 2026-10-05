@@ -1,5 +1,43 @@
 # Kernel qualification lease — unactivated synthetic implementation
 
+## Suspend-aware userspace admission (2026-10-05)
+
+Preparation, readiness and the single-use claim now include the actual time
+namespace. Both the guard receipt and worker readiness retain their original
+monotonic and CLOCK_BOOTTIME deadlines. Either expired deadline refuses admission;
+the same worker restores when either original restoration deadline has elapsed.
+Deadline creation samples boottime first, and no deadline is renewed. Missing or
+invalid boottime evidence is an error with no fallback. Guard policy, eight-second
+kernel timeout and restoration windows are unchanged.
+
+A separately opted-in CI step exercises three fresh private network namespaces:
+
+- A controller child sees only its boottime observation advanced by nine seconds:
+  it must refuse the guard receipt while its recovery window remains live.
+- A controller child sees only its boottime observation advanced by 23 seconds:
+  it must refuse readiness despite the still-live monotonic deadline.
+- A real child time namespace, created with unshare --time --fork and zero offsets,
+  must refuse evidence bound to the original time namespace. Network namespace
+  and host clocks remain unchanged.
+
+The first two are injected observer readings, not actual kernel clock changes or
+suspend. After each rejection the unmodified parent must still accept the same
+preparation with the same real live worker and kernel guard. Every case verifies
+no application, identical preparation/readiness/claim bytes, unchanged guard
+handles/unrelated rules, management continuity and complete owned cleanup. The
+existing 50 lease/restart records plus 15 clock records are mandatory (65 total);
+regression remains 26 jobs. A separate command-free worker unit test verifies
+restoration when modelled boottime expires before monotonic without a new sleep.
+
+[Linux timekeeping](https://cdn.kernel.org/doc/html/latest/core-api/timekeeping.html)
+distinguishes CLOCK_MONOTONIC (excludes suspend) from CLOCK_BOOTTIME (includes it).
+[Time namespaces](https://man7.org/linux/man-pages/man7/time_namespaces.7.html)
+virtualize both clocks, so domain identity is part of the evidence binding.
+Actual suspend/resume packet expiry, reboot-durable evidence, startup ordering,
+and a suspend after the final admission read remain unqualified. Short suspension
+within both original deadlines is not automatically rejected. This fixture adds
+no live installer, host suspend/reboot command or runtime activation.
+
 ## Worker restart and process pause (2026-10-05)
 
 A reused worker invocation could overwrite readiness and rebase its restoration

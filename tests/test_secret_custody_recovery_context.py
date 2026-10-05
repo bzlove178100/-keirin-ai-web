@@ -255,8 +255,8 @@ class Tests(unittest.TestCase):
             run.assert_not_called()
 
     def test_changed_boot_namespace_index_mac_or_missing_context_refused(self):
-        expected = {"boot": "original", "netns": "ns1", "interfaces": {"host0": {"ifindex": 2, "address": t.MAC_HOST, "kind": "veth"}}}
-        variants = [dict(expected, boot="changed"), dict(expected, netns="ns2"), {}]
+        expected = {"boot": "original", "netns": "ns1", "time_ns": "time:[1]", "interfaces": {"host0": {"ifindex": 2, "address": t.MAC_HOST, "kind": "veth"}}}
+        variants = [dict(expected, boot="changed"), dict(expected, netns="ns2"), dict(expected, time_ns="time:[2]"), {}]
         for key, value in (("ifindex", 3), ("address", CHANGED_MAC), ("kind", "dummy")):
             variant = copy.deepcopy(expected)
             variant["interfaces"]["host0"][key] = value
@@ -299,7 +299,7 @@ class Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as value:
             path = Path(value)
             for changed in ({}, dict(r.binding(data), attempt="b" * 32), dict(r.binding(data), context={"boot": "b"})):
-                (path / "ready").write_text(json.dumps({"pid": 123, "start": "456", "deadline": time.monotonic() + 5, "binding": changed}))
+                (path / "ready").write_text(json.dumps({"pid": 123, "start": "456", "deadline": time.monotonic() + 5, "boottime_deadline": r.boottime() + 5, "binding": changed}))
                 with patch.object(os, "pidfd_open", return_value=7), patch.object(os, "close"), patch.object(r.select, "select", return_value=([], [], [])), patch.object(r, "process_start", return_value="456"), patch.object(os, "readlink", return_value=data["netns"]), patch.object(r, "require_context") as context:
                     with self.assertRaisesRegex(RuntimeError, "READINESS_BINDING_MISMATCH"):
                         r.readiness(path, data)

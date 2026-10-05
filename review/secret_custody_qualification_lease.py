@@ -95,8 +95,11 @@ def snapshot(reports, profile="time"):
     return result
 
 
-def require(receipt, binding, reports, now, profile="time"):
-    """Pure fail-closed check. Receipts originate only from fixed installation.
+def require(receipt, binding, reports, now, profile="time", *, boottime_now=None):
+    """Pure fail-closed admission using both original monotonic/boottime deadlines.
+
+    Receipts originate only from fixed installation; this does not establish
+    kernel packet expiry across actual system suspend.
 
     Not an attestation against another privileged writer. A point read cannot
     eliminate the final-check/commit race; intact kernel guards bound that race.
@@ -104,9 +107,13 @@ def require(receipt, binding, reports, now, profile="time"):
     import math
     try:
         deadline = receipt["deadline"]
+        boot_deadline = receipt["boottime_deadline"]
         if (type(now) not in (int, float) or not math.isfinite(now)
                 or type(deadline) not in (int, float) or not math.isfinite(deadline)
                 or not 2 <= deadline - now <= SECONDS
+                or type(boottime_now) not in (int, float) or not math.isfinite(boottime_now)
+                or type(boot_deadline) not in (int, float) or not math.isfinite(boot_deadline)
+                or not 2 <= boot_deadline - boottime_now <= SECONDS
                 or receipt["binding"] != binding or receipt["snapshot"] != snapshot(reports, profile)):
             raise ValueError("LEASE_MISMATCH")
     except (ValueError, KeyError, TypeError, IndexError, AttributeError) as exc:
