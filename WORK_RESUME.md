@@ -1,5 +1,17 @@
 # Work resume handoff
 
+## Current slice: DHCPv6 under kernel qualification expiry
+
+Updated 2026-10-05 (Asia/Tokyo). Resume confirmed PR #198 merged at main `06440cab6f52a63405500ade0f3c286c073d98e2`, tree `b2c14005ee5a4dba1fd720b9d9fcdcf982a3794c`. All independent main-push workflows succeeded: regression `37252751176` (24/24 jobs), runtime `37252751169`, UI `37252751187`, AWS `37252751155`, PostgreSQL `37252751170`. Guarded DNS job `111583551262` succeeded. The prior in-progress main receipt is resolved; older current-slice headings below are historical.
+
+Add explicit `dhcp6-lease` admission using the fixed IPv6 tuple and the unchanged DHCPv6 base policy, including multicast DHCPv6 controls. The existing prepared receipt binds the guard to its attempt/boot/netns/interface, expires after eight seconds, and cannot be refreshed by candidate/maintenance restoration.
+
+The mandatory guarded case reuses the pinned patched CI client in a fresh private namespace after the existing original-defect, patched-lifecycle and unguarded-recovery controls. Require actual old/new qualification success, controller SIGKILL, kernel expiry with candidate rules and the same live 22-second worker still present, then a NEW DHCPv6 Renew after expiry and before restoration. Both inet/netdev DHCPv6 counters and actual address lifetime must increase. Existing/new management must remain usable. The same worker must restore maintenance after expiry without rearming; wrong-source denial, another Renew, Rebind to the allowed alternate DUID and genuine address expiry while the RA route remains all continue under unchanged guard handles. Owned teardown removes guards as well as base tables, links and processes.
+
+Local 4 DHCPv6-recovery + 9 DHCPv6 protocol + 6 shared-recovery + 6 lease + 8 context tests passed (33). No kernel success is inferred from these local tests. Exact final-head CI, guarded PASS records and independent main-push receipts must be recorded in the PR. All five required workflows and all 24 regression jobs must succeed before merge. This adds one mandatory step to the existing client-build job, without duplicating the build or dropping existing controls.
+
+Still unqualified: guarded real chrony client and rescue composition; arbitrary endpoint/address changes; reboot/suspend; privileged guard tampering; first live installation. After successful integration, the next dependency is the real chrony client under the same prepared guard, followed by restricted rescue. The DHCPv6 evidence qualifies only the explicitly patched CI client, not the installed Ubuntu/live-host binary. Runtime/provider/credential/prediction/DB/data-fetch/scheduler/report gates remain OFF. No phone/AWS/credential operation is required or authorized by this slice.
+
 ## Current slice: DHCP-delivered DNS under kernel qualification expiry
 
 Updated 2026-10-05 (Asia/Tokyo). PR #197 is merged at main `b9013dc9c8bd144771b418ecdeec0d1d32dad5a6`, tree `88a9ba1fdcee45e8b58645f6eead4d4931a1d5dc`. Independent main workflows all passed: regression `37250898062` (23 jobs), runtime `37250898059` (exact main SHA), UI `37250898068`, AWS `37250898109`, PostgreSQL `37250898048`. Dynamic guard job `111578110677` passed twelve records. Current main and these receipts were rechecked before this slice. Older pending/blocker descriptions are history, not a reason to repeat completed work.

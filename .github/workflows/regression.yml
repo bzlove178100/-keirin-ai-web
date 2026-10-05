@@ -332,6 +332,9 @@ jobs:
       - name: Compose patched DHCPv6 lifecycle with independent restricted recovery
         # Reuse the same hash-verified build; a fresh network/mount/runtime.
         run: sudo -n env KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP6_CI=1 KC_IPV6_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dhcpv6_recovery.py --systemd
+      - name: Verify DHCPv6 renewal rebind and late recovery through kernel expiry
+        # Separate namespace; original, patched and unguarded controls remain mandatory.
+        run: sudo -n env KC_DHCP6_LEASE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP6_CI=1 KC_IPV6_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dhcpv6_recovery.py --lease-systemd
       - name: Remove only the owned disposable client builds
         if: always()
         run: |
