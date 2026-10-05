@@ -1,5 +1,31 @@
 # Kernel qualification lease — unactivated synthetic implementation
 
+## DHCPv6 composition (2026-10-05)
+
+The explicit `dhcp6-lease` profile uses the same fixed IPv6 qualification tuple
+as `ra6`, but retains the distinct DHCPv6 maintenance/candidate policy. Shared
+preparation, worker readiness and both controller checks require the original
+bound eight-second guard receipt. Restoration never replaces the guard tables.
+
+The existing DHCPv6 CI job keeps the unpatched timer-defect control, pinned
+patched lifecycle and unguarded recovery mandatory, then adds a guarded run in
+a fresh private namespace using the same hash-verified client build. After
+controller SIGKILL, old/new qualification must expire while candidate tables
+and the same 22-second worker still remain. A new Renew after observed expiry
+must refresh actual address lifetime and both-layer DHCPv6 counters before
+worker restoration, with existing/new administration still working. The worker
+must then restore maintenance without rearming. Wrong-source packet rejection,
+another Renew, alternate-DUID Rebind and real address expiry with the RA route
+remaining all continue under unchanged guard handles. Teardown removes both
+guards and the original owned resources; the namespace must be empty.
+
+All five final-head workflows and all 24 regression jobs are required before
+merge; exact CI and independent main-push receipts are kept in the PR. This
+qualifies only the pinned patched CI client and fixed synthetic addresses.
+Arbitrary renumbering, the installed Ubuntu/live client, guarded chrony/rescue,
+reboot/suspend, privileged guard tampering and first live installation remain
+outside this proof. All activation gates remain OFF.
+
 ## Defect and mechanism
 
 PR #193 demonstrated that process liveness checks and nft installation are not

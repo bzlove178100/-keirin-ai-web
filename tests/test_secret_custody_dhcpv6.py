@@ -401,7 +401,8 @@ def lifecycle(*, client="installed", recovery=None):
             proc.kill()
             proc.wait(timeout=2)
         t.run(t.IP, "link", "del", "host0", success=False)
-        for family, table in (("inet", v.TABLE), ("netdev", v.LINK)):
+        for family, table in (("inet", v.TABLE), ("netdev", v.LINK),
+                              *(recovery.cleanup_tables() if recovery else ())):
             t.nft("delete table " + family + " " + table + "\n", success=False)
         assert {x["ifname"] for x in json.loads(t.run(t.IP, "-j", "link", "show").stdout)} == {"lo"}
         assert all("metainfo" in x for x in json.loads(t.run(t.NFT, "-j", "list", "ruleset").stdout)["nftables"])
