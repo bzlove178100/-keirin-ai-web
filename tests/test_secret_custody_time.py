@@ -26,6 +26,8 @@ r = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(r)
 t, raw = r.t, r.raw
 TABLE, LINK, KEY = "kc_time", "kc_time_link", "time"
+LEASE_KEY = "time-lease"
+lease = r.lease_module()
 FAMILIES = ((4, "ip", "192.0.2."), (6, "ip6", "2001:db8:1::"))
 ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C", "LC_ALL": "C"}
 # Linux SO_TIMESTAMPNS_NEW: fixed two signed 64-bit fields, including on time32.
@@ -70,6 +72,18 @@ def guard():
     t.guard()
     if os.environ.get("KC_TIME_CI") != "1":
         raise RuntimeError("TIME_CI_OPT_IN_REQUIRED")
+
+
+def lease_guard():
+    guard()
+    r.guard()
+    if os.environ.get("KC_TIME_LEASE_CI") != "1":
+        raise RuntimeError("TIME_LEASE_CI_OPT_IN_REQUIRED")
+
+
+def guard_handles():
+    return [[(kind, item["handle"]) for row in report["nftables"] for kind, item in row.items()
+             if kind in ("table", "chain", "rule", "set")] for report in r.lease_reports()]
 
 
 def stamp(now):
@@ -417,6 +431,13 @@ def fresh_sources(before, after, state, primary):
             and after[ip]["Total good RX"] >= before[ip]["Total good RX"] + 4 for ip in before))
 
 
+def fresh_expiry_sources(before, after, state, primary):
+    # Separate two-sample/five-second continuity contract. Fault preparation
+    # still requires its original four good samples and finished burst.
+    return (state[primary]["state"] == "*" and all(state[ip]["reach"] > 0
+            and after[ip]["Total good RX"] >= before[ip]["Total good RX"] + 2 for ip in before))
+
+
 def burst_idle(text):
     if len(text) > 4096:
         raise ValueError("ACTIVITY_REPORT_BOUND")
@@ -517,9 +538,19 @@ def empty():
     assert all("metainfo" in x for x in json.loads(t.run(t.NFT, "-j", "list", "ruleset").stdout)["nftables"])
 
 
-def kernel():
+def kernel(*, family=None):
     guard()
     r.guard()
+    guarded = family is not None
+    if guarded:
+        lease_guard()
+        if type(family) is not int or family not in (4, 6):
+            raise ValueError("FIXED_TIME_LEASE_FAMILY_REQUIRED")
+        parent = os.environ.get("TIME_LEASE_PARENT_NETNS")
+        if not parent or os.readlink("/proc/self/ns/net") == parent:
+            raise RuntimeError("DISTINCT_TIME_LEASE_NAMESPACE_REQUIRED")
+    families = FAMILIES if not guarded else tuple(item for item in FAMILIES if item[0] == family)
+    key = LEASE_KEY if guarded else KEY
     empty()
     daemon, ctl = binaries()
     identity = t.run(str(daemon), "-v")
@@ -546,28 +577,58 @@ def kernel():
         candidate = r.shape(KEY)
         t.nft(r.replacement(KEY, "maintenance"))
         assert maintenance != candidate and r.shape(KEY) == maintenance
-        for version, _, prefix in FAMILIES:
+        for version, _, prefix in families:
             with ExitStack() as stack:
                 admin = stack.enter_context(t.connect(prefix + "2", 22))
                 clock = stack.enter_context(client(version, daemon, ctl))
+                clock_start = r.process_start(clock.proc.pid)
                 def check():
                     clock.check()
+                    assert r.process_start(clock.proc.pid) == clock_start
                     assert t.exchange(admin)
                 r.d.wait_for(lambda: clock.selected("2"), 20, check)
                 print(f"PASS IPv{version}_CHRONY_PRIMARY_SELECTED_NO_CLOCK_CAPABILITIES", flush=True)
-                with r.armed(KEY, maintenance, candidate) as (path, _):
-                    r.invoke_controller(path, KEY, "after")
+                with r.armed(key, maintenance, candidate, "lifecycle" if guarded else "short") as (path, _):
+                    seen = time.monotonic()
+                    ready = json.loads((path / "ready").read_text())
+                    handles = guard_handles() if guarded else None
+                    r.invoke_controller(path, key, "after")
                     assert r.shape(KEY) == candidate
                     old = stack.enter_context(t.connect(prefix + "2", 443))
-                    assert t.exchange(old)
+                    assert t.exchange(old) and t.reaches(prefix + "2", 443)
                     before = clock.ntpstats("2")["Total good RX"]
                     selection_wait(clock, proc, "post-controller-sample", lambda state:
                         clock.ntpstats("2")["Total good RX"] > before and state[prefix + "2"]["state"] == "*"
                         and state[prefix + "2"]["reach"] > 0, 3, check, baseline={prefix + "2": {"Total good RX": before}})
                     assert not (path / "result").exists()
                     print(f"PASS IPv{version}_CHRONY_FRESH_SAMPLES_AFTER_CONTROLLER_SIGKILL", flush=True)
-                    r.d.wait_for(lambda: (path / "result").exists(), 10, check)
+                    if guarded:
+                        # Wait from readiness, later than guard creation; no
+                        # mutation or worker restoration can explain denial.
+                        r.d.wait_for(lambda: time.monotonic() > seen + lease.SECONDS + .2, 12, check)
+                        assert r.shape(KEY) == candidate and not (path / "result").exists()
+                        assert r.process_start(ready["pid"]) == ready["start"]
+                        assert not t.exchange(old) and not t.reaches(prefix + "2", 443)
+                        assert guard_handles() == handles
+                        assert t.reaches(prefix + "2", 22)
+                        check()
+                        print(f"PASS IPv{version}_CHRONY_KERNEL_EXPIRY_WITH_CANDIDATE_AND_LIVE_WORKER", flush=True)
+                        baseline = {prefix + s: clock.ntpstats(s) for s in ("2", "3")}
+                        selection_wait(clock, proc, "post-guard-expiry-samples", lambda state:
+                            fresh_expiry_sources(baseline, {prefix + s: clock.ntpstats(s) for s in ("2", "3")},
+                                                 state, prefix + "2"), 5, check, baseline=baseline)
+                        assert r.shape(KEY) == candidate and not (path / "result").exists()
+                        assert r.process_start(ready["pid"]) == ready["start"]
+                        assert not t.exchange(old) and not t.reaches(prefix + "2", 443)
+                        assert t.reaches(prefix + "2", 22) and guard_handles() == handles
+                        check()
+                        print(f"PASS IPv{version}_CHRONY_FRESH_BOTH_PEER_SAMPLES_AFTER_EXPIRY_BEFORE_RESTORE", flush=True)
+                    r.d.wait_for(lambda: (path / "result").exists(), 25 if guarded else 10, check)
                     assert (path / "result").read_text() == "RESTORE_MAINTENANCE"
+                    if guarded:
+                        assert guard_handles() == handles
+                        print(f"PASS IPv{version}_CHRONY_PID1_RESTORES_AFTER_KERNEL_EXPIRY_WITHOUT_REARM", flush=True)
+                assert not path.exists() and not Path(f'/proc/{ready["pid"]}').exists()
                 assert r.shape(KEY) == maintenance and not t.exchange(old)
                 assert not t.reaches(prefix + "2", 443) and t.reaches(prefix + "2", 22)
                 before = clock.ntpstats("2")["Total good RX"]
@@ -623,7 +684,12 @@ def kernel():
                 assert r.shape(KEY) == maintenance and not t.exchange(old)
                 check()
                 print(f"PASS IPv{version}_CHRONY_PRIMARY_RETURN_UNAPPROVED_SOURCE_TRANSPORT_DENIED", flush=True)
-        print("PASS TIME_BOTH_CLIENTS_REAPED_PRIVATE_FILES_REMOVED", flush=True)
+                if guarded:
+                    assert guard_handles() == handles
+                    assert not t.reaches(prefix + "2", 443)
+                    print(f"PASS IPv{version}_CHRONY_GUARD_UNCHANGED_THROUGH_FAILOVER_REJECTION_AND_RETURN", flush=True)
+        label = "CLIENT" if guarded else "BOTH_CLIENTS"
+        print(f"PASS TIME_{label}_REAPED_PRIVATE_FILES_REMOVED", flush=True)
     finally:
         proc.stdin.close()
         try:
@@ -634,15 +700,58 @@ def kernel():
         proc.stdout.close()
         t.run(t.IP, "link", "del", "host0", success=False)
         t.run(t.IP, "link", "del", "peer0", success=False)
-        for family, name in (("inet", TABLE), ("netdev", LINK)):
+        for family, name in (("inet", TABLE), ("netdev", LINK), *(lease.TABLES if guarded else ())):
             t.nft(f"delete table {family} {name}\n", success=False)
         empty()
         assert proc.returncode == 0, "TIME_PEER_OR_SERVER_CLEANUP_FAILED"
     print("PASS TIME_PEER_LINKS_AND_RULES_CLEANED", flush=True)
-    print("RESULT SYNTHETIC_TIME_RECOVERY_OK_NO_CLOCK_OR_LIVE_APPLY", flush=True)
+    label = "GUARDED_" if guarded else ""
+    print(f"RESULT SYNTHETIC_TIME_{label}RECOVERY_OK_NO_CLOCK_OR_LIVE_APPLY", flush=True)
+
+
+def guarded_kernel():
+    lease_guard()
+    empty()
+    # Each family gets its own one-shot guard and owned teardown. Never delete
+    # an expired guard to rearm it for another attempt in the same namespace.
+    for family in (4, 6):
+        subprocess.run(["unshare", "--net", sys.executable, "-I", "-B", __file__, "--lease-case", str(family)],
+            env=dict(os.environ, TIME_LEASE_PARENT_NETNS=os.readlink("/proc/self/ns/net")),
+            check=True, timeout=240)
+        empty()
+    print("RESULT SYNTHETIC_DUAL_FAMILY_CHRONY_LEASE_OK_NO_CLOCK_OR_LIVE_APPLY", flush=True)
 
 
 class Tests(unittest.TestCase):
+    def test_guarded_scope_refuses_before_commands(self):
+        with patch(__name__ + ".guard"), patch.object(r, "guard"), patch.dict(os.environ, {"KC_TIME_LEASE_CI": "0"}), patch.object(t, "run") as command:
+            with self.assertRaisesRegex(RuntimeError, "TIME_LEASE_CI_OPT_IN_REQUIRED"):
+                guarded_kernel()
+            command.assert_not_called()
+        with patch(__name__ + ".guard"), patch.object(r, "guard"), patch(__name__ + ".lease_guard"), patch.object(t, "run") as command:
+            for value in (True, "4", 0, 5):
+                with self.assertRaisesRegex(ValueError, "FIXED_TIME_LEASE_FAMILY_REQUIRED"):
+                    kernel(family=value)
+            with patch.dict(os.environ, {"TIME_LEASE_PARENT_NETNS": "same"}), patch.object(os, "readlink", return_value="same"):
+                with self.assertRaisesRegex(RuntimeError, "DISTINCT_TIME_LEASE_NAMESPACE_REQUIRED"):
+                    kernel(family=4)
+            with patch.dict(os.environ, {"TIME_LEASE_PARENT_NETNS": ""}):
+                with self.assertRaisesRegex(RuntimeError, "DISTINCT_TIME_LEASE_NAMESPACE_REQUIRED"):
+                    kernel(family=6)
+            command.assert_not_called()
+
+    def test_expiry_continuity_rejects_cached_or_single_peer_samples(self):
+        state = {"primary": {"state": "*", "reach": 255}, "alternate": {"state": "+", "reach": 255}}
+        before = {ip: {"Total good RX": 10} for ip in state}
+        for primary, alternate, expected in ((10, 10, False), (12, 10, False), (10, 12, False), (11, 12, False), (12, 12, True)):
+            after = {"primary": {"Total good RX": primary}, "alternate": {"Total good RX": alternate}}
+            self.assertEqual(fresh_expiry_sources(before, after, state, "primary"), expected)
+        state["alternate"]["reach"] = 0
+        self.assertFalse(fresh_expiry_sources(before, after, state, "primary"))
+        state["alternate"]["reach"] = 255
+        state["primary"]["state"] = "?"
+        self.assertFalse(fresh_expiry_sources(before, after, state, "primary"))
+
     def test_real_peers_have_fixed_scope_no_upstream_and_no_clock_privileges(self):
         for address in ("192.0.2.2", "2001:db8:1::3"):
             config = server_config(address, Path("/private"))
@@ -793,6 +902,10 @@ class Tests(unittest.TestCase):
 if __name__ == "__main__":
     if sys.argv[1:] == ["--systemd"]:
         kernel()
+    elif sys.argv[1:] == ["--lease-systemd"]:
+        guarded_kernel()
+    elif len(sys.argv) == 3 and sys.argv[1] == "--lease-case" and sys.argv[2] in ("4", "6"):
+        kernel(family=int(sys.argv[2]))
     elif sys.argv[1:] == ["--peer"]:
         peer()
     else:

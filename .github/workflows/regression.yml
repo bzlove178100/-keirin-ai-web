@@ -428,6 +428,43 @@ jobs:
             sudo -n rm -rf -- "$client_root"
           fi
 
+  custody-time-qualification-lease:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test guarded chrony scope and fresh-sample rejection
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_time.py
+      - name: Extract CI chrony client without installing or starting a host service
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n apt-get update -qq
+          package_root=$(mktemp -d "$RUNNER_TEMP/kc-time-package.XXXXXX")
+          cd "$package_root"
+          apt-get download chrony
+          packages=(chrony_*.deb)
+          test "${#packages[@]}" -eq 1
+          dpkg-deb -f "${packages[0]}" Package Version
+          client_root="/run/kc-chrony-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          sudo -n mkdir -m 0755 "$client_root"
+          echo "KC_TIME_CLIENT_ROOT=$client_root" >> "$GITHUB_ENV"
+          printf 'KC_TIME_CI_ONLY\n' | sudo -n tee "$client_root/owned" > /dev/null
+          sudo -n dpkg-deb -x "${packages[0]}" "$client_root"
+      - name: Verify fresh chrony samples and late recovery through kernel expiry
+        run: sudo -n env KC_TIME_LEASE_CI=1 KC_TIME_CLIENT_ROOT="$KC_TIME_CLIENT_ROOT" KC_TIME_CI=1 KC_DHCP_CI=1 KC_DYNAMIC_RECOVERY_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_time.py --lease-systemd
+      - name: Remove only this run's extracted client
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          client_root="/run/kc-chrony-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [ -d "$client_root" ]; then
+            test ! -L "$client_root"
+            test "$(sudo -n cat "$client_root/owned")" = KC_TIME_CI_ONLY
+            sudo -n rm -rf -- "$client_root"
+          fi
+
   custody-resolved-cache:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

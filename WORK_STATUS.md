@@ -1,5 +1,17 @@
 # Work status
 
+## Current slice: real chrony clients under kernel qualification expiry
+
+Updated 2026-10-05 (Asia/Tokyo). PR #199 is complete at main `b935837609a54306bf33f7ff98a3e835fb229046`, tree `4846850a4832bd551c103b0dc9c4facca0945449`. Independent main workflows all passed: regression `37289811718` (24/24 jobs), runtime `37289811518`, UI `37289811508`, AWS `37289811562`, PostgreSQL `37289811763`. DHCPv6 job `111697308154` passed all existing controls and 16 guarded records. Exact PR/main receipts: https://github.com/bzlove178100/-keirin-ai-web/pull/199 . Older current-slice headings below are history.
+
+Compose the real chrony client lifecycle with the already prepared `time-lease` profile. Each family runs in its own private namespace with a fresh one-shot eight-second guard, unchanged time policy and a 22-second independent restoring worker. No guard is deleted/rearmed between attempts in the same namespace.
+
+Require actual old/new qualification success, controller SIGKILL, then kernel expiry while candidate rules and the same worker remain. After observed expiry, both approved peers must supply two NEW good samples within five seconds to the same capability-free client, with the primary selected, both reachable and existing/new management preserved. The same worker must then restore maintenance without rearming. Existing post-controller (3s), post-restore (two samples/5s), fault preparation (four fresh samples from both peers, one completed burst 4/16, 12s), silent/wrong-origin failover (35s), rejection and approved return (20s) contracts remain unchanged. Guard handles must survive the full failover/rejection/return lifecycle and be removed only by owned teardown.
+
+The legacy fifteen-record unguarded job remains mandatory. One new mandatory guarded job has separate IPv4/IPv6 cases and retains real interleaved/kernel RX/TX evidence, wrong-origin/no-response controls, unapproved-source/TCP denial and complete process/file/link/rule cleanup. Local 15 time + 6 lease + 6 shared recovery + 8 context tests passed (35). This is local evidence only; the PR must record actual guarded kernel results, all five final-head workflows/all 25 regression jobs, and independent main-push receipts before reporting integration complete.
+
+No clock is adjusted: clients and real servers run as nobody with no capabilities, NoNewPrivs and `-x -U`. A same-clock synthetic reference does not establish external UTC accuracy, authenticated NTP/NTS or live-host time qualification. Next after successful integration: guarded restricted-rescue composition. Arbitrary endpoint/address changes, reboot/suspend, privileged guard tampering and first live installation remain unqualified. All runtime/provider/credential/prediction/DB/data-fetch/scheduler/report gates remain OFF; no phone/AWS/credential step is needed.
+
 ## Current slice: DHCPv6 under kernel qualification expiry
 
 Updated 2026-10-05 (Asia/Tokyo). Resume confirmed PR #198 merged at main `06440cab6f52a63405500ade0f3c286c073d98e2`, tree `b2c14005ee5a4dba1fd720b9d9fcdcf982a3794c`. All independent main-push workflows succeeded: regression `37252751176` (24/24 jobs), runtime `37252751169`, UI `37252751187`, AWS `37252751155`, PostgreSQL `37252751170`. Guarded DNS job `111583551262` succeeded. The prior in-progress main receipt is resolved; older current-slice headings below are historical.
