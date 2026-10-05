@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import select
+import signal
 import shutil
 import socket
 import stat
@@ -93,17 +94,30 @@ class Server:
         self.lock = threading.Lock()
         self.mode, self.requests, self.responses, self.bad, self.error = "good", 0, 0, 0, None
         af = socket.AF_INET6 if ":" in address else socket.AF_INET
-        self.sock = stack.enter_context(socket.socket(af, socket.SOCK_DGRAM))
+        self.sock = socket.socket(af, socket.SOCK_DGRAM)
+        self.stopping = threading.Event()
+        self.sock.settimeout(0.1)
         self.sock.setsockopt(socket.SOL_SOCKET, RX_TIMESTAMP, 1)
         if af == socket.AF_INET6:
             self.sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
         self.sock.bind((address, 123))
-        threading.Thread(target=self.serve, daemon=True).start()
+        self.thread = threading.Thread(target=self.serve, daemon=True)
+        self.thread.start()
+        stack.callback(self.close)
+
+    def close(self):
+        self.stopping.set()
+        self.thread.join(timeout=1)
+        self.sock.close()
+        assert not self.thread.is_alive(), "NTP_FAULT_THREAD_NOT_REAPED"
 
     def serve(self):
         try:
-            while True:
-                data, source, received = received_packet(self.sock)
+            while not self.stopping.is_set():
+                try:
+                    data, source, received = received_packet(self.sock)
+                except socket.timeout:
+                    continue
                 with self.lock:
                     self.requests += 1
                     if self.requests > 512:
@@ -116,6 +130,102 @@ class Server:
         except BaseException as exc:
             self.error = type(exc).__name__
 
+
+
+def no_clock_args(daemon, version, config):
+    return ["/usr/bin/setpriv", "--reuid=65534", "--regid=65534", "--clear-groups",
+            "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--no-new-privs",
+            str(daemon), "-x", "-U", "-d", "-u", "nobody", "-" + str(version), "-f", str(config)]
+
+
+def server_config(address, directory):
+    if address not in {prefix + suffix for _, _, prefix in FAMILIES for suffix in ("2", "3")}:
+        raise ValueError("FIXED_CHRONY_SERVER_ADDRESS_REQUIRED")
+    host = "2001:db8:1::1" if ":" in address else "192.0.2.1"
+    # A same-clock isolated reference, not proof of external UTC accuracy.
+    return (f"bindaddress {address}\nallow {host}\nlocal stratum 1\nport 123\ncmdport 0\n"
+            f"bindcmdaddress {directory}/command.sock\npidfile {directory}/pid\n"
+            f"driftfile {directory}/drift\n")
+
+
+class ChronyServer:
+    """Healthy real chronyd; explicit socket handoff to malformed/silent peer."""
+    def __init__(self, stack, address, daemon, ctl):
+        self.address, self.daemon, self.ctl = address, daemon, ctl
+        self.directory = Path(tempfile.mkdtemp(prefix="kc-time-server-", dir="/run"))
+        os.chown(self.directory, 65534, 65534)
+        self.proc, self.fault, self.mode = None, None, None
+        self.fault_stack = ExitStack()
+        self.counts = {"requests": 0, "responses": 0, "bad": 0}
+        stack.callback(self.close)
+        self.change("good")
+
+    def stop(self):
+        if self.fault is not None:
+            self.fault_stack.close()
+            self.counts = {key: self.counts[key] + getattr(self.fault, key) for key in self.counts}
+            self.fault = None
+        if self.proc is not None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait(timeout=2)
+            assert not Path(f"/proc/{self.proc.pid}").exists()
+            self.proc = None
+
+    def close(self):
+        self.stop()
+        shutil.rmtree(self.directory)
+        assert not self.directory.exists()
+
+    def change(self, mode):
+        if mode not in ("good", "silent", "origin"):
+            raise ValueError("FIXED_TIME_MODE_REQUIRED")
+        self.stop()
+        self.mode = mode
+        if mode == "good":
+            config = self.directory / "config"
+            config.write_text(server_config(self.address, self.directory))
+            config.chmod(0o644)
+            with (self.directory / "log").open("ab") as log:
+                self.proc = subprocess.Popen(no_clock_args(self.daemon, 6 if ":" in self.address else 4, config),
+                    stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=ENV)
+            try:
+                r.d.wait_for(lambda: (self.directory / "command.sock").exists() or self.proc.poll() is not None, 5)
+                self.check()
+            except BaseException:
+                print((self.directory / "log").read_text(errors="replace")[-5000:], file=sys.stderr)
+                raise
+        else:
+            self.fault = Server(self.fault_stack, self.address)
+            with self.fault.lock:
+                self.fault.mode = mode
+        return self.report()
+
+    def check(self):
+        if self.mode == "good":
+            Client(self.proc, self.directory, self.ctl, "").check()
+        else:
+            assert self.fault.error is None, "NTP_FAULT_SERVER_FAILED"
+
+    def timestamping(self):
+        self.check()
+        assert self.mode == "good"
+        output = t.run(str(self.ctl), "-n", "-h", str(self.directory / "command.sock"), "serverstats").stdout.decode()
+        assert len(output) < 4096
+        fields = {key.strip(): int(value.strip()) for key, value in
+                  (line.split(":", 1) for line in output.splitlines() if ":" in line)}
+        return {key: fields[key] for key in ("Interleaved NTP packets", "NTP kernel RX timestamps",
+                                            "NTP kernel TX timestamps", "NTP daemon TX timestamps")}
+
+    def report(self):
+        self.check()
+        if self.fault is None:
+            return dict(self.counts)
+        with self.fault.lock:
+            return {key: self.counts[key] + getattr(self.fault, key) for key in self.counts}
 
 def policy(mode="maintenance"):
     if mode not in ("maintenance", "qualification"):
@@ -149,6 +259,10 @@ def policy(mode="maintenance"):
 def peer():
     guard()
     assert os.readlink("/proc/self/ns/net") != os.environ.get("FIXTURE_PARENT_NETNS")
+    def shutdown(_signal, _frame):
+        raise SystemExit(0)
+    signal.signal(signal.SIGTERM, shutdown)
+    daemon, ctl = binaries(report=False)
     with ExitStack() as stack:
         servers = {}
         print("READY", flush=True)
@@ -160,26 +274,35 @@ def peer():
                 t.run(t.IP, "link", "set", "peer0", "addrgenmode", "none")
                 t.run("sysctl", "-qw", "net.ipv6.conf.peer0.accept_ra=0")
                 t.setup("peer0", t.MAC_PEER, ("2", "3", "9"))
+                # Only this private peer namespace: permit port 123 without caps.
+                t.run("sysctl", "-qw", "net.ipv4.ip_unprivileged_port_start=0")
                 for _, _, prefix in FAMILIES:
                     for suffix in ("2", "3", "9"):
-                        servers[prefix + suffix] = Server(stack, prefix + suffix)
+                        servers[prefix + suffix] = (Server(stack, prefix + suffix) if suffix == "9"
+                                                    else ChronyServer(stack, prefix + suffix, daemon, ctl))
                     for port in (22, 123, 443):
                         t.listen(stack, prefix + "2", port)
                 result = True
             elif msg[0] == "mode":
                 _, address, mode = msg
                 assert mode in ("good", "silent", "origin")
-                with servers[address].lock:
-                    server = servers[address]
-                    server.mode = mode
-                    result = {"requests": server.requests, "responses": server.responses, "bad": server.bad}
+                result = servers[address].change(mode)
+            elif msg[0] == "timestamping":
+                result = servers[msg[1]].timestamping()
             elif msg[0] == "counts":
                 server = servers[msg[1]]
-                with server.lock:
-                    result = {"requests": server.requests, "responses": server.responses, "bad": server.bad}
+                if isinstance(server, ChronyServer):
+                    result = server.report()
+                else:
+                    with server.lock:
+                        result = {"requests": server.requests, "responses": server.responses, "bad": server.bad}
             else:
                 raise ValueError("FIXED_TIME_RPC_REQUIRED")
-            assert all(s.error is None for s in servers.values()), "NTP_SERVER_FAILED"
+            for server in servers.values():
+                if isinstance(server, ChronyServer):
+                    server.check()
+                else:
+                    assert server.error is None, "NTP_SERVER_FAILED"
             print(json.dumps(result), flush=True)
 
 
@@ -201,7 +324,7 @@ def probe(address, success=True):
             assert len(result) == 48 and result[0] == 0x24 and result[24:32] == data[40:48]
 
 
-def binaries():
+def binaries(report=True):
     root = Path(os.environ.get("KC_TIME_CLIENT_ROOT", ""))
     if not re.fullmatch(r"/run/kc-chrony-ci-[0-9]+-[0-9]+", str(root)):
         raise ValueError("FIXED_CI_CLIENT_DIRECTORY_REQUIRED")
@@ -212,7 +335,8 @@ def binaries():
     assert (root / "owned").read_text() == "KC_TIME_CI_ONLY\n"
     for path in paths[1:]:
         assert path.is_file()
-        print("CLIENT", path.name, hashlib.sha256(path.read_bytes()).hexdigest(), flush=True)
+        if report:
+            print("CLIENT", path.name, hashlib.sha256(path.read_bytes()).hexdigest(), flush=True)
     return paths[1:]
 
 
@@ -353,8 +477,8 @@ def client(version, daemon, ctl):
     proc = None
     try:
         config = directory / "config"
-        config.write_text(f'''server {prefix}2 iburst minpoll 0 maxpoll 0 prefer
-server {prefix}3 iburst minpoll 0 maxpoll 0
+        config.write_text(f'''server {prefix}2 iburst minpoll 0 maxpoll 0 xleave prefer
+server {prefix}3 iburst minpoll 0 maxpoll 0 xleave
 minsamples 4
 maxsamples 8
 port 0
@@ -367,8 +491,7 @@ logdir {directory}
 ''')
         config.chmod(0o644)
         with (directory / "log").open("wb") as log:
-            args = ["/usr/bin/setpriv", "--reuid=65534", "--regid=65534", "--clear-groups", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--no-new-privs",
-                    str(daemon), "-x", "-U", "-d", "-u", "nobody", "-" + str(version), "-f", str(config)]
+            args = no_clock_args(daemon, version, config)
             proc = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=ENV)
             r.d.wait_for(lambda: (directory / "command.sock").exists() or proc.poll() is not None, 5)
             value = Client(proc, directory, ctl, prefix)
@@ -461,6 +584,13 @@ def kernel():
                         current = {prefix + s: clock.ntpstats(s) for s in ("2", "3")}
                         return fresh_sources(baseline, current, state, prefix + "2") and clock.sampling_idle()
                     selection_wait(clock, proc, mode + "-prime", primed, 12, check, baseline=baseline)
+                    interleaved = {prefix + s: clock.ntpdata(s)["Interleaved"] for s in ("2", "3")}
+                    assert set(interleaved.values()) == {"Yes"}, "KERNEL_TX_INTERLEAVED_PEERS_REQUIRED"
+                    server_stamps = {prefix + s: t.rpc(proc, "timestamping", prefix + s) for s in ("2", "3")}
+                    assert all(x["NTP kernel TX timestamps"] > 0 and x["NTP kernel RX timestamps"] > 0
+                               for x in server_stamps.values()), "REAL_SERVER_KERNEL_TIMESTAMPS_REQUIRED"
+                    print("TIME_INTERLEAVED_PEERS", version, mode, json.dumps({"client": interleaved,
+                          "server": server_stamps}), flush=True)
                     print("TIME_FRESH_PHASE", version, mode, json.dumps({"before": baseline,
                           "after": {prefix + s: clock.ntpstats(s) for s in ("2", "3")}, "sources": clock.state(),
                           "raw_measurements": clock.measurements(), "acquisition": "one-burst-4/16-per-source",
@@ -495,13 +625,12 @@ def kernel():
                 print(f"PASS IPv{version}_CHRONY_PRIMARY_RETURN_UNAPPROVED_SOURCE_TRANSPORT_DENIED", flush=True)
         print("PASS TIME_BOTH_CLIENTS_REAPED_PRIVATE_FILES_REMOVED", flush=True)
     finally:
-        proc.terminate()
+        proc.stdin.close()
         try:
-            proc.wait(timeout=3)
+            proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait(timeout=3)
-        proc.stdin.close()
         proc.stdout.close()
         t.run(t.IP, "link", "del", "host0", success=False)
         t.run(t.IP, "link", "del", "peer0", success=False)
@@ -513,6 +642,19 @@ def kernel():
 
 
 class Tests(unittest.TestCase):
+    def test_real_peers_have_fixed_scope_no_upstream_and_no_clock_privileges(self):
+        for address in ("192.0.2.2", "2001:db8:1::3"):
+            config = server_config(address, Path("/private"))
+            self.assertIn("bindaddress " + address + "\n", config)
+            self.assertIn("local stratum 1\n", config)
+            for bad in ("server ", "pool ", "makestep", "rtcsync", "maxdelaydevratio", "noclientlog"):
+                self.assertNotIn(bad, config)
+        with self.assertRaises(ValueError):
+            server_config("8.8.8.8", Path("/private"))
+        args = no_clock_args(Path("/chronyd"), 4, Path("/config"))
+        for expected in ("-x", "-U", "--bounding-set=-all", "--no-new-privs", "--reuid=65534"):
+            self.assertIn(expected, args)
+
     def test_bounded_burst_targets_only_fixed_sources_and_rejects_failure(self):
         for prefix in ("192.0.2.", "2001:db8:1::"):
             clock = Client(Mock(), Path("/private"), Path("/chronyc"), prefix)
