@@ -1,5 +1,49 @@
 # Disposable guest suspend/boot foundation — no live activation
 
+## Packet experiment added after the foundation (2026-10-05)
+
+The foundation below completed in PR #204; it remains a separate mandatory job.
+The new experiment runs two fresh guests using the same diskless/no-NIC QEMU
+command. Inside each guest only, a veth connects a distinct peer network namespace.
+Fixed 192.0.2.1/2 and 2001:db8:1::1/2 addresses carry TCP/443 qualification and
+TCP/22 management echo. No guest route or backend reaches the real network.
+
+The bounded initramfs contains the fixed guest code, existing qualification
+renderer, system Python/ip/nft/kmod and their packaged libraries, and matching
+installed kernel modules discovered with read-only modprobe --show-depends.
+The host never inserts modules or alters networking. Module/image/kernel/emulator
+hashes are printed; no host environment, secrets, configuration or /etc is copied.
+
+Both cases first prove reachable ports under an empty fresh-boot ruleset. This is
+an unprotected-startup negative control and cannot establish safe startup. Next,
+install the exact existing eight-second inet/netdev guard once and prove both
+existing and new dual-family connections while it is live. Keep original rule
+handles/policy and an unrelated sentinel unchanged throughout the measurement.
+
+The awake control waits ten seconds and must deny all qualification probes while
+all management probes survive. The S3 case requires actual QMP SUSPEND, suspended
+state, twelve host seconds, system_wakeup/WAKEUP and real clock evidence. After
+resume, explicit old/new IPv4/IPv6 qualification probes precede any nft read/write.
+They must finish within seven monotonic seconds of original installation, while
+at least ten boottime seconds elapsed. No worker, controller, refresh or restoration
+transaction may run ahead of these probes. This is not a trace of every packet or
+proof about the kernel's first post-resume instruction.
+
+All four denied yields SUSPEND_EXPIRY_OBSERVED. All four allowed yields
+BLOCKED_SUSPEND_EXPIRY_GAP. Mixed/late/inconsistent observations fail instead of
+being interpreted as a successful boundary. The diagnostic job can succeed while
+reporting the blocking gap; activation_allowed stays false in either outcome.
+Both cases must then show original ordinary awake expiry, management continuity,
+unchanged rules and full guest/host-owned cleanup. There are nine mandatory packet
+records and 28 regression jobs; the six original VM-foundation records remain.
+
+Actual results are not inferred from upstream source or local models: the final
+PR/main receipts contain measured packets, clocks, boot IDs and exact input hashes.
+The existing upstream source finding below does not establish a version-matched
+clock implementation. Closed-policy startup ordering, external authenticated
+management, arbitrary endpoints, privileged edits and live installation remain
+unqualified. All activation gates remain OFF.
+
 The new mandatory CI job builds a static C PID 1 and a minimal initramfs containing
 only that program and its initial console. An unprivileged Python supervisor runs
 QEMU TCG with the disposable runner's installed kernel copied as read-only input.
