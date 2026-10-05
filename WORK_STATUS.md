@@ -1,5 +1,17 @@
 # Work status
 
+## Current slice: DHCP-delivered DNS under kernel qualification expiry
+
+Updated 2026-10-05 (Asia/Tokyo). PR #197 is merged at main `b9013dc9c8bd144771b418ecdeec0d1d32dad5a6`, tree `88a9ba1fdcee45e8b58645f6eead4d4931a1d5dc`. Independent main workflows all passed: regression `37250898062` (23 jobs), runtime `37250898059` (exact main SHA), UI `37250898068`, AWS `37250898109`, PostgreSQL `37250898048`. Dynamic guard job `111578110677` passed twelve records. Current main and these receipts were rechecked before this slice. Older pending/blocker descriptions are history, not a reason to repeat completed work.
+
+Add explicit `dhcp-dns-lease` admission using the unchanged DHCP-DNS maintenance/candidate policy and existing fixed DHCPv4 guard tuple. Preparation creates and seals the independent eight-second guard; worker readiness and both controller checks require its original bound receipt. No DNS observation grants permission or alters the fixed allowed resolver. Legacy unguarded execution remains a separate mandatory control.
+
+The new mandatory private-netns CI case runs real networkd, resolved and a private bus. After controller SIGKILL it must show old/new qualification success, then kernel expiry with candidate rules still present and the same 22-second worker alive. Cache-flushed A and AAAA queries must still reach the approved upstream. Actual DHCP renewal must deliver an unapproved DNS address without widening access, followed by late PID 1 maintenance restoration without guard rearming. Existing distinct negative transactions, approved return, killed/mixed observations, daemon identity checks and genuine DHCP lease/address/route/DNS expiry continue under the same expired guard. Owned cleanup must remove guards as well as the base tables, links, processes and private files.
+
+Validation pending in disposable CI; local 6 recovery + 5 DHCP-DNS observation + 6 shared recovery tests passed (17). Do not merge until all five final workflows and all 24 regression jobs pass. Preserve any failed run and change the condition before retry. Exact code/final/main acceptance will be recorded in the PR; no live apply is authorized by this work.
+
+Still unqualified: guarded DHCPv6, chrony client and rescue composition; arbitrary endpoint changes; reboot/suspend; privileged guard tampering; first live installation. Next dependency slice is DHCPv6 under the same prepared-guard boundary. Runtime/provider/credential/prediction/DB/data-fetch/scheduler/report gates remain OFF; no phone/AWS/credential operation is needed.
+
 ## Current slice: guarded dynamic dependencies and restoration after expiry
 
 Updated 2026-10-05 (Asia/Tokyo). Start from PR #196 main `43d885ec9b99ab9c74f61260912f39c03a1509ac`, tree `bb58aed189d4ed5299a6b71f47df9c138a0b7a58`. All five independent main-push workflows and 22 regression jobs passed; main regression `37249256571`, runtime `37249256614` (exact main SHA verified at 09:59:08 JST), time `111573315450` (15 records) and lease `111573315341` (35 records). PR #196 is merged; older DRAFT/BLOCKER text below is historical and superseded by its final receipt.

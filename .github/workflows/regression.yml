@@ -503,3 +503,17 @@ jobs:
         run: /usr/bin/python3 -I -B tests/test_secret_custody_dynamic_lease.py
       - name: Verify kernel expiry and late recovery preserve DHCP and RA lifecycles
         run: sudo -n env KC_DYNAMIC_LEASE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dynamic_lease.py --systemd
+
+  custody-dhcp-dns-qualification-lease:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test guarded DHCP DNS admission and isolation
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_dhcp_dns_recovery.py
+      - name: Install query client in disposable CI
+        run: |
+          sudo -n apt-get update -qq
+          sudo -n apt-get install -y --no-install-recommends bind9-dnsutils
+      - name: Verify DNS renewal and late recovery through kernel expiry
+        run: sudo -n env KC_DHCP_DNS_LEASE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_DNS_CI=1 KC_RESOLVED_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_dhcp_dns_recovery.py --lease-systemd

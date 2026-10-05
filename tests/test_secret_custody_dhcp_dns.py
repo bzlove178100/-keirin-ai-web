@@ -485,7 +485,7 @@ def kernel(recovery=None):
         proc.stdin.close()
         proc.stdout.close()
         t.run(t.IP, "link", "del", "host0", success=False)
-        for family, name in r.tables(4):
+        for family, name in (*r.tables(4), *(recovery.cleanup_tables() if recovery else ())):
             t.nft(f"delete table {family} {name}\n", success=False)
     z.y.empty()
     print("PASS DHCP_DNS_PEER_LINK_RULE_CLEANUP", flush=True)
