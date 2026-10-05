@@ -540,6 +540,21 @@ jobs:
       - name: Verify actual interface replacement and worker loss around final readiness
         run: sudo -n env KC_RECOVERY_CONTEXT_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_recovery_context.py --systemd
 
+  custody-suspend-packets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test guest packet evidence and isolation guards
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_suspend_packets.py
+      - name: Install disposable guest experiment tools
+        run: sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends qemu-system-x86 nftables iproute2 kmod
+      - name: Measure original kernel guard with real packets across guest S3
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_suspend_packets.py --vm
+
   custody-suspend-vm:
     runs-on: ubuntu-24.04
     timeout-minutes: 7

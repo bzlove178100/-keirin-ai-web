@@ -79,6 +79,11 @@ int main(void) {
     int fd = open("/run/probe.marker", O_WRONLY | O_CREAT | O_EXCL, 0600);
     if (fd < 0) fail("MARKER_CREATE_REQUIRED");
     close(fd);
+#ifdef KC_PACKET_PROBE
+    if (!strstr(cmdline, " kc_packet_probe=1 ")) fail("FIXED_PACKET_OPT_IN_REQUIRED");
+    execl("/usr/bin/python3", "python3", "-I", "-B", "/probe.py", (char *)NULL);
+    fail("PACKET_GUEST_EXEC_FAILED");
+#endif
     for (;;) {
         int command = getchar();
         if (command == 's') {
