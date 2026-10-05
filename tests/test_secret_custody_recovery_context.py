@@ -275,6 +275,25 @@ class Tests(unittest.TestCase):
                 r.transition(4, [], "qualification", verify=lambda: (_ for _ in ()).throw(RuntimeError("worker-lost")))
             mutate.assert_not_called()
 
+    def test_guarded_rescue_binds_both_links_and_refuses_rescue_only_drift(self):
+        links = {name: {"ifname": name, "ifindex": index, "address": mac,
+                       "link_type": "ether", "linkinfo": {"info_kind": "veth"}}
+                 for name, index, mac in (("host0", 2, t.MAC_HOST), ("rescue0", 4, "02:00:00:00:02:01"))}
+        def report(*args):
+            return subprocess.CompletedProcess(args, 0, stdout=json.dumps([links[args[-1]]]))
+        with patch.object(t, "run", side_effect=report), patch.object(r.Path, "read_text", return_value="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), patch.object(os, "readlink", return_value="net:[123]"):
+            for version in ("rescue", "rescue-lease"):
+                expected = r.recovery_context(version)
+                self.assertEqual(set(expected["interfaces"]), {"host0", "rescue0"})
+                data = {"version": version, "context": expected}
+                r.require_context(data)
+                for field, changed in (("ifindex", 6), ("address", CHANGED_MAC)):
+                    original = links["rescue0"][field]
+                    links["rescue0"][field] = changed
+                    with self.assertRaisesRegex(RuntimeError, "RECOVERY_CONTEXT_CHANGED_STOP"):
+                        r.require_context(data)
+                    links["rescue0"][field] = original
+
     def test_other_attempt_or_context_cannot_reuse_readiness(self):
         data = {"version": 4, "attempt": "a" * 32, "context": {"boot": "a"}, "netns": "net:[2]"}
         with tempfile.TemporaryDirectory() as value:

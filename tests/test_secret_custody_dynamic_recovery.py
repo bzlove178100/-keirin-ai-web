@@ -36,7 +36,8 @@ w = module("watchdog", "test_secret_custody_network_watchdog.py")
 UNRELATED = "kc_dynamic_unrelated"
 WINDOWS = {"short": 5, "lifecycle": 22}
 GUARDED = {"time-lease": ("time", "time"), "dhcp4-lease": (4, "dhcp4"), "ra6-lease": (6, "ra6"),
-           "dhcp-dns-lease": ("dhcp-dns", "dhcp4"), "dhcp6-lease": ("dhcp6", "ra6")}
+           "dhcp-dns-lease": ("dhcp-dns", "dhcp4"), "dhcp6-lease": ("dhcp6", "ra6"),
+           "rescue-lease": ("rescue", "dhcp4")}
 
 
 def guard():
@@ -141,11 +142,12 @@ def process_start(pid):
 
 def recovery_context(version):
     tables(version)
+    base = GUARDED.get(version, (version, None))[0]
     boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
     if str(uuid.UUID(boot)) != boot:
         raise ValueError("BOOT_ID_REQUIRED")
     interfaces = {}
-    for name in (("host0", "rescue0") if version == "rescue" else ("host0",)):
+    for name in (("host0", "rescue0") if base == "rescue" else ("host0",)):
         output = t.run(t.IP, "-j", "-d", "link", "show", "dev", name).stdout
         if len(output) > 16384:
             raise ValueError("INTERFACE_REPORT_BOUND")
@@ -695,9 +697,9 @@ if __name__ == "__main__":
         print("RESULT SYNTHETIC_DYNAMIC_RECOVERY_OK_NO_LIVE_APPLY", flush=True)
     elif len(args) == 2 and args[0] == "--peer" and args[1] in ("4", "6"):
         peer(int(args[1]))
-    elif len(args) == 3 and args[0] == "--worker" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "time-lease", "dhcp4-lease", "ra6-lease", "dhcp-dns-lease", "dhcp6-lease", "dhcp-dns", "rescue"):
+    elif len(args) == 3 and args[0] == "--worker" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "time-lease", "dhcp4-lease", "ra6-lease", "dhcp-dns-lease", "dhcp6-lease", "dhcp-dns", "rescue", "rescue-lease"):
         worker(args[1], int(args[2]) if args[2] in ("4", "6") else args[2])
-    elif len(args) == 4 and args[0] == "--controller" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "time-lease", "dhcp4-lease", "ra6-lease", "dhcp-dns-lease", "dhcp6-lease", "dhcp-dns", "rescue") and args[3] in ("before", "after"):
+    elif len(args) == 4 and args[0] == "--controller" and args[2] in ("4", "6", "dhcp6", "pmtu4", "pmtu6", "dns", "time", "time-lease", "dhcp4-lease", "ra6-lease", "dhcp-dns-lease", "dhcp6-lease", "dhcp-dns", "rescue", "rescue-lease") and args[3] in ("before", "after"):
         controller(args[1], int(args[2]) if args[2] in ("4", "6") else args[2], args[3])
     else:
         unittest.main(verbosity=2)
