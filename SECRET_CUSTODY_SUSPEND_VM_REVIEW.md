@@ -2,6 +2,12 @@
 
 ## Packet experiment added after the foundation (2026-10-05)
 
+The first packet CI attempt stopped before VM launch: job 111758239014 failed
+while resolving an assumed standalone nft_counter module. Remove that standalone
+module assumption and require the actual counter-bearing nft rule installation
+and live snapshot to succeed. Dependency failures now preserve stderr. No timing
+or packet requirement is relaxed; a new commit, not an unchanged rerun, tests this.
+
 The foundation below completed in PR #204; it remains a separate mandatory job.
 The new experiment runs two fresh guests using the same diskless/no-NIC QEMU
 command. Inside each guest only, a veth connects a distinct peer network namespace.
@@ -11,7 +17,7 @@ TCP/22 management echo. No guest route or backend reaches the real network.
 The bounded initramfs contains the fixed guest code, existing qualification
 renderer, system Python/ip/nft/kmod and their packaged libraries, and matching
 installed kernel modules discovered with read-only modprobe --show-depends.
-The host never inserts modules or alters networking. Module/image/kernel/emulator
+The experiment driver never inserts host modules or alters host networking. Module/image/kernel/emulator
 hashes are printed; no host environment, secrets, configuration or /etc is copied.
 
 Both cases first prove reachable ports under an empty fresh-boot ruleset. This is
@@ -48,8 +54,11 @@ The new mandatory CI job builds a static C PID 1 and a minimal initramfs contain
 only that program and its initial console. An unprivileged Python supervisor runs
 QEMU TCG with the disposable runner's installed kernel copied as read-only input.
 The manifest prints the actual kernel release, kernel/initramfs/QEMU SHA-256 and
-emulator version. No new host kernel or host service is installed. QEMU is installed
-only in the disposable CI runner; no cloud resource or hosted runtime is enabled.
+emulator version. No new host kernel is installed. QEMU packages are installed
+only in the disposable CI runner; their package scripts may install service metadata
+(the observed log creates qemu-kvm.service). The experiment explicitly uses TCG and
+does not invoke that service or KVM. Package-script side effects are not claimed
+absent. No cloud resource or hosted runtime is enabled.
 
 ## Isolation and observation contract
 

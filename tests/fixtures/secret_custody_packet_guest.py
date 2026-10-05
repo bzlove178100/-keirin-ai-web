@@ -149,7 +149,7 @@ def main():
         raise RuntimeError('FIXED_PACKET_CASE_REQUIRED')
     spec = importlib.util.spec_from_file_location('lease', '/lease.py')
     lease = importlib.util.module_from_spec(spec); spec.loader.exec_module(lease)
-    run('/sbin/modprobe', '-C', '/module-config', '-a', 'ipv6', 'veth', 'nf_tables', 'nft_counter')
+    run('/sbin/modprobe', '-C', '/module-config', '-a', 'ipv6', 'veth', 'nf_tables')
     if [r for r in json.loads(run(NFT, '-j', 'list', 'ruleset'))['nftables'] if 'metainfo' not in r]:
         raise RuntimeError('EMPTY_GUEST_RULESET_REQUIRED')
     parent, child = socket.socketpair(type=socket.SOCK_SEQPACKET)

@@ -23,7 +23,7 @@ from unittest.mock import patch
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('vm', HERE / 'test_secret_custody_suspend_vm.py')
 vm = importlib.util.module_from_spec(spec); spec.loader.exec_module(vm)
-MODULES = ('ipv6', 'veth', 'nf_tables', 'nft_counter')
+MODULES = ('ipv6', 'veth', 'nf_tables')
 
 
 def guard():
@@ -95,8 +95,11 @@ def payload(path):
     empty = path / 'module-config'; empty.mkdir()
     manifest = []
     for module in MODULES:
-        output = subprocess.run(['/usr/sbin/modprobe', '-C', str(empty), '--show-depends', module],
-                                check=True, capture_output=True, text=True, timeout=5).stdout
+        dependency = subprocess.run(['/usr/sbin/modprobe', '-C', str(empty), '--show-depends', module],
+                                    capture_output=True, text=True, timeout=5)
+        if dependency.returncode:
+            raise RuntimeError('MODULE_DISCOVERY_FAILED ' + module + ' ' + dependency.stderr[-2000:])
+        output = dependency.stdout
         for line in output.splitlines():
             if line.startswith('builtin '): continue
             parts = line.split()
