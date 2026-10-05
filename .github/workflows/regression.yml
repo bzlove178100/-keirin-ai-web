@@ -551,6 +551,8 @@ jobs:
         run: sudo -n env KC_QUALIFICATION_LEASE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_qualification_lease.py --systemd
       - name: Refuse consumed recovery attempts and resume the same paused worker
         run: sudo -n env KC_RECOVERY_RESTART_CI=1 KC_QUALIFICATION_LEASE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_qualification_lease.py --restart-systemd
+      - name: Reject elapsed boottime and foreign time namespace before admission
+        run: sudo -n env KC_SUSPEND_CLOCK_CI=1 KC_QUALIFICATION_LEASE_CI=1 KC_DYNAMIC_RECOVERY_CI=1 KC_DHCP_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_qualification_lease.py --clock-systemd
 
   custody-dynamic-qualification-lease:
     runs-on: ubuntu-24.04

@@ -28,6 +28,7 @@ lease = module("lease", HERE.parent / "review/secret_custody_qualification_lease
 CASES = ("normal", "worker-loss", "delayed-apply", "identity-drift",
          "guarded-normal", "guarded-missing", "guarded-changed", "guarded-expired", "guarded-recreated")
 RESTART_CASES = ("restart-before", "restart-after", "paused-worker")
+CLOCK_CASES = ("clock-lease", "clock-readiness", "clock-namespace")
 PREFIXES = ("192.0.2.", "2001:db8:1::")
 UNRELATED = "kc_lease_unrelated"
 
@@ -42,6 +43,70 @@ def restart_guard():
     guard()
     if os.environ.get("KC_RECOVERY_RESTART_CI") != "1":
         raise RuntimeError("RECOVERY_RESTART_CI_OPT_IN_REQUIRED")
+
+
+def clock_guard():
+    guard()
+    if os.environ.get("KC_SUSPEND_CLOCK_CI") != "1":
+        raise RuntimeError("SUSPEND_CLOCK_CI_OPT_IN_REQUIRED")
+
+
+def clock_controller(value, name):
+    """Fixed CI-only clock fault, never a production environment hook."""
+    clock_guard()
+    if name not in CLOCK_CASES:
+        raise ValueError("FIXED_CLOCK_CASE_REQUIRED")
+    path = r.w.directory(value)
+    data = json.loads((path / "expected.json").read_text())
+    actual = os.readlink("/proc/self/ns/time")
+    original = data["context"]["time_ns"]
+    assert os.readlink("/proc/self/ns/net") == data["netns"]
+    assert (actual != original) == (name == "clock-namespace")
+    offset = {"clock-lease": 9, "clock-readiness": 23, "clock-namespace": 0}[name]
+    print("CLOCK_FAULT", name, json.dumps({"prepared_time_ns": original, "observed_time_ns": actual,
+          "monotonic": time.monotonic(), "boottime": r.boottime(),
+          "injected_observer_boottime_offset": offset}), flush=True)
+    if name == "clock-namespace":
+        r.controller(value, "time-lease", "after")
+    else:
+        original_clock = r.boottime
+        # Model elapsed suspended time in this observer only. The kernel clock,
+        # original worker and guard remain real and unchanged in the parent.
+        with patch.object(r, "boottime", side_effect=lambda: original_clock() + offset):
+            r.controller(value, "time-lease", "after")
+
+
+def clock_case(name, maintenance, candidate, administration):
+    clock_guard()
+    with r.armed("time-lease", maintenance, candidate, "lifecycle") as (path, _):
+        data = json.loads((path / "expected.json").read_text())
+        ready = json.loads((path / "ready").read_text())
+        original = {f: (path / f).read_bytes() for f in ("expected.json", "ready", "worker.claim")}
+        handles = guard_handles()
+        r.readiness(path, data)
+        print("PASS CLOCK_BOUND_DUAL_DEADLINES_AND_REAL_LIVE_GUARD", name, flush=True)
+        command = [sys.executable, "-I", "-B", __file__, "--clock-controller", str(path), name]
+        if name == "clock-namespace":
+            command = ["unshare", "--time", "--fork"] + command
+        result = subprocess.run(command, capture_output=True, timeout=4)
+        expected = {"clock-lease": b"QUALIFICATION_GUARD_REQUIRED", "clock-readiness": b"WATCHDOG_NOT_ARMED",
+                    "clock-namespace": b"RECOVERY_CONTEXT_CHANGED_STOP"}[name]
+        assert result.returncode != 0 and expected in result.stderr, (result.stdout + result.stderr)[-2500:]
+        assert b"CLOCK_FAULT" in result.stdout
+        print(result.stdout.decode().strip(), flush=True)
+        print("PASS CLOCK_STALE_CONTROLLER_REFUSED_BEFORE_APPLY", name, expected.decode(), flush=True)
+        # The same unmodified preparation is STILL admissible in its actual
+        # clock domain. Refusal is not explained by genuine eight-second expiry.
+        r.readiness(path, data)
+        assert r.process_start(ready["pid"]) == ready["start"]
+        print("PASS CLOCK_ORIGINAL_DOMAIN_WORKER_AND_GUARD_STILL_LIVE", name, flush=True)
+        assert all((path / f).read_bytes() == value for f, value in original.items())
+        assert not (path / "applied").exists() and not (path / "result").exists()
+        assert r.shape("time") == maintenance and guard_handles() == handles
+        assert all(not t.reaches(p + "2", 443) for p in PREFIXES)
+        administration()
+        print("PASS CLOCK_NO_RULE_RECEIPT_REWRITE_ADMIN_PRESERVED", name, flush=True)
+    assert not path.exists() and not Path(f'/proc/{ready["pid"]}').exists()
 
 
 def restart_case(name, maintenance, candidate, administration, stack):
@@ -201,8 +266,10 @@ def case(name):
     guard()
     if name in RESTART_CASES:
         restart_guard()
+    if name in CLOCK_CASES:
+        clock_guard()
     parent = os.environ.get("LEASE_CASE_PARENT_NETNS")
-    if name not in CASES + RESTART_CASES or not parent or parent == os.readlink("/proc/self/ns/net"):
+    if name not in CASES + RESTART_CASES + CLOCK_CASES or not parent or parent == os.readlink("/proc/self/ns/net"):
         raise RuntimeError("DISTINCT_LEASE_CASE_NAMESPACE_REQUIRED")
     r.empty()
     try:
@@ -232,6 +299,10 @@ def case(name):
                 assert all(t.reaches(p + "2", 22) for p in PREFIXES)
             administration()
             assert all(not t.reaches(p + "2", 443) for p in PREFIXES)
+            if name in CLOCK_CASES:
+                clock_case(name, maintenance, candidate, administration)
+                assert r.table_shape("inet", UNRELATED) == unrelated
+                return
             if name in RESTART_CASES:
                 restart_case(name, maintenance, candidate, administration, stack)
                 assert r.table_shape("inet", UNRELATED) == unrelated
@@ -318,29 +389,84 @@ def case(name):
         t.run(t.IP, "link", "del", "host0", success=False)
         for family, table in (*r.tables("time"), *lease.TABLES, ("inet", UNRELATED)):
             t.nft(f"delete table {family} {table}\n", success=False)
-        if name in RESTART_CASES:
+        if name in RESTART_CASES + CLOCK_CASES:
             r.empty()
-            print("PASS RESTART_PROCESSES_LINKS_RULES_CLAIM_AND_PRIVATE_FILES_CLEANED", name, flush=True)
+            label = "CLOCK" if name in CLOCK_CASES else "RESTART"
+            print(f"PASS {label}_PROCESSES_LINKS_RULES_CLAIM_AND_PRIVATE_FILES_CLEANED", name, flush=True)
     r.empty()
     print("PASS LEASE_CASE_PROCESSES_LINKS_TABLES_PRIVATE_FILES_CLEANED", name, flush=True)
 
 
-def kernel(restarts=False):
+def kernel(restarts=False, clocks=False):
     guard()
     if type(restarts) is not bool:
         raise ValueError("FIXED_RESTART_MODE_REQUIRED")
+    if type(clocks) is not bool or (clocks and restarts):
+        raise ValueError("FIXED_CLOCK_MODE_REQUIRED")
     if restarts:
         restart_guard()
+    if clocks:
+        clock_guard()
     r.empty()
     print("KERNEL", os.uname().release, flush=True)
-    for name in RESTART_CASES if restarts else CASES:
+    for name in CLOCK_CASES if clocks else RESTART_CASES if restarts else CASES:
         subprocess.run(["unshare", "--net", sys.executable, "-I", "-B", __file__, "--case", name],
             env=dict(os.environ, LEASE_CASE_PARENT_NETNS=os.readlink("/proc/self/ns/net")), timeout=40, check=True)
         r.empty()
-    print("RESULT SYNTHETIC_" + ("RECOVERY_RESTART" if restarts else "KERNEL_LEASE_REVOKED") + "_NO_LIVE_APPLY", flush=True)
+    label = "SUSPEND_CLOCK_ADMISSION" if clocks else "RECOVERY_RESTART" if restarts else "KERNEL_LEASE_REVOKED"
+    print("RESULT SYNTHETIC_" + label + "_NO_LIVE_APPLY", flush=True)
 
 
 class Tests(unittest.TestCase):
+    def test_clock_case_requires_opt_in_and_fixed_mode_before_commands(self):
+        with patch(__name__ + ".guard"), patch.dict(os.environ, {"KC_SUSPEND_CLOCK_CI": "0"}), patch.object(t, "run") as run:
+            with self.assertRaisesRegex(RuntimeError, "SUSPEND_CLOCK_CI_OPT_IN_REQUIRED"):
+                kernel(clocks=True)
+            with self.assertRaisesRegex(ValueError, "FIXED_CLOCK_MODE_REQUIRED"):
+                kernel(clocks="yes")
+            run.assert_not_called()
+
+    def test_suspend_elapsed_boottime_expires_otherwise_live_guard_receipt(self):
+        reports = self.sample_reports()
+        receipt = {"binding": {}, "deadline": 108, "boottime_deadline": 208, "snapshot": lease.snapshot(reports)}
+        lease.require(receipt, {}, reports, 101, boottime_now=201)
+        for now in (207, 209, 199, None, True, float("inf"), float("nan")):
+            with self.subTest(boottime=now), self.assertRaisesRegex(RuntimeError, "GUARD_REQUIRED"):
+                lease.require(receipt, {}, reports, 101, boottime_now=now)
+        for deadline in (None, True, float("inf"), float("nan")):
+            with self.assertRaisesRegex(RuntimeError, "GUARD_REQUIRED"):
+                lease.require(dict(receipt, boottime_deadline=deadline), {}, reports, 101, boottime_now=201)
+        del receipt["boottime_deadline"]
+        with self.assertRaisesRegex(RuntimeError, "GUARD_REQUIRED"):
+            lease.require(receipt, {}, reports, 101, boottime_now=201)
+
+    def test_missing_invalid_or_unavailable_suspend_clock_has_no_fallback(self):
+        for value in (None, True, -1, float("nan"), float("inf")):
+            with patch.object(time, "clock_gettime", return_value=value):
+                with self.assertRaisesRegex(RuntimeError, "SUSPEND_AWARE_CLOCK_REQUIRED"):
+                    r.boottime()
+        with patch.object(time, "clock_gettime", side_effect=OSError("unavailable")):
+            with self.assertRaisesRegex(RuntimeError, "SUSPEND_AWARE_CLOCK_REQUIRED"):
+                r.boottime()
+        with patch.object(r, "boottime", return_value=201), patch.object(time, "monotonic", return_value=101):
+            with self.assertRaisesRegex(RuntimeError, "WATCHDOG_NOT_ARMED"):
+                r.recovery_remaining({"deadline": 122})
+
+    def test_modeled_suspend_makes_worker_restore_before_monotonic_deadline(self):
+        with tempfile.TemporaryDirectory() as value:
+            path = Path(value)
+            (path / "lock").touch()
+            data = {"version": "time-lease", "netns": "fixture", "window": "lifecycle", "attempt": "a" * 32,
+                    "context": {}, "maintenance": [], "candidate": ["candidate"]}
+            (path / "expected.json").write_text(json.dumps(data))
+            with patch.object(r, "guard"), patch.object(r.w, "directory", return_value=path), patch.object(os, "getppid", return_value=1), patch.object(os, "readlink", return_value="fixture"), patch.object(r, "require_context"), patch.object(r, "require_lease"), patch.object(r, "shape", side_effect=[[], ["candidate"], ["candidate"], []]), patch.object(t, "nft") as mutate, patch.object(time, "monotonic", side_effect=[100, 100, 101, 101]), patch.object(r, "boottime", side_effect=[200, 223]), patch.object(time, "sleep") as sleep:
+                r.worker(value, "time-lease")
+                self.assertEqual((path / "result").read_text(), "RESTORE_MAINTENANCE")
+                ready = json.loads((path / "ready").read_text())
+                self.assertEqual((ready["deadline"], ready["boottime_deadline"]), (122, 222))
+                mutate.assert_called_once()
+                sleep.assert_not_called()
+
     def test_restart_requires_explicit_opt_in_before_commands(self):
         with patch(__name__ + ".guard"), patch.dict(os.environ, {"KC_RECOVERY_RESTART_CI": "0"}), patch.object(t, "run") as run:
             with self.assertRaisesRegex(RuntimeError, "RECOVERY_RESTART_CI_OPT_IN_REQUIRED"):
@@ -396,14 +522,14 @@ class Tests(unittest.TestCase):
 
     def test_receipt_expiry_binding_and_policy_drift(self):
         reports = self.sample_reports()
-        receipt = {"binding": {"attempt": "one"}, "deadline": 18, "snapshot": lease.snapshot(reports)}
-        lease.require(receipt, {"attempt": "one"}, reports, 12)
+        receipt = {"binding": {"attempt": "one"}, "deadline": 18, "boottime_deadline": 18, "snapshot": lease.snapshot(reports)}
+        lease.require(receipt, {"attempt": "one"}, reports, 12, boottime_now=12)
         for now in (17, float("nan"), True, 9):
             with self.assertRaisesRegex(RuntimeError, "GUARD_REQUIRED"):
-                lease.require(receipt, receipt["binding"], reports, now)
+                lease.require(receipt, receipt["binding"], reports, now, boottime_now=12)
         for bad in (None, {}, dict(receipt, binding={"attempt": "two"})):
             with self.assertRaises(RuntimeError):
-                lease.require(bad, {"attempt": "one"}, reports, 12)
+                lease.require(bad, {"attempt": "one"}, reports, 12, boottime_now=12)
         for change in ("handle", "policy", "expired", "missing", "timeout"):
             bad = copy.deepcopy(reports)
             if change == "handle":
@@ -417,10 +543,10 @@ class Tests(unittest.TestCase):
             else:
                 bad[0]["nftables"][1]["set"]["elem"] = []
             with self.subTest(change=change), self.assertRaises(RuntimeError):
-                lease.require(receipt, receipt["binding"], bad, 12)
+                lease.require(receipt, receipt["binding"], bad, 12, boottime_now=12)
         reports[0]["nftables"][1]["set"]["elem"][0]["elem"]["expires"] = 4
         reports[0]["nftables"][-1]["rule"]["expr"][0]["counter"]["packets"] = 9
-        lease.require(receipt, receipt["binding"], reports, 14)
+        lease.require(receipt, receipt["binding"], reports, 14, boottime_now=14)
 
     def test_guard_is_required_for_new_profile_only(self):
         with patch.object(r, "lease_reports", return_value=self.sample_reports()):
@@ -475,11 +601,15 @@ if __name__ == "__main__":
         kernel()
     elif sys.argv[1:] == ["--restart-systemd"]:
         kernel(True)
+    elif sys.argv[1:] == ["--clock-systemd"]:
+        kernel(clocks=True)
     elif sys.argv[1:] == ["--peer"]:
         peer()
     elif len(sys.argv) == 3 and sys.argv[1] == "--case":
         case(sys.argv[2])
     elif len(sys.argv) == 3 and sys.argv[1] == "--held-controller":
         held_controller(sys.argv[2])
+    elif len(sys.argv) == 4 and sys.argv[1] == "--clock-controller":
+        clock_controller(sys.argv[2], sys.argv[3])
     else:
         unittest.main(verbosity=2)
