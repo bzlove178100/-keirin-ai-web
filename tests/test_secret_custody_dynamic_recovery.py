@@ -204,6 +204,33 @@ def require_lease(data):
         except (RuntimeError, ValueError, KeyError, TypeError) as exc:
             raise RuntimeError("QUALIFICATION_GUARD_REQUIRED") from exc
 
+
+def claim_worker(path, data):
+    """One worker lifetime per private attempt; a partial claim also consumes it.
+
+    The claim survives process loss until observing-fixture teardown. No restart
+    may replace readiness or start a new deadline with the same preparation.
+    This is not durable storage across host reboot or a defence against root.
+    """
+    owner = {"pid": os.getpid(), "start": process_start(os.getpid()), "binding": binding(data)}
+    try:
+        fd = os.open(path / "worker.claim", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    except FileExistsError as exc:
+        raise RuntimeError("WORKER_ATTEMPT_ALREADY_USED") from exc
+    with os.fdopen(fd, "w") as output:
+        output.write(json.dumps(owner))
+    return owner
+
+
+def require_worker_claim(path, ready):
+    try:
+        content = (path / "worker.claim").read_text()
+        if len(content) > 16384 or json.loads(content) != {k: ready[k] for k in ("pid", "start", "binding")}:
+            raise ValueError("OWNER_CHANGED")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise RuntimeError("WORKER_CLAIM_MISMATCH") from exc
+
+
 def readiness(path, data):
     report = (path / "ready").read_text()
     if len(report) > 16384:
@@ -227,6 +254,7 @@ def readiness(path, data):
         os.close(fd)
     if ready.get("binding") != binding(data):
         raise RuntimeError("READINESS_BINDING_MISMATCH")
+    require_worker_claim(path, ready)
     require_context(data)
     require_lease(data)
 
@@ -241,13 +269,13 @@ def worker(value, version):
         raise RuntimeError("INDEPENDENT_SUPERVISOR_AND_NAMESPACE_REQUIRED")
     maintenance, candidate = data["maintenance"], data["candidate"]
     with w.locked(path):
+        owner = claim_worker(path, data)
         require_context(data)
         if shape(version) != maintenance:
             raise RuntimeError("MAINTENANCE_ANCHOR_REQUIRED")
         require_lease(data)
         deadline = time.monotonic() + WINDOWS[data["window"]]
-        ready = {"pid": os.getpid(), "start": process_start(os.getpid()), "deadline": deadline,
-                 "binding": binding(data)}
+        ready = dict(owner, deadline=deadline)
         temporary = path / "ready.tmp"
         temporary.write_text(json.dumps(ready))
         temporary.replace(path / "ready")
