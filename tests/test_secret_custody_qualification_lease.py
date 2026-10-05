@@ -1,5 +1,6 @@
 """Real kernel expiry despite final-check worker loss and delayed stale apply."""
 from contextlib import ExitStack
+import copy
 import importlib.util
 import json
 import os
@@ -23,7 +24,8 @@ HERE = Path(__file__).resolve().parent
 c = module("context", HERE / "test_secret_custody_recovery_context.py")
 r, t, d = c.r, c.t, c.d
 lease = module("lease", HERE.parent / "review/secret_custody_qualification_lease.py")
-CASES = ("normal", "worker-loss", "delayed-apply", "identity-drift")
+CASES = ("normal", "worker-loss", "delayed-apply", "identity-drift",
+         "guarded-normal", "guarded-missing", "guarded-changed", "guarded-expired", "guarded-recreated")
 PREFIXES = ("192.0.2.", "2001:db8:1::")
 UNRELATED = "kc_lease_unrelated"
 
@@ -85,6 +87,39 @@ def guard_handles():
     return result
 
 
+
+def guarded_case(name, maintenance, candidate, administration):
+    with r.armed("time-lease", maintenance, candidate,
+                 window="lifecycle" if name == "guarded-expired" else "short") as (path, unit):
+        data = json.loads((path / "expected.json").read_text())
+        r.readiness(path, data)
+        print("PASS GUARDED_READY_WITH_OWNED_LIVE_LEASE", name, flush=True)
+        if name == "guarded-missing":
+            t.nft("delete table inet kc_lease_guard\n")
+        elif name == "guarded-changed":
+            t.nft("add rule inet kc_lease_guard output counter accept\n")
+        elif name == "guarded-recreated":
+            t.nft("".join(f"delete table {f} {n}\n" for f, n in lease.TABLES)
+                  + lease.install(data["context"]["interfaces"]["host0"]["ifindex"]))
+        elif name == "guarded-expired":
+            d.wait_for(lambda: time.monotonic() > data["qualification_guard"]["deadline"] + .2, 10, administration)
+        if name == "guarded-normal":
+            r.invoke_controller(path, "time-lease", "after")
+            assert r.shape("time-lease") == candidate
+            assert all(t.reaches(p + "2", 443) for p in PREFIXES)
+            assert r.w.await_file(path / "result", 7) == "RESTORE_MAINTENANCE"
+            print("PASS GUARDED_APPLY_AND_RESTORE", name, flush=True)
+        else:
+            result = subprocess.run([sys.executable, "-I", "-B", r.__file__, "--controller", str(path), "time-lease", "after"],
+                                    capture_output=True, timeout=4)
+            assert result.returncode != 0 and b"QUALIFICATION_GUARD_REQUIRED" in result.stderr, result.stderr[-1500:]
+            assert not (path / "applied").exists()
+            print("PASS GUARDED_REFUSED_BEFORE_CANDIDATE_MUTATION", name, flush=True)
+        assert r.shape("time-lease") == maintenance
+        assert all(not t.reaches(p + "2", 443) for p in PREFIXES)
+        administration()
+        print("PASS GUARDED_MAINTENANCE_AND_ADMIN_PRESERVED", name, flush=True)
+
 def case(name):
     guard()
     parent = os.environ.get("LEASE_CASE_PARENT_NETNS")
@@ -118,6 +153,10 @@ def case(name):
                 assert all(t.reaches(p + "2", 22) for p in PREFIXES)
             administration()
             assert all(not t.reaches(p + "2", 443) for p in PREFIXES)
+            if name.startswith("guarded-"):
+                guarded_case(name, maintenance, candidate, administration)
+                assert r.table_shape("inet", UNRELATED) == unrelated
+                return
             ifindex = r.recovery_context("time")["interfaces"]["host0"]["ifindex"]
             # The lease is born before readiness, never in candidate/restore.
             t.nft(lease.install(ifindex))
@@ -212,6 +251,58 @@ def kernel():
 
 
 class Tests(unittest.TestCase):
+    def sample_reports(self):
+        reports = []
+        for family, table in lease.TABLES:
+            rows = [{"table": {"family": family, "name": table, "handle": 1}},
+                    {"set": {"family": family, "table": table, "name": lease.SET,
+                             "handle": 2, "type": "inet_service", "flags": ["timeout"],
+                             "timeout": 8, "elem": [{"elem": {"val": 443, "expires": 7}}]}}]
+            rows += [{"chain": {"family": family, "table": table, "handle": n}} for n in (3, 4)]
+            rows += [{"rule": {"family": family, "table": table, "handle": n,
+                              "expr": [{"counter": {"packets": 0, "bytes": 0}}, {"drop": None}]}}
+                     for n in range(5, 11)]
+            reports.append({"nftables": rows})
+        return reports
+
+    def test_receipt_expiry_binding_and_policy_drift(self):
+        reports = self.sample_reports()
+        receipt = {"binding": {"attempt": "one"}, "deadline": 18, "snapshot": lease.snapshot(reports)}
+        lease.require(receipt, {"attempt": "one"}, reports, 12)
+        for now in (17, float("nan"), True, 9):
+            with self.assertRaisesRegex(RuntimeError, "GUARD_REQUIRED"):
+                lease.require(receipt, receipt["binding"], reports, now)
+        for bad in (None, {}, dict(receipt, binding={"attempt": "two"})):
+            with self.assertRaises(RuntimeError):
+                lease.require(bad, {"attempt": "one"}, reports, 12)
+        for change in ("handle", "policy", "expired", "missing", "timeout"):
+            bad = copy.deepcopy(reports)
+            if change == "handle":
+                bad[0]["nftables"][0]["table"]["handle"] = 100
+            elif change == "policy":
+                bad[0]["nftables"][-1]["rule"]["expr"][-1] = {"accept": None}
+            elif change == "expired":
+                bad[0]["nftables"][1]["set"]["elem"][0]["elem"]["expires"] = 0
+            elif change == "timeout":
+                bad[0]["nftables"][1]["set"]["timeout"] = 999
+            else:
+                bad[0]["nftables"][1]["set"]["elem"] = []
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                lease.require(receipt, receipt["binding"], bad, 12)
+        reports[0]["nftables"][1]["set"]["elem"][0]["elem"]["expires"] = 4
+        reports[0]["nftables"][-1]["rule"]["expr"][0]["counter"]["packets"] = 9
+        lease.require(receipt, receipt["binding"], reports, 14)
+
+    def test_guard_is_required_for_new_profile_only(self):
+        with patch.object(r, "lease_reports", return_value=self.sample_reports()):
+            with self.assertRaisesRegex(RuntimeError, "GUARD_REQUIRED"):
+                r.require_lease({"version": "time-lease"})
+            r.require_lease({"version": "time"})
+        self.assertEqual(r.lease_module().SECONDS, lease.SECONDS)
+        self.assertEqual(r.tables("time"), r.tables("time-lease"))
+        for mode in ("maintenance", "qualification"):
+            self.assertEqual(r.profile("time", mode), r.profile("time-lease", mode))
+
     def test_scope_index_and_no_refresh_or_broad_established_bypass(self):
         for bad in (True, 0, -1, "3", 2**31):
             with self.assertRaises(ValueError):

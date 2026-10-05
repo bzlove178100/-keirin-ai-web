@@ -34,3 +34,66 @@ def install(ifindex):
             # No update/add from packet path, ct bypass, flowtable or userspace timer.
             text += f"add rule {family} {table} {chain} tcp {port} 443 counter drop\n"
     return text
+
+
+def snapshot(reports):
+    """Seal fixed-installer readback; retain handles and every policy field.
+
+    Only live counters and the member's decreasing expiry are measurements.
+    Expiry is checked for presence/positivity, not converted between nft versions.
+    The independent conservative deadline starts BEFORE installation.
+    """
+    import copy
+    import math
+    if not isinstance(reports, list) or len(reports) != len(TABLES):
+        raise ValueError("LEASE_TABLE_REPORTS_REQUIRED")
+    result = []
+    for report, (family, table) in zip(reports, TABLES):
+        rows = copy.deepcopy(report["nftables"])
+        rows = [row for row in rows if "metainfo" not in row]
+        kinds = [next(iter(row)) for row in rows if len(row) == 1]
+        if sorted(kinds) != sorted(["table", "set", "chain", "chain"] + ["rule"] * 6):
+            raise ValueError("LEASE_OBJECTS_REQUIRED")
+        for row in rows:
+            kind, item = next(iter(row.items()))
+            if (item["family"] != family or type(item["handle"]) is not int
+                    or item["handle"] <= 0
+                    or (item["name"] if kind == "table" else item["table"]) != table):
+                raise ValueError("LEASE_OBJECT_IDENTITY_REQUIRED")
+            if kind == "set":
+                if item["name"] != SET or item["type"] != "inet_service" or item["flags"] != ["timeout"]:
+                    raise ValueError("LEASE_TIMED_SERVICE_SET_REQUIRED")
+                elements = item["elem"]
+                if len(elements) != 1 or set(elements[0]) != {"elem"}:
+                    raise ValueError("LEASE_SINGLE_MEMBER_REQUIRED")
+                member = elements[0]["elem"]
+                expiry = member.pop("expires")
+                if (member["val"] != 443 or type(member["val"]) is not int
+                        or type(expiry) not in (int, float) or not math.isfinite(expiry) or expiry <= 0):
+                    raise ValueError("LEASE_LIVE_MEMBER_REQUIRED")
+            if kind == "rule":
+                for expression in item["expr"]:
+                    if "counter" in expression:
+                        counter = expression["counter"]
+                        counter.pop("packets", None)
+                        counter.pop("bytes", None)
+        result.append(rows)
+    return result
+
+
+def require(receipt, binding, reports, now):
+    """Pure fail-closed check. Receipts originate only from fixed installation.
+
+    Not an attestation against another privileged writer. A point read cannot
+    eliminate the final-check/commit race; intact kernel guards bound that race.
+    """
+    import math
+    try:
+        deadline = receipt["deadline"]
+        if (type(now) not in (int, float) or not math.isfinite(now)
+                or type(deadline) not in (int, float) or not math.isfinite(deadline)
+                or not 2 <= deadline - now <= SECONDS
+                or receipt["binding"] != binding or receipt["snapshot"] != snapshot(reports)):
+            raise ValueError("LEASE_MISMATCH")
+    except (ValueError, KeyError, TypeError, IndexError, AttributeError) as exc:
+        raise RuntimeError("QUALIFICATION_GUARD_REQUIRED") from exc
