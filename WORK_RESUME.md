@@ -1,5 +1,50 @@
 # Work resume handoff
 
+## Historical payout normalization — 2026-10-07
+
+This checkpoint supersedes older current-status statements below. PR #207 is
+merged at main 4a3e18d0f75783d1ecd6d9342087a4a21b637f91,
+tree 52b07e8a0bc364020ef4a244ba9dded81f3fb14d. All six PR workflows passed;
+independent main-push runs also passed: regression 37588152057 (28/28 jobs),
+runtime 37588151938, PostgreSQL 37588152013, UI 37588151987,
+ML 37588151978 and AWS 37588152101. Earlier pending statements describe history.
+
+Private intake now contains 314 unique race observations: earlier 13 plus 301 free
+KeirinDB samples (2024-01-01: 98; 2025-01-01: 113; 2026-01-01: 90).
+These are three individual dates, not complete years. Original downloads and the
+source/quality checkpoint are saved privately; no real race data enters this repo.
+Source automated/commercial-use scope and historical feature times are unresolved.
+The 2026 sample has no entrant table; all 1,408 earlier entrant rows lack H, and the
+2026-08-21 rider master has not been joined into earlier features.
+
+Current branch codex/historical-payout-normalization adds ml.historical_payouts.
+It preserves raw evidence, hashes and change reasons while accepting only known
+ordered-payout date formats that agree with the complete supplied finish order.
+Contradictions/unknown formats are quarantined; tied winning orders must be complete.
+Refunds require explicit evidence and remain separate from ordinary winning labels.
+DNS/DNF/DSQ remain distinct; a nonclassified fault abbreviation is recorded explicitly.
+Output is an unapproved normalization candidate, not a training record.
+
+Applied locally to 301 already-downloaded races: 301 internally consistent candidates;
+604 payout-row transformations; trifecta outcomes 298 ordinary / 2 dead heats /
+1 full refund; one explicit fault-status normalization. Four selected boundary
+cases were cross-checked against result/notice pages with scoped, hash-bound evidence
+in the private report. This does not verify all 301 records externally or establish
+feature timing. No additional race acquisition occurred in this increment.
+Local historical checks: 48 synthetic tests passed (15 new); no real-data training.
+Current increment CI/merge pending; final receipts belong in its PR and the private
+keirin_progress_and_data_quality_2026-10-07.json checkpoint. Do not confuse the prior
+PR #207 receipts above with this candidate. The detailed normalization artifact is
+keirin_payout_normalization_2026-10-07.json, also outside the public repository.
+
+Next: establish usable point-in-time entry/feature/result evidence over a continuous
+period, then review immutable records and freeze chronological evaluation partitions.
+Approved real-data training races: 0; real-data training runs: 0; accuracy/ROI unmeasured.
+No autonomous collector or learner runs. Production, DB write, external fetch and
+runtime activation remain OFF. No overall completion percentage or deadline is
+justified by these counts. General-agent blocker BLOCKED_SUSPEND_EXPIRY_GAP remains
+unchanged and unqualified; this Keirin increment does not resolve it.
+
 ## Result-derived historical form — 2026-10-07
 
 PR #206 is merged at main 2dcebb6dd3b78901ae3d515afa702ac4222564bb,

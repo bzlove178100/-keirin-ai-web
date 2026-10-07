@@ -2,6 +2,56 @@
 
 Purpose: collect leakage-resistant real-race histories for paired Phase32 baseline vs LightGBM offline evaluation.
 
+## Current historical intake checkpoint — 2026-10-07
+
+The older dated sections below are retained as history. PR #207 is merged at
+main `4a3e18d0f75783d1ecd6d9342087a4a21b637f91`; six PR workflows and six
+independent main-push workflows passed, with 28 regression jobs in each.
+Private observations now total 314 unique races: the earlier 13 plus 301 free
+KeirinDB samples from 2024-01-01, 2025-01-01 and 2026-01-01. This covers three
+individual dates, not three full years or complete venue/date coverage.
+
+### Auditable offline payout candidates
+
+```sh
+python -m ml.historical_payouts \
+  --info PRIVATE_RACE_INFO.csv --results PRIVATE_RESULTS.csv \
+  --payoffs PRIVATE_PAYOFF.csv --output NEW_PRIVATE_OUTPUT.json
+```
+
+Use a new private output path outside the public repository. The command opens
+output exclusively and never overwrites input. Source byte hashes, filenames,
+all parsed columns, raw-row hashes and candidate hashes are retained. Identical
+rows are deduplicated with counts; contradictory identities, ranks, roster sizes,
+metadata or ordered payouts quarantine the whole race. Missing/unsupported data
+is not repaired from the desired label. CSV row-width and header errors stop intake.
+
+Only explicit 2-car and 3-car ordered combinations are normalized. Known
+spreadsheet date-like forms are candidates only when they match complete supplied
+finish ranks. Every valid tied winning order must be present. Full refunds need
+explicit source values and insufficient classified finishers; they are never
+converted into zero payouts or invented third places. DNS, DNF and DSQ remain
+distinct; the source's nonclassified fault abbreviation is recorded as a change.
+Unordered bet rows are preserved as raw evidence, not normalized by this module.
+
+Private application: all 301 races are internally consistent candidates, with
+604 date-like ordered-payout rows (302 exacta, 302 trifecta). Trifecta settlement
+counts: 298 ordinary, two dead heats and one full refund. Four selected boundary
+cases were checked against external result/notice pages; the refund notice only
+confirms refund/finisher-count status. This is not exhaustive external verification,
+source independence, or approval of feature timing. Per-case facts, source URLs,
+scope and candidate hashes stay in the private report. Synthetic historical unit
+tests: 48 passed (15 new payout checks); CI for this increment remains pending.
+
+Every candidate remains training_approved=false with unknown feature/result times.
+No entrant table is reconstructed from results. The 2026 sample lacks entrants;
+2024/2025 H values are missing, and the later rider master is not joined. Dead-heat
+and refund settlement support does not add multi-label training support.
+Zero approved real training races and zero real-data training runs remain.
+Next: substantiate point-in-time feature/entry/result availability for a continuous
+historical interval, resolve identities and source-use scope, then freeze and review
+training/validation/test partitions. Production/DB/fetch gates remain OFF.
+
 ## Parallel collection and training proposal — 2026-10-06
 
 ### Historical intake follow-up
