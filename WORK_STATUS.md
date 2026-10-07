@@ -1,5 +1,50 @@
 # Work status
 
+## Offline entrant import — 2026-10-07
+
+This checkpoint supersedes the earlier pending-main receipt: PR #210 is merged
+at 908952a046fd6c8d3b66e70ba1cf7c5d06f12847. All five applicable main-push
+workflows passed: UI 37599957354, runtime 37599957359, PostgreSQL 37599957343,
+AWS 37599957399, regression 37599957355 (28/28 jobs). ML was path-filtered.
+
+`ml.historical_entrants` now imports private KeirinDB entrant CSVs into existing
+payout candidates without network access. It joins exact race/car/provider ID,
+cross-checks rider names and withdrawal status, retains raw rows and hashes,
+and maps only Points, style, S, H and B. Blank numeric values remain missing.
+It does not use current rider-master values or unreviewed aggregate-rate columns.
+Missing cars are not reconstructed from results. Each changed record has a new
+hash linked to its original payout candidate; old reviews cannot carry over.
+
+Applied to the already acquired sample: 301 races, 1,408 entrant rows supplied;
+208 races / 1,387 rider rows matched (2024: 96 / 659; 2025: 112 / 728).
+Three races remain quarantined because withdrawn entrants have no car number;
+90 races have no entrant file in the 2026 sample. All 1,387 matched H values
+remain missing, while score/S/B are present. This is an input conversion result,
+not a new collection count, independent source verification or training approval.
+Observed matched rosters contain 5, 6 and 7 riders; synthetic coverage also
+checks 3 and 9. No nine-rider real-data import is claimed in this sample.
+
+Local historical tests: 58 passed, including 10 new entrant-import tests.
+The private CLI report and evidence archive preserve reproducible inputs.
+This implementation's PR/CI/merge is not complete at this document checkpoint;
+read its PR and the private progress report for final receipts.
+
+Primary provider research distinguishes a full-year KeirinDB CSV offer from
+its three isolated-day free samples, a current-rider-only CSV, a third-party
+Kdreams collection repository, and a vendor's betting APIs. None of these
+checks established a newly qualified continuous training dataset. The private
+source decision record retains URLs, missing evidence and an unsent inquiry.
+No purchase or provider message was made. Next acquisition decision: confirm
+historical card timing and the intended model-training use of an existing CSV
+provider before paying or scaling intake; commercial use is a separate scope.
+
+Unique historical observations remain 317; training-approved races 0;
+real-data training runs 0. Feature/result-availability times are still unknown.
+Conversion output still needs source/time evidence and a dedicated historical
+review before training. General-agent BLOCKED_SUSPEND_EXPIRY_GAP was not
+retested or resolved. Production, DB writes, automatic collection, autonomous
+learning and runtime activation remain OFF. No overall percentage is asserted.
+
 ## Archived-card corroboration and source-use review — 2026-10-07
 
 This checkpoint supersedes earlier current-status text. PR #209 is merged at
