@@ -72,13 +72,13 @@ class HistoricalRecordTests(unittest.TestCase):
         record = convert(enrich(candidates, entrants))["records"][0]
         # Explicit synthetic attestations only, never applied to private data.
         record.update(training_use_status="confirmed", pre_race_state_verified=True,
-                      feature_as_of="2024-01-01T09:00:00+09:00",
-                      listed_scheduled_start_jst="2024-01-01T10:00:00+09:00",
-                      result_available_at="2024-01-01T10:10:00+09:00")
+                      feature_as_of="2020-01-01T09:00:00+09:00",
+                      listed_scheduled_start_jst="2020-01-01T10:00:00+09:00",
+                      result_available_at="2020-01-01T10:10:00+09:00")
         review = {"race_id": record["race_id"], "record_sha256": digest(record),
                   **{k: "synthetic-fixture" for k in ("reviewer", "source_use_evidence",
                                                      "feature_time_evidence", "result_time_evidence")}}
-        plan = prepare([record], [review], "2024-02-01T00:00:00Z", "2024-03-01T00:00:00Z")
+        plan = prepare([record], [review], "2020-02-01T00:00:00Z", "2020-03-01T00:00:00Z")
         self.assertEqual(plan["partition_counts"], {"train": 1, "validation": 0, "test": 0})
         self.assertEqual(plan["excluded"], [])
         self.assertEqual(sum(r["target_first"] for r in plan["partitions"]["train"][0]["rows"]), 1)
