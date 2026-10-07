@@ -1,5 +1,53 @@
 # Work resume handoff
 
+## Dated historical program intake — 2026-10-07
+
+This checkpoint supersedes older current-status statements below. PR #208 is
+merged at main 3d22089d2fe59b550709154cc1d3a1aac6a13b98,
+tree 3e677359ffd5fd2d16453a8918301c2fe726fdfa. All six PR workflows passed;
+independent main-push runs also passed: regression 37591972830 (28/28 jobs),
+runtime 37591972844, PostgreSQL 37591972850, UI 37591972829,
+ML 37591972919 and AWS 37591972825. Its earlier pending text is historical.
+
+Private intake now contains 317 unique race observations: previous 314 plus
+three bounded race-1 observations from the consecutive 2024-01-29/30/31 meeting.
+Three dated official program PDFs (11 pages) were obtained. Only three races and
+21 rider rows have been structured; untranscribed races in those PDFs are not
+counted. Paper scores/BK, roster and scheduled starts were visually transcribed;
+full finish orders and ordered payouts were checked against three result pages.
+For two races, the next day's official program also agrees on the full order
+and ordered payouts. This does not establish independent upstream data providers.
+All originals, private records, SHA-256 hashes and reproduction script stay
+outside this public repository.
+
+The PDFs report creation on the preceding day, but that is not proof of public
+availability before the race. HTTP modification dates postdate the meeting.
+Historical feature and result-availability times remain unset. No stable rider-ID
+join was inferred from names; no style/S/H was invented from results. BK is
+retained literally, with its model-column mapping awaiting review. Scores/BK
+were not independently checked against another archived card. Source automated,
+training and commercial-use scope remains unconfirmed.
+
+Existing offline intake and training-preparation code was run on the three new
+records: all three remain excluded; train/validation/test counts are 0/0/0.
+No new model implementation or real-data training occurred. Diagnostic split
+dates are not an adopted evaluation period. Private detail artifact:
+keirin_dated_program_intake_2026-10-07.json; raw evidence and reproduction script:
+keirin_dated_program_evidence_2026-10-07.zip. The existing private progress JSON
+records current counts and, after checks, the final documentation PR receipts.
+This documentation increment has not passed CI or merged at this checkpoint;
+its final receipts must be read from its PR or that private progress file.
+
+Next: establish source use/time evidence and stable identities for a bounded
+continuous period; approve feature mapping before expanding transcription or
+training. Do not repeat unchanged failed source URLs or treat PDF metadata as
+historical publication evidence. Preserve the separate general-agent goal:
+BLOCKED_SUSPEND_EXPIRY_GAP remains unresolved and was not retested in this slice.
+Approved historical training races: 0; real-data training runs: 0; accuracy and
+return on stakes unmeasured. Production, DB writes, automatic collection,
+autonomous learning and runtime activation remain OFF. Counts do not justify an
+overall completion percentage or a delivery date.
+
 ## Historical payout normalization — 2026-10-07
 
 This checkpoint supersedes older current-status statements below. PR #207 is
