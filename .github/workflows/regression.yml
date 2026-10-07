@@ -42,6 +42,8 @@ jobs:
         run: python tests/test_agent_queue_planner.py
       - name: Run runtime bridge and delivery checks
         run: python tests/test_agent_runtime_bridge.py
+      - name: Verify note draft readback and ambiguous-save handling
+        run: python tests/test_note_drafts.py
       - name: Run live GitHub host bridge unit checks
         run: python tests/test_agent_github_readonly_host.py
       - name: Verify candidate CI identity and fail-closed waiting

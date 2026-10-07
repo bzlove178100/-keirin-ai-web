@@ -1,5 +1,46 @@
 # Work status
 
+## note draft adapter and historical review conversion — 2026-10-07
+
+Current main before this increment is PR #211 merge
+9ba315fa244df7352fa2a4b8e755d241cca4d8ed. All six independent main-push
+workflows passed (UI 37602735819, ML 37602735943, AWS 37602735992,
+PostgreSQL 37602735827, regression 37602735835 with 28/28 jobs,
+runtime 37602735718). This supersedes earlier pending-PR211 receipts below.
+
+A previously authorized provider inquiry has now been sent; the Work browser
+showed completion. The reply is not yet verified. The private progress report
+holds the exact message and screenshot. Earlier “unsent” statements are history.
+
+The Work browser retained note authentication in a fresh tab. The article
+editor remained on a loading indicator after one reload, so private draft
+save/reopen is NOT verified. NOTE_INTEGRATION.md records this boundary.
+The new NoteDraftAdapter handles existing private drafts through an injected
+host backend: expected account/content, separate permissions, persisted readback,
+and blocked ambiguous saves. It has no live browser backend by default and no
+publication/message action. Synthetic tests are not standalone live integration.
+
+ml.historical_records replays normalization from retained raw rows before mapping
+entrant candidates to the historical training/review schema. Candidate lineage,
+provider rider IDs, missing H/timestamps, DNS/DNF/DSQ, dead heat and refunds are
+preserved. Final record hashes differ from upstream candidates; old reviews do
+not transfer. The converter never creates use/time evidence or training approval.
+
+Applied offline to the same 301 races: 208 converted review records (206 ordinary,
+1 dead heat, 1 full refund), 93 upstream quarantines. Counts of 7/6/5 riders are
+157/33/18. Existing training preparation with empty reviews excludes all 208;
+train/validation/test remain 0/0/0. Diagnostic boundaries are not evaluation
+partitions. Cumulative unique observations remain 317; real-data training 0.
+Local tests: 67 historical tests and 8 note-adapter tests, including 17 new tests.
+Current increment CI/merge receipts must be read from its PR/private progress.
+
+Next: bind and verify a real authorized note browser backend only after editor
+access works; review the provider reply; add supported source/time evidence to
+converted records and review their final hashes; establish continuous coverage
+and fixed chronological evaluation. General-agent BLOCKED_SUSPEND_EXPIRY_GAP
+remains unresolved and was not retested. Production, DB writes, automatic
+collection, autonomous learning and runtime activation remain OFF.
+
 ## Offline entrant import — 2026-10-07
 
 This checkpoint supersedes the earlier pending-main receipt: PR #210 is merged
