@@ -1,5 +1,60 @@
 # Work resume handoff
 
+## Historical training follow-up — 2026-10-07
+
+Added a separate `ml.historical_training` offline path on the development branch.
+It requires record-hash-bound operator reviews with source-use, historical-feature
+and result-availability evidence references. References are attestations, not an
+automatic verification of source permission or truth. Explicit pre-race features
+are separate from archived displayed statistics; no historical prediction capture
+timestamp is invented. Seven/nine-rider ordinary finishes are supported; dead heats
+remain quarantined pending a multi-label contract.
+
+Chronological boundaries are explicit. Complete races stay together and labels
+unavailable before the next partition are purged. Training uses train only;
+early stopping uses validation; final metrics use the held-out test partition.
+Do not repeatedly tune against that test period. This initial path populates
+race_score/S/H/B/style only; other shared model features remain missing.
+
+Local evidence: 19 synthetic unit tests pass; a synthetic 12-race mixed 7/9-rider
+smoke executed LightGBM training with 8 train / 2 validation / 2 test races and
+wrote temporary model artifacts. This demonstrates execution, NOT useful accuracy.
+The four existing real samples remain excluded with no reviews and unknown feature
+times: zero eligible real records, zero real-data training runs, no new retrieval.
+Diagnostic real-sample split dates do not constitute an adopted evaluation period.
+Remote main was read as c1cfd45a369c34d4102665579cc4e49842042cff on this turn.
+CI workflow now includes these checks; no CI success or main merge claimed here.
+
+Next: substantiate usable historical source access and feature-time evidence,
+collect a bounded real dataset, choose and freeze evaluation periods before model
+selection, then perform real-data training and evaluate untouched data. There is
+no running collector or scheduled training. Production/DB/fetch gates remain OFF.
+The separate agent suspend-expiry blocker below is unchanged.
+
+## User steering: reliable reporting and parallel Keirin collection — 2026-10-06
+
+Latest follow-up: user requests historical data from multiple sites and improved
+learning. Local intake audit (`ml/historical_audit.py`) with eight passing synthetic
+tests now preserves seven/nine-rider records, detects duplicates/conflicts and keeps
+dead heats explicit. Four private factual samples were saved; none are training
+eligible. Six source candidates were reviewed, not licensed or connected. Next
+resolve source access/terms and historical feature timestamps, then implement a
+separate historical training contract without weakening prospective validation.
+This local branch remains unmerged; no bulk collection or training is running.
+
+The user rejected unsupported delivery forecasts. The prior PR #220–230 completion
+estimate and use of 10/61 = 16.4% as overall product completion are withdrawn.
+Follow the evidence/forecast rules added to AGENTS.md. Report implemented,
+verified and operational separately; do not invent a replacement percentage/date.
+
+Next priority requested: assess and prepare bounded real-race collection and
+periodic offline learning in parallel with broader development. The prepared
+sequence and unresolved activation prerequisites are in PROSPECTIVE_COLLECTION.md.
+Source remains caller-supplied/disconnected; current ML supports seven riders.
+No collection, recurring worker, training run or production activation has started.
+The existing suspend-expiry blocker below is retained, not fixed or bypassed.
+This branch records investigation/planning only; it is not a merged implementation.
+
 ## Current slice: real guest packets across suspend with original kernel guard
 
 Measured result: **BLOCKED_SUSPEND_EXPIRY_GAP**, not suspend qualification. Packet job `111764224176`, regression run `37310432870`, candidate `9846be0336da33b6d2f11781328b59a6a190ed17`, passed all nine experiment records on 2026-10-05 at 21:36:30 JST. The awake control denied all four old/new IPv4/IPv6 qualification probes while all four management probes survived. After actual S3, all four qualification probes still succeeded, without refresh or any preceding post-resume nft read/write. From original installation to first post-resume clock sampling, boottime advanced 11.145488332 seconds; all explicit probes completed within 0.295390938 monotonic seconds of installation. Suspend-window monotonic advanced 0.036644628 seconds and boottime 10.896148706 seconds. Original rules/handles and sentinel remained unchanged; later ordinary awake expiry denied all qualification probes while management survived. Both guest/peer/image/channel/process cleanups completed. Kernel `6.17.0-1022-azure` and QEMU binary/input hashes are in the job and PR #205. This is measured behavior of these exact inputs, not a claim about all kernels or live systems.

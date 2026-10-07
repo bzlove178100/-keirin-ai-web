@@ -9,6 +9,8 @@ on:
       - 'ml/**'
       - 'tests/ml_position_smoke.py'
       - 'tests/test_offline_evaluation.py'
+      - 'tests/test_historical*.py'
+      - 'tests/historical_training_smoke.py'
       - 'tests/test_prospective_pipeline_e2e.py'
       - '.github/workflows/ml-position-smoke.yml'
   pull_request:
@@ -18,6 +20,8 @@ on:
       - 'ml/**'
       - 'tests/ml_position_smoke.py'
       - 'tests/test_offline_evaluation.py'
+      - 'tests/test_historical*.py'
+      - 'tests/historical_training_smoke.py'
       - 'tests/test_prospective_pipeline_e2e.py'
       - '.github/workflows/ml-position-smoke.yml'
 
@@ -45,5 +49,11 @@ jobs:
         run: python tests/ml_position_smoke.py
       - name: Run paired holdout and leakage checks
         run: python tests/test_offline_evaluation.py
+      - name: Run historical review and chronological checks
+        run: python -m unittest discover -s tests -p 'test_historical*.py' -v
+      - name: Run synthetic historical training and held-out evaluation
+        env:
+          OMP_NUM_THREADS: '2'
+        run: python tests/historical_training_smoke.py
       - name: Run prospective snapshot-to-evaluation end-to-end check
         run: python tests/test_prospective_pipeline_e2e.py
