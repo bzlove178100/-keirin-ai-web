@@ -1,5 +1,55 @@
 # Work resume handoff
 
+## Archived-card corroboration and source-use review — 2026-10-07
+
+This checkpoint supersedes earlier current-status text. PR #209 is merged at
+8e82619d40abcd331cef7b7e8ae9d478e66729f9, tree
+ef78448fb990816fd77c4e7e371dac37f6dc2869. Five applicable PR workflows passed
+(regression 28/28). Independent main-push checks also passed: AWS 37597251455,
+PostgreSQL 37597251508, UI 37597251451, regression 37597251410 (28/28),
+and runtime 37597251423. ML was not triggered by that documentation-only change.
+
+Cumulative unique historical observations remain 317; this increment adds no
+new races. Three archived race cards corroborate all 21 existing paper scores
+and all 21 paper BK/archive B values. They also supply observed style and S
+values for those 21 rows. Matching uses the same race/car plus name, age,
+prefecture and term; it does not establish stable cross-race rider identities.
+No stable IDs were resolved or current rider-master features imported.
+Value agreement is not proof of independent upstream sources or of pre-race
+publication. Feature/result-availability timestamps remain unset.
+
+The private source-qualification report records source-specific scope:
+KeirinDB explicitly describes AI-assisted analysis and prediction-logic use;
+that statement is not treated as an explicit model-training, automated-fetch
+or commercial-service license. Kdreams' site policy contains restrictions on
+private use and unauthorized copying; its cards are not accepted as a training
+source, and no further bulk collection is started. KEIRIN.JP's own policy does
+not authorize another provider. Legal applicability has not been adjudicated.
+No paid purchase, provider message or permission request was sent.
+
+Existing training preparation was run on the three enriched candidates, with
+no fabricated reviews: 0 train / 0 validation / 0 test; all remain excluded.
+These diagnostic dates are not an adopted evaluation partition. Numeric H and
+other optional fields may remain missing; stable IDs are needed specifically
+for rider-history joins. Do not turn every enrichment into a universal gate.
+
+Private artifacts: keirin_source_qualification_2026-10-07.json and
+keirin_source_qualification_evidence_2026-10-07.zip. The bundle retains factual
+extracts, original HTML hashes, the prior intake and an offline reconciliation
+script; full archive HTML and editorial content are not bundled. The prior
+paper-intake artifact remains an unchanged baseline. The progress JSON records
+this new scope and final PR/CI receipts. Current documentation CI/merge is
+pending here; read its PR or the private progress file for final receipts.
+
+Next: prioritize a source that can substantiate learning-use scope and historical
+input/result timing, rather than scaling a source that is not qualified. Keep
+the separate general-agent work visible: BLOCKED_SUSPEND_EXPIRY_GAP was neither
+retested nor resolved. No new product implementation in this increment.
+Historical training-approved races 0; real-data training runs 0; accuracy and
+return on stakes unmeasured. Production, DB writes, automatic collection,
+autonomous learning and runtime activation remain OFF. No overall completion
+percentage or deadline is established.
+
 ## Dated historical program intake — 2026-10-07
 
 This checkpoint supersedes older current-status statements below. PR #208 is
