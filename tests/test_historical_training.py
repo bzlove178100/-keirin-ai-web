@@ -31,6 +31,22 @@ def plan(records, reviews=None):
 
 
 class HistoricalTrainingTests(unittest.TestCase):
+    def test_three_to_nine_riders_and_reviewed_form(self):
+        for count in range(3, 10):
+            r = fixture(1, count)
+            r["pre_race_features"][0].update(recent_win_rate=25, recent_top2_rate=50,
+                                              recent_top3_rate=75, recent_avg_finish=3)
+            result = plan([r])
+            self.assertEqual(len(result["partitions"]["train"][0]["rows"]), count)
+            self.assertEqual(result["partitions"]["train"][0]["rows"][0]["recent_win_rate"], 25)
+
+    def test_impossible_form_values_remain_excluded(self):
+        for field, value in (("recent_win_rate", 101), ("recent_top2_rate", -1),
+                             ("recent_avg_finish", 0), ("recent_avg_finish", True)):
+            r = fixture(1)
+            r["pre_race_features"][0][field] = value
+            self.assertEqual(plan([r])["partition_counts"]["train"], 0)
+
     def test_seven_and_nine_grouped_and_labels_separate(self):
         result = plan([fixture(4), fixture(2, 9), fixture(3), fixture(1)])
         self.assertEqual(result["partition_counts"], {"train": 2, "validation": 1, "test": 1})

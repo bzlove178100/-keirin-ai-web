@@ -14,7 +14,8 @@ from pathlib import Path
 
 from ml.historical_audit import audit
 
-FEATURES = ("race_score", "S", "H", "B")
+FEATURES = ("race_score", "S", "H", "B", "recent_win_rate", "recent_top2_rate",
+            "recent_top3_rate", "recent_avg_finish")
 
 
 def digest(record: dict) -> str:
@@ -68,8 +69,6 @@ def prepare(records: list, reviews: list, validation_start: str, test_start: str
                 reasons.append("historical_record_must_not_claim_prospective")
             if record.get("dead_heat") is not False:
                 reasons.append("explicit_non_dead_heat_required")
-            if not record.get("rider_count") in (7, 9):
-                reasons.append("historical_trainer_supports_seven_or_nine")
             feature_time = timestamp(record.get("feature_as_of"))
             start = timestamp(record.get("listed_scheduled_start_jst"))
             result_time = timestamp(record.get("result_available_at"))
@@ -93,6 +92,10 @@ def prepare(records: list, reviews: list, validation_start: str, test_start: str
                     value = feature.get(name)
                     if value is not None and (type(value) not in (int, float) or not math.isfinite(value)):
                         raise ValueError("invalid_numeric_feature")
+                    if value is not None and name in ("recent_win_rate", "recent_top2_rate", "recent_top3_rate") and not 0 <= value <= 100:
+                        raise ValueError("recent_rate_out_of_range")
+                    if value is not None and name == "recent_avg_finish" and not 1 <= value <= 9:
+                        raise ValueError("recent_finish_out_of_range")
                 rows.append({"car_number": feature["car_number"], "style": feature["style"],
                              **{name: feature.get(name) for name in FEATURES}})
             if reasons:
@@ -137,6 +140,8 @@ def train(plan: dict, output: Path) -> dict:
     report = {k: v for k, v in plan.items() if k != "partitions"}
     report.update(status="trained_historical_offline_only", training_runs=1,
                   test_metrics=evaluate(models, races["test"]),
+                  test_metrics_by_rider_count={str(n): evaluate(models, [r for r in races["test"] if len(r[1]) == n])
+                                              for n in sorted({len(r[1]) for r in races["test"]})},
                   probability_calibration_status="uncalibrated",
                   evaluated_at=datetime.now().astimezone().isoformat(),
                   populated_features=list(FEATURES) + ["style"],

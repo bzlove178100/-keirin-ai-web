@@ -206,3 +206,47 @@ execution (12 races: 8/2/2; seven/nine riders). Four existing real samples were
 rejected as expected; zero real training runs. CI wiring added but not yet
 qualified. Source access, verified historical features and actual collection
 remain unresolved. No autonomous job is running.
+
+## Result-derived form candidates — 2026-10-07
+
+`python -m ml.historical_form PRIVATE_TARGET PRIVATE_RESULT_ARRAY --window-days 120 --output NEW_PRIVATE_CANDIDATES`
+
+This offline builder offers an alternative to using potentially refreshed archive
+statistics. It reconstructs custom recent_win_rate / recent_top2_rate /
+recent_top3_rate percentages and recent_avg_finish from supplied reviewed results.
+It does not claim to reproduce official statistics or a complete career history.
+Use a consistent configured window and denominator definition within a dataset.
+
+Target contract: race_id, feature_as_of, listed_scheduled_start_jst,
+identity_evidence, entry_time_evidence, and riders with car_number and namespaced
+rider_id. Cutoff must strictly precede scheduled start. Evidence must support
+that this roster was known before the cutoff, not merely present in final results.
+
+Each history race needs race_id, race_status=completed, race_start_at,
+result_available_at, result_time_evidence, identity_evidence, source_use_evidence,
+and participants. A participant has car_number, namespaced rider_id, status
+(FINISHED/DNF/DSQ/DNS), and finish_rank (integer for FINISHED, null otherwise).
+Competition ranks preserve ties (1,1,3); incomplete finish orders are rejected.
+Evidence references remain operator attestations and must point to actual reviewed
+records; fields or hashes alone cannot prove past availability or permission.
+
+A history race must start within the selected window, strictly before cutoff,
+and have results available strictly before cutoff. The target race itself,
+conflicting duplicates, cancelled/unknown-status races and unknown identity/time
+records are excluded. Cross-source aliases require verified canonical identities
+upstream. No matching by car number, fuzzy name, or invented publication time.
+
+DNF/DSQ count as starts for rates; DNS is excluded. Average finishing place uses
+classified finishes only, and missing history produces null, not zero. Outputs
+retain per-rider sample counts, source race IDs and record hashes with evidence
+references. Retain the candidate/provenance bundle alongside the target record
+and review the resulting record hash before using the historical training path.
+The builder does not approve training or directly run a model.
+
+The historical path now accepts three through nine riders and these four reviewed
+numeric fields. This is separate from the prospective pipeline's existing
+seven-rider requirements. Target dead heats still require a future multi-label
+contract. Holdout metrics are also reported by rider count so unequal combination
+spaces are visible. Synthetic verification: 33 unit tests and one 18-race end-to-end
+form/training/holdout check (8/3/7; every supported rider count in test). No real
+model-performance claim, source activation, collection worker or promotion.

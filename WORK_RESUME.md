@@ -1,5 +1,44 @@
 # Work resume handoff
 
+## Result-derived historical form — 2026-10-07
+
+PR #206 is merged at main 2dcebb6dd3b78901ae3d515afa702ac4222564bb,
+tree 2c64400069824a928353380eb876f8d1ce3d76c3. All six independent
+main-push workflows passed: regression 37585873918, runtime 37585873893,
+PostgreSQL 37585873964, UI 37585873906, AWS 37585873924, ML 37585873925.
+Its earlier final-head workflows also passed (28 regression jobs). The private
+intake snapshot dated 2026-10-07 contains 13 unique factual samples, including
+one six-rider race; zero real-data training runs. These are recorded findings,
+not new observations in the current slice.
+
+Next implementation on `codex/historical-form-provenance` reconstructs custom
+recent form from reviewed earlier results instead of assuming displayed archive
+statistics were frozen before a race. It requires namespaced stable rider IDs,
+pre-start target entry/cutoff evidence, and result-availability/use/identity
+references. It joins identities, not car numbers or fuzzy names. It excludes
+future/late/self results, conflicting duplicates and out-of-window races. No
+result publication timestamp is inferred from the event date.
+
+DNF/DSQ count in the started-race rate denominator; DNS does not. Mean finish
+uses classified finishes only. Dead-heat ranks are retained for these history
+features, while dead-heat target labels remain unsupported in training. Missing
+history stays missing, with supplied-history coverage and contributing hashes
+explicit. These custom window statistics are not claimed to equal an official
+published score or complete career record. Candidates still require a separate
+review before training; evidence strings do not authenticate source truth.
+
+Historical model input now accepts the four reviewed recent-form fields and
+three through nine riders; prospective seven-rider validation is unchanged.
+Evaluation reports the test subset for each actual rider count separately.
+Local checks: 33 synthetic unit tests passed; a synthetic 18-race form -> training
+-> holdout run passed with 8 train / 3 validation / 7 test, including each rider
+count from three through nine in test. CI and merge of this follow-up are pending.
+No real-data learning, automatic collection, deployment or accuracy improvement
+has occurred. The source/use/time/identity evidence for real records remains
+unresolved. Next: obtain those inputs through a qualified source and preserve
+provenance, then freeze evaluation periods and validate on untouched real data.
+Existing suspend-expiry blocker and all production/DB/fetch gates are unchanged.
+
 ## Historical training follow-up — 2026-10-07
 
 Added a separate `ml.historical_training` offline path on the development branch.
