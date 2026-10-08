@@ -1,5 +1,32 @@
 # Work resume handoff
 
+## Repeated interruption recovery follow-up — 2026-10-09
+
+Verified base: PR #219 merged at 5aa4de7001108ef8c4f360328771a0908434f9e0.
+All five PR and independent main workflows passed, including 28 regression jobs
+on each side. This supersedes the pending CI checkpoint below.
+
+Replayed the separately saved follow-up against current main. Its expanded tests
+reproduced the second-interruption failure and acceptance of malformed attempt
+counts before the fix (19 tests: four failures and two errors, including subcases).
+The follow-up accepts only the launcher's exact saved reconciliation in pending
+or running state, checks original report bytes again, and completes without a
+new action or reconciliation. It rejects malformed attempt counts before the
+legacy decoder can coerce them. Ordinary shared-runner decoding is unchanged.
+
+After applying the saved implementation, all 19 preparation tests and eight
+shared-core tests passed. Cases cover repeated interruption, output corruption,
+missing/unrelated reconciliation, duplicate records, invalid counts and action
+non-replay. This is scoped local recovery verification, not host qualification
+or live training. Private reports and evidence remain outside this repository.
+
+The earlier push-authorization blocker was resolved by the user's instruction;
+GitHub connector delivery is used because terminal git push has no credentials.
+CI/merge for this follow-up is pending at this commit checkpoint; consult its PR
+and private receipt for the final result. Source-use replies, note editor access
+and BLOCKED_SUSPEND_EXPIRY_GAP remain separate unresolved work. Production, DB
+writes, hosted execution, autonomous collection and learning remain OFF.
+
 ## Verified local preparation recovery — 2026-10-09
 
 Verified base: main 13940dcd7f689be501e78697d821997d95daea21 (PR #218).

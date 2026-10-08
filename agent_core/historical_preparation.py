@@ -21,6 +21,30 @@ from .store import FileStateStore
 
 TASK_ID = "historical-preparation"
 REPOSITORY = Path(__file__).resolve().parents[1]
+RECONCILIATION_NOTE = "historical_preparation_exact_output_verified_no_action_replay"
+
+
+def reconciliation_committed(state) -> bool:
+    """Recognize this launcher's saved reconciliation across a second interruption.
+
+    This is a consistency check on caller-protected local state, not permission
+    to retry an action. Report bytes are checked again before the runner resumes.
+    """
+    if (state.status not in {"pending", "running"}
+            or state.completed_steps != ["prepare"]
+            or state.blocked_reason is not None or state.last_error is not None
+            or set(state.attempts) != {"prepare"}
+            or type(state.attempts["prepare"]) is not int
+            or state.attempts["prepare"] < 1
+            or len(state.reconciliations) != 1):
+        return False
+    record = state.reconciliations[0]
+    return isinstance(record, dict) and all(record.get(key) == value for key, value in {
+        "step_id": "prepare", "resolution": "applied_and_verified",
+        "note": RECONCILIATION_NOTE,
+        "previous_blocked_reason": "interrupted_step_requires_reconciliation:prepare",
+        "previous_last_error": None,
+    }.items())
 
 
 def file_hash(path: Path) -> str:
@@ -148,13 +172,25 @@ def run_preparation(records: Path, reviews: Path, run_dir: Path,
         if reconcile_verified_output and (not store.state_path(TASK_ID).is_file()
                                            or not (root / "task.json").is_file()):
             raise BlockedAction("historical_reconciliation_existing_task_required")
+        if reconcile_verified_output:
+            # TaskState's legacy decoder coerces attempt values with int().
+            # Recovery requires the saved JSON itself to contain a real count.
+            saved = json.loads(store.state_path(TASK_ID).read_text())
+            attempts = saved.get("attempts")
+            if (not isinstance(attempts, dict) or set(attempts) != {"prepare"}
+                    or type(attempts["prepare"]) is not int or attempts["prepare"] < 1):
+                raise BlockedAction("historical_reconciliation_interruption_required")
         write_once(root / "task.json", spec.to_dict())
         state = store.load_state(TASK_ID)
         if reconcile_verified_output:
             # Never let a matching report authorize an unrelated or changed task.
             if state.spec_fingerprint != spec.fingerprint():
                 raise BlockedAction("historical_reconciliation_task_mismatch")
-            if state.status != "completed":
+            if reconciliation_committed(state):
+                # A crash can occur after reconciliation is durable but before
+                # the runner completes. Recheck without reconciling or replaying.
+                adapter.check()
+            elif state.status != "completed":
                 if (state.status != "blocked"
                         or state.blocked_reason != "interrupted_step_requires_reconciliation:prepare"
                         or state.completed_steps
@@ -167,7 +203,7 @@ def run_preparation(records: Path, reviews: Path, run_dir: Path,
                 # The caller must still protect the private inputs/output from other writers.
                 store._reconcile_blocked_step_locked(TASK_ID, step_id="prepare",
                     resolution="applied_and_verified",
-                    note="historical_preparation_exact_output_verified_no_action_replay",
+                    note=RECONCILIATION_NOTE,
                     artifact_updates=(artifact,))
         if state.status == "completed":
             adapter.check()
