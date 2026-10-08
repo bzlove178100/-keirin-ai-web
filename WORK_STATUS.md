@@ -1,5 +1,42 @@
 # Work status
 
+## Detailed historical intake alongside existing work — 2026-10-08
+
+Verified base is PR #213 merge c36f9c5b5cf9f4f1938d31ce1b8543f7fd8fd151.
+The user's new instruction explicitly asks for collection improvements alongside
+existing work. This supersedes the earlier note-first pause for independent
+collection development; it does not resolve the note failure or authorize
+unbounded external collection, purchases, publication or messages.
+
+`ml.historical_details` adds hash-pinned, lossless four-table CSV intake,
+field-level coverage, duplicate/conflict handling and an explicit missing-data
+backlog. It retains all 55 source column positions across the four schemas,
+including unexpected columns, and connects eligible candidates to the existing
+strict review converter. A separate hash-bound rate-feature bridge requires
+confirmed definitions/window evidence; it never treats download time as a
+historical cutoff. See HISTORICAL_DETAIL_COLLECTION.md for usage and limits.
+
+Applied to the existing 11 files: 301 races, 6,451 unique rows, no conflicting
+keys; 211 have all four tables, three of those have missing entrant cars. The
+other 90 lack entrants. Converted review records remain 208. All 1,408 H cells
+are blank; 90 race weather/wind values are absent in the 2026 sample. This is
+more detailed organization/validation, not new external collection. Cumulative
+unique observations 317; training-eligible 0; real-data training runs 0.
+
+Local historical tests and existing shared-agent preparation tests pass.
+This increment's remote PR/CI/merge is pending at this checkpoint; consult its
+PR and private receipt for final status. No existing learner or production
+feature contract is changed. Automatic collection, autonomous learning,
+production predictions, application DB writes and hosted activation remain OFF.
+
+note support has acknowledged an editor-loading inquiry; the root cause and
+repair are unverified. Do not request repeated phone/login checks. The provider
+use/time inquiry also remains awaiting a substantive reply. Keep both threads
+and BLOCKED_SUSPEND_EXPIRY_GAP open. Next collection work is source/window
+qualification and continuous-period acquisition, followed by reviewed features
+and frozen evaluation partitions; do not report all details collected or a
+completion percentage based on file/PR counts.
+
 ## Shared-agent historical preparation — 2026-10-08
 
 PR #212 is merged at 734272e4a07c96c331cec1c3b31e995cb8e104c9,
