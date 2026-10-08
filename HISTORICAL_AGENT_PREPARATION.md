@@ -34,6 +34,19 @@ reviews or boundaries require a new run directory. An interrupted attempt keeps
 the shared runner's explicit reconciliation requirement; this launcher never
 marks it resolved merely because an output file exists.
 
+For the specific blocked reason `interrupted_step_requires_reconciliation:prepare`,
+an operator may repeat the same command with `--reconcile-verified-output`. This
+explicit local recovery requires the original task definition/fingerprint, exactly
+one unresolved preparation step, unchanged input/review bytes and boundaries, and
+byte-for-byte agreement with a recomputed preparation report. It restores the
+verified local artifact record and records reconciliation under the task lock,
+then skips the action. It never rewrites the report or calls training. A missing,
+partial, changed or symlink report, changed task, unrelated failure or held lock
+is rejected. A second recovery invocation only rechecks the completed report.
+Other failures still require separate diagnosis; this flag is not generic retry.
+The caller must protect inputs/output from concurrent external writers. This is
+local interruption recovery, not host-suspend/network-guard qualification.
+
 The CLI prints counts, hashes and task outcome, not record contents. Its task and
 preparation artifacts still contain private paths/data and must stay outside git.
 Local artifact readback does not prove durable remote saving or a device download;

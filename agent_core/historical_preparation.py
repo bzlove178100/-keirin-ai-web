@@ -101,10 +101,14 @@ class HistoricalPreparationAdapter:
         return ActionResult(message="offline preparation report verified; no training performed",
             data={"partition_counts": report["partition_counts"], "excluded_records": len(report["excluded"]),
                   "training_runs": 0},
-            artifacts=(ArtifactUpdate(artifact_id="historical-preparation-plan", kind="historical-plan",
+            artifacts=(self.verified_artifact(),))
+
+    def verified_artifact(self):
+        self.check()
+        return ArtifactUpdate(artifact_id="historical-preparation-plan", kind="historical-plan",
                 locator=str(self.output), created=True, verified=True, persistent_saved=False,
                 metadata={"sha256": file_hash(self.output), "storage_scope": "local_host_only",
-                          "training_runs": 0}),))
+                          "training_runs": 0})
 
     def verify(self, args, context):
         self.check()
@@ -112,7 +116,8 @@ class HistoricalPreparationAdapter:
 
 
 def run_preparation(records: Path, reviews: Path, run_dir: Path,
-                    validation_start: str, test_start: str) -> dict:
+                    validation_start: str, test_start: str, *,
+                    reconcile_verified_output: bool = False) -> dict:
     """Run or resume the same hash-bound task; changed inputs need a new directory.
 
     Interrupted/failed tasks retain AgentRunner's explicit reconciliation rule.
@@ -140,8 +145,31 @@ def run_preparation(records: Path, reviews: Path, run_dir: Path,
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     store = FileStateStore(root / "state")
     with store.task_lock(TASK_ID):
+        if reconcile_verified_output and (not store.state_path(TASK_ID).is_file()
+                                           or not (root / "task.json").is_file()):
+            raise BlockedAction("historical_reconciliation_existing_task_required")
         write_once(root / "task.json", spec.to_dict())
-        if store.load_state(TASK_ID).status == "completed":
+        state = store.load_state(TASK_ID)
+        if reconcile_verified_output:
+            # Never let a matching report authorize an unrelated or changed task.
+            if state.spec_fingerprint != spec.fingerprint():
+                raise BlockedAction("historical_reconciliation_task_mismatch")
+            if state.status != "completed":
+                if (state.status != "blocked"
+                        or state.blocked_reason != "interrupted_step_requires_reconciliation:prepare"
+                        or state.completed_steps
+                        or set(state.attempts) != {"prepare"}
+                        or type(state.attempts["prepare"]) is not int
+                        or state.attempts["prepare"] < 1):
+                    raise BlockedAction("historical_reconciliation_interruption_required")
+                artifact = adapter.verified_artifact()
+                # Keep verification and reconciliation within the same task lock.
+                # The caller must still protect the private inputs/output from other writers.
+                store._reconcile_blocked_step_locked(TASK_ID, step_id="prepare",
+                    resolution="applied_and_verified",
+                    note="historical_preparation_exact_output_verified_no_action_replay",
+                    artifact_updates=(artifact,))
+        if state.status == "completed":
             adapter.check()
     outcome = AgentRunner(store, registry.actions()).run(spec)
     report = adapter.check() if outcome.status == "completed" else None
@@ -162,10 +190,13 @@ def main():
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--validation-start", required=True)
     parser.add_argument("--test-start", required=True)
+    parser.add_argument("--reconcile-verified-output", action="store_true",
+        help="Explicitly reconcile an interrupted blocked task only after exact output verification; never rerun preparation")
     args = parser.parse_args()
     try:
         receipt = run_preparation(args.records, args.reviews, args.run_dir,
-                                  args.validation_start, args.test_start)
+                                  args.validation_start, args.test_start,
+                                  reconcile_verified_output=args.reconcile_verified_output)
     except Exception:
         # Private input/provider text must not become command logs.
         print(json.dumps({"status": "blocked", "reason": "historical_preparation_requires_review"}))

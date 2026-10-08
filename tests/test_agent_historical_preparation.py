@@ -30,7 +30,18 @@ class HistoricalPreparationAgentTests(unittest.TestCase):
     def run_job(self, **kwargs):
         return run_preparation(self.records, self.reviews, self.run_dir,
                                kwargs.get('validation_start', '2020-01-03T00:00:00+09:00'),
-                               '2020-01-04T00:00:00+09:00')
+                               '2020-01-04T00:00:00+09:00',
+                               reconcile_verified_output=kwargs.get('reconcile_verified_output', False))
+
+    def interrupt_after_output(self):
+        original = HistoricalPreparationAdapter.run
+        def crash(adapter, args, context):
+            original(adapter, args, context)
+            raise KeyboardInterrupt()
+        with patch.object(HistoricalPreparationAdapter, 'run', crash):
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_job()
+        self.assertEqual(self.run_job()['outcome']['status'], 'blocked')
 
     def test_synthetic_reviewed_partitions_are_prepared_but_never_trained(self):
         with patch('ml.historical_training.train', side_effect=AssertionError('must not train')):
@@ -111,6 +122,82 @@ class HistoricalPreparationAgentTests(unittest.TestCase):
         self.assertEqual(second['outcome']['executed_steps'], ())
         self.assertEqual(output.read_text(), 'private-existing-text')
         self.assertNotIn('private-existing-text', (self.run_dir/'state/activity.jsonl').read_text())
+
+    def test_explicit_reconciliation_recovers_crash_after_output_without_replay(self):
+        self.interrupt_after_output()
+        output = self.run_dir/'preparation.json'
+        before = (output.read_bytes(), output.stat().st_mtime_ns)
+        store = FileStateStore(self.run_dir/'state')
+        self.assertEqual(store.load_state(TASK_ID).artifacts, {})
+        with patch.object(HistoricalPreparationAdapter, 'run', side_effect=AssertionError('replayed')):
+            recovered = self.run_job(reconcile_verified_output=True)
+            again = self.run_job(reconcile_verified_output=True)
+        self.assertEqual(recovered['outcome']['status'], 'completed')
+        self.assertEqual(recovered['outcome']['executed_steps'], ())
+        self.assertEqual(again['outcome']['executed_steps'], ())
+        self.assertEqual((output.read_bytes(), output.stat().st_mtime_ns), before)
+        state = store.load_state(TASK_ID)
+        self.assertEqual(len(state.reconciliations), 1)
+        self.assertEqual(state.attempts, {'prepare': 1})
+        artifact = state.artifacts['historical-preparation-plan']
+        self.assertEqual(artifact.metadata['sha256'], recovered['preparation_sha256'])
+        self.assertFalse(artifact.persistent_saved)
+        self.assertEqual(recovered['training_runs'], 0)
+
+    def test_reconciliation_missing_tampered_and_symlink_output_preserves_block(self):
+        for case in ('missing', 'tampered', 'symlink'):
+            with self.subTest(case=case):
+                self.run_dir = self.root/('job-'+case)
+                self.interrupt_after_output()
+                output = self.run_dir/'preparation.json'
+                if case == 'missing': output.unlink()
+                elif case == 'tampered': output.write_text('private-corruption')
+                else:
+                    target = self.root/'copy.json'
+                    output.rename(target)
+                    output.symlink_to(target)
+                store = FileStateStore(self.run_dir/'state')
+                before = store.state_path(TASK_ID).read_bytes()
+                with self.assertRaises((BlockedAction, FileNotFoundError)):
+                    self.run_job(reconcile_verified_output=True)
+                self.assertEqual(store.state_path(TASK_ID).read_bytes(), before)
+                self.assertNotIn('private-corruption', store.ledger_path.read_text())
+
+    def test_reconciliation_refuses_changed_task_state_or_noninterruption_block(self):
+        for case in ('fingerprint', 'reason', 'attempt', 'completed_step'):
+            with self.subTest(case=case):
+                self.run_dir = self.root/('job-'+case)
+                self.interrupt_after_output()
+                store = FileStateStore(self.run_dir/'state')
+                state = store.load_state(TASK_ID)
+                if case == 'fingerprint': state.spec_fingerprint = 'different'
+                elif case == 'reason': state.blocked_reason = 'verification_error_requires_reconciliation'
+                elif case == 'attempt': state.attempts['unrelated'] = 1
+                else: state.completed_steps = ['prepare']
+                store.save_state(state)
+                before = store.state_path(TASK_ID).read_bytes()
+                with self.assertRaisesRegex(BlockedAction, 'historical_reconciliation_'):
+                    self.run_job(reconcile_verified_output=True)
+                self.assertEqual(store.state_path(TASK_ID).read_bytes(), before)
+
+    def test_reconciliation_refuses_new_task_and_changed_inputs(self):
+        with self.assertRaisesRegex(BlockedAction, 'existing_task_required'):
+            self.run_job(reconcile_verified_output=True)
+        self.assertFalse((self.run_dir/'preparation.json').exists())
+        self.interrupt_after_output()
+        self.reviews.write_text('[]')
+        store = FileStateStore(self.run_dir/'state')
+        before = store.state_path(TASK_ID).read_bytes()
+        with self.assertRaisesRegex(BlockedAction, 'output_conflict'):
+            self.run_job(reconcile_verified_output=True)
+        self.assertEqual(store.state_path(TASK_ID).read_bytes(), before)
+
+    def test_reconciliation_cannot_run_while_task_lock_is_held(self):
+        self.interrupt_after_output()
+        store = FileStateStore(self.run_dir/'state')
+        with store.task_lock(TASK_ID):
+            with self.assertRaisesRegex(RuntimeError, 'task_already_running'):
+                self.run_job(reconcile_verified_output=True)
 
     def test_input_change_during_run_blocks_and_dry_run_cannot_write(self):
         adapter = HistoricalPreparationAdapter(records=self.records, reviews=self.reviews,
