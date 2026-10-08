@@ -44,6 +44,12 @@ then skips the action. It never rewrites the report or calls training. A missing
 partial, changed or symlink report, changed task, unrelated failure or held lock
 is rejected. A second recovery invocation only rechecks the completed report.
 Other failures still require separate diagnosis; this flag is not generic retry.
+If interrupted again after reconciliation was saved, the same flag accepts only
+the exact saved reconciliation with the preparation step already complete,
+rechecks the report, then finishes without a new action or reconciliation. This
+covers the pending/running handoff to the shared runner. Recovery reads attempt
+counts from the original JSON before legacy state decoding; booleans, strings,
+fractional and nonpositive counts cannot be converted into valid attempts.
 The caller must protect inputs/output from concurrent external writers. This is
 local interruption recovery, not host-suspend/network-guard qualification.
 

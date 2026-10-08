@@ -1,5 +1,34 @@
 # Work status
 
+## Recovery review follow-up — 2026-10-09
+
+The previously saved local recovery patch was restored onto unchanged main
+13940dcd7f689be501e78697d821997d95daea21. Review reproduced a second-interruption
+bug: after the reconciliation state was saved but before runner completion,
+repeating the recovery flag rejected the valid pending state. This follow-up
+recognizes only that launcher's exact saved reconciliation in pending/running
+state, rechecks the output before state advancement, and skips the action.
+A malformed saved attempt count is also rejected before the legacy decoder can
+coerce a boolean/string/fraction into an integer. The shared state decoder and
+ordinary runner semantics are unchanged.
+
+Local verification passed 19 preparation tests and eight shared-core tests,
+including four new tests for the second interruption and negative provenance
+cases. The original report bytes/mtime, attempt count and single reconciliation
+are preserved. These are synthetic regression checks; no new real-data training,
+race capture, host qualification, mailbox query or live service change occurred.
+
+The user authorized this reviewed five-file change on 2026-10-09 at 08:50 JST:
+push to bzlove178100/-keirin-ai-web, create a PR and merge after applicable CI
+succeeds. The earlier approval block is historical. Before pushing, current main
+was observed at 5aa4de7001108ef8c4f360328771a0908434f9e0 (PR #219), which already
+contains the first recovery implementation. This follow-up preserves that work
+and adds only the repeated-interruption and raw-count validation fixes above.
+Local tests were repeated after integrating that base. This commit checkpoint
+precedes remote CI and merge; consult its PR and saved receipt for final status.
+Source-use replies, note access and BLOCKED_SUSPEND_EXPIRY_GAP remain separate
+unresolved work. All execution/collection/learning gates remain OFF.
+
 ## Verified local preparation recovery — 2026-10-09
 
 Verified base: main 13940dcd7f689be501e78697d821997d95daea21 (PR #218).

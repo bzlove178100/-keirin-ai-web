@@ -164,7 +164,7 @@ class HistoricalPreparationAgentTests(unittest.TestCase):
                 self.assertNotIn('private-corruption', store.ledger_path.read_text())
 
     def test_reconciliation_refuses_changed_task_state_or_noninterruption_block(self):
-        for case in ('fingerprint', 'reason', 'attempt', 'completed_step'):
+        for case in ('fingerprint', 'reason', 'attempt', 'completed_step', 'bool', 'string', 'float'):
             with self.subTest(case=case):
                 self.run_dir = self.root/('job-'+case)
                 self.interrupt_after_output()
@@ -173,7 +173,8 @@ class HistoricalPreparationAgentTests(unittest.TestCase):
                 if case == 'fingerprint': state.spec_fingerprint = 'different'
                 elif case == 'reason': state.blocked_reason = 'verification_error_requires_reconciliation'
                 elif case == 'attempt': state.attempts['unrelated'] = 1
-                else: state.completed_steps = ['prepare']
+                elif case == 'completed_step': state.completed_steps = ['prepare']
+                else: state.attempts['prepare'] = {'bool': True, 'string': '1', 'float': 1.5}[case]
                 store.save_state(state)
                 before = store.state_path(TASK_ID).read_bytes()
                 with self.assertRaisesRegex(BlockedAction, 'historical_reconciliation_'):
@@ -198,6 +199,69 @@ class HistoricalPreparationAgentTests(unittest.TestCase):
         with store.task_lock(TASK_ID):
             with self.assertRaisesRegex(RuntimeError, 'task_already_running'):
                 self.run_job(reconcile_verified_output=True)
+
+    def interrupt_after_reconciliation(self):
+        self.interrupt_after_output()
+        original = FileStateStore._reconcile_blocked_step_locked
+        def crash(store, *args, **kwargs):
+            original(store, *args, **kwargs)
+            raise KeyboardInterrupt()
+        with patch.object(FileStateStore, '_reconcile_blocked_step_locked', crash):
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_job(reconcile_verified_output=True)
+
+    def test_repeated_recovery_survives_interruption_after_reconciliation_commit(self):
+        self.interrupt_after_reconciliation()
+        output = self.run_dir/'preparation.json'
+        before = (output.read_bytes(), output.stat().st_mtime_ns)
+        store = FileStateStore(self.run_dir/'state')
+        self.assertEqual(store.load_state(TASK_ID).status, 'pending')
+        with patch.object(HistoricalPreparationAdapter, 'run', side_effect=AssertionError('replayed')):
+            recovered = self.run_job(reconcile_verified_output=True)
+        self.assertEqual(recovered['outcome']['status'], 'completed')
+        self.assertEqual(recovered['outcome']['executed_steps'], ())
+        self.assertEqual((output.read_bytes(), output.stat().st_mtime_ns), before)
+        self.assertEqual(len(store.load_state(TASK_ID).reconciliations), 1)
+
+    def test_reconciled_pending_output_is_checked_before_completion_state_changes(self):
+        self.interrupt_after_reconciliation()
+        store = FileStateStore(self.run_dir/'state')
+        before = store.state_path(TASK_ID).read_bytes()
+        (self.run_dir/'preparation.json').write_text('private-corruption')
+        with self.assertRaisesRegex(BlockedAction, 'readback_mismatch'):
+            self.run_job(reconcile_verified_output=True)
+        self.assertEqual(store.state_path(TASK_ID).read_bytes(), before)
+
+    def test_reconciled_running_resume_skips_action(self):
+        self.interrupt_after_reconciliation()
+        store = FileStateStore(self.run_dir/'state')
+        state = store.load_state(TASK_ID)
+        state.status = 'running'
+        store.save_state(state)
+        with patch.object(HistoricalPreparationAdapter, 'run', side_effect=AssertionError('replayed')):
+            receipt = self.run_job(reconcile_verified_output=True)
+        self.assertEqual(receipt['outcome']['status'], 'completed')
+        self.assertEqual(receipt['outcome']['executed_steps'], ())
+
+    def test_pending_recovery_requires_exact_saved_reconciliation(self):
+        for case in ('missing', 'unrelated', 'resolution', 'reason', 'extra', 'attempt', 'zero'):
+            with self.subTest(case=case):
+                self.run_dir = self.root/('pending-'+case)
+                self.interrupt_after_reconciliation()
+                store = FileStateStore(self.run_dir/'state')
+                state = store.load_state(TASK_ID)
+                if case == 'missing': state.reconciliations = []
+                elif case == 'unrelated': state.reconciliations[0]['note'] = 'other_recovery'
+                elif case == 'resolution': state.reconciliations[0]['resolution'] = 'not_applied'
+                elif case == 'reason': state.reconciliations[0]['previous_blocked_reason'] = 'other_failure'
+                elif case == 'extra': state.reconciliations.append(dict(state.reconciliations[0]))
+                elif case == 'attempt': state.attempts['prepare'] = True
+                else: state.attempts['prepare'] = 0
+                store.save_state(state)
+                before = store.state_path(TASK_ID).read_bytes()
+                with self.assertRaisesRegex(BlockedAction, 'interruption_required'):
+                    self.run_job(reconcile_verified_output=True)
+                self.assertEqual(store.state_path(TASK_ID).read_bytes(), before)
 
     def test_input_change_during_run_blocks_and_dry_run_cannot_write(self):
         adapter = HistoricalPreparationAdapter(records=self.records, reviews=self.reviews,
