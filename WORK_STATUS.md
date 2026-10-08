@@ -1,5 +1,44 @@
 # Work status
 
+## Official detailed intake and working access route — 2026-10-08
+
+Verified base: PR #215 merge 87dfca07ff9a9562c297d4862b5cb8bf2f5e7719,
+with all six PR workflows, all six main-push workflows and 28 regression jobs
+in each successful. This supersedes its earlier pending checkpoint below.
+
+The private venue-list capture at 18:31:58 JST joins 1–7R ordered results;
+the preceding five values are unchanged. A later official top-page route
+returned detailed pages with HTTP 200, using the same public race tokens that
+had previously failed. The earlier EC0500E server-side cause remains unknown;
+working access at this observation time is not a permanent service repair.
+
+New offline `ml.historical_official_detail` retains entire header/card/result
+blocks, pins capture bytes and identity, reconciles rider IDs, rejects late
+pre-race captures, and preserves non-finishers and partial refunds. It supports
+3–9 listed riders and separates listed riders, finishers and confirmed starters.
+No unknown metric windows are silently mapped into training features.
+See HISTORICAL_OFFICIAL_DETAIL.md.
+
+Privately saved: seven detailed results (49 listed rows), plus four pre-race
+cards for 9–12R (28 rows, all before listed starts). 1R includes a withdrawal
+and partial refund; 2R includes a fall retirement; 12R's new pre-race card
+includes a withdrawal. Earlier paper bytes remain unchanged. Later observations
+must not be used to rewrite what was known at the earlier paper capture time.
+These enrich existing races; cumulative unique observations remain 329.
+
+Local historical tests: 106 passed including 15 new detail tests; shared-agent
+historical preparation: 10 passed. This increment's remote CI/merge is pending
+at this commit checkpoint; its PR and private implementation receipt carry
+final status. Learning-eligible records and actual training runs remain zero.
+Source-use/feature definitions, final-record reviews and continuous evaluation
+coverage are unfinished. These captures are not paired prediction records.
+
+note/provider reply search still found only note's prior acknowledgement in
+its stated query scope. No new outgoing messages. The note editor issue and
+BLOCKED_SUSPEND_EXPIRY_GAP are not fixed or revalidated by these data tests.
+Production, application DB writes, automatic external collection and autonomous
+learning remain OFF. No completion percentage or delivery date is inferred.
+
 ## Official source capture and offline result reconciliation — 2026-10-08
 
 Verified base: PR #214 is merged at
