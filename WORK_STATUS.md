@@ -1,5 +1,43 @@
 # Work status
 
+## Official source capture and offline result reconciliation — 2026-10-08
+
+Verified base: PR #214 is merged at
+08e3b82020e40f27d114aee37f7e53e8e814ce54. Its six independent main-push
+workflows and all 28 regression jobs passed. This supersedes the pending
+PR214 checkpoint below.
+
+A separate private capture saved the current official program at 15:43:11 JST,
+before the first listed start of 15:45: 12 races and 84 rider rows. Ten brief
+rider-comment facts, one stated follow intention and bank dimensions were also
+retained. These are pre-race source observations, not paired prediction records.
+Cumulative unique observations are 329; no new races are counted by this join.
+
+The official result list saved at 17:17:03 JST contains ordered payouts for
+races 1–4 and blank cells for 5–12. The new offline importer pins source and
+snapshot hashes, checks table shape/date/roster/chronology, excludes duplicate
+mobile tables, preserves multiple outcomes, and quarantines ambiguous rows.
+It produces separate result observations and unapproved historical review
+candidates without changing the pre-race bytes. See HISTORICAL_OFFICIAL_RESULTS.md.
+
+Applied privately: four joined summaries, eight pending at that capture time.
+Existing preparation excludes all four candidates (0/0/0); full results/status,
+style, source-use and final-record reviews remain incomplete. Local historical
+checks: 91 passed, including 12 new tests. This increment's remote CI/merge
+is pending at this checkpoint; consult its PR and private receipt for final state.
+
+The linked KEIRIN.JP detail lookup returned HTTP 500. A separate GET reading
+path returned the same status; the cause and repair are unverified. The source
+list remains accessible. Do not infer full finish orders or retry unchanged
+failed lookups. Next: confirm a working official detail path or subsequent
+program results, reconcile result/status changes, and extend continuous input
+coverage and reviewed training preparation. No background collector is running.
+
+note's editor issue, provider inquiry and BLOCKED_SUSPEND_EXPIRY_GAP remain open.
+No new messages or purchases; production, application DB writes, autonomous
+learning and automatic collection remain OFF. Learning-eligible races and real
+training runs remain zero. No completion percentage or delivery date inferred.
+
 ## Detailed historical intake alongside existing work — 2026-10-08
 
 Verified base is PR #213 merge c36f9c5b5cf9f4f1938d31ce1b8543f7fd8fd151.
