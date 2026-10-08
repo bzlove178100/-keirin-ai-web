@@ -1,5 +1,44 @@
 # Work status
 
+## Shared-agent historical preparation — 2026-10-08
+
+PR #212 is merged at 734272e4a07c96c331cec1c3b31e995cb8e104c9,
+tree 8cec984a3eb919cd52c7aa9374dddf6b06004d7a. Its six PR workflows
+and six independent main-push workflows passed, with 28/28 regression jobs
+on each. The previous private progress report is version 8.
+
+The authenticated note home loaded this morning. Following its current new-post
+link still left the editor on a loading indicator; no repeated login, new draft,
+save or publication occurred. The cause remains unknown. Focused mailbox searches
+for the provider/topic and note sender found no matching reply; do not generalize
+this to all possible reply locations. Browser integration remains incomplete.
+
+The new historical_preparation launcher connects existing reviewed-record
+preparation to the shared AgentRunner and FileStateStore. It pins input hashes,
+paths and explicit diagnostic boundaries, verifies persisted report bytes and
+records a private activity ledger. Identical completed resumes do not repeat the
+action; changed input, review, boundary, output or an interrupted attempt stops
+for review. No train, fetch, DB, note write or scheduler action is exposed.
+See HISTORICAL_AGENT_PREPARATION.md for usage and remaining work.
+
+Applied to the same 208 converted records with empty reviews: the diagnostic
+completed and excluded all 208, with train/validation/test 0/0/0. A second call
+executed no steps and verified the same output hash. This is real-data execution
+of preparation, not real-data training. Cumulative unique observations remain
+317, training-eligible races 0, real training runs 0. The earlier 93 upstream
+quarantines are unchanged. Private artifacts remain outside git.
+
+Local verification: 10 new agent-preparation tests, 67 historical tests, 8 core
+tests, 3 persistence-redaction tests and existing web/safety regression passed.
+Current increment PR/merge/independent-main receipts must be read from its PR
+and private progress record. No completion percentage or delivery date inferred.
+
+Next: resolve note editor access using new evidence before binding a live host;
+read any provider reply and attach supported use/time evidence to exact records;
+review final hashes and establish continuous, fixed-period evaluation data.
+BLOCKED_SUSPEND_EXPIRY_GAP remains unresolved. Production, DB writes, automatic
+collection, autonomous learning and hosted runtime activation remain OFF.
+
 ## note draft adapter and historical review conversion — 2026-10-07
 
 Current main before this increment is PR #211 merge
