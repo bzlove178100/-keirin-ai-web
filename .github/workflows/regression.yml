@@ -44,6 +44,8 @@ jobs:
         run: python tests/test_agent_runtime_bridge.py
       - name: Verify note draft readback and ambiguous-save handling
         run: python tests/test_note_drafts.py
+      - name: Verify private historical preparation through the shared runner
+        run: python tests/test_agent_historical_preparation.py
       - name: Run live GitHub host bridge unit checks
         run: python tests/test_agent_github_readonly_host.py
       - name: Verify candidate CI identity and fail-closed waiting

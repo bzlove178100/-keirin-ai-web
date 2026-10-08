@@ -6,6 +6,15 @@ from the standalone agent. It is not an activation receipt.
 
 ## Observed in the Work browser, 2026-10-07
 
+Update 2026-10-08: the authenticated note home loaded with the existing account
+without another sign-in. Its visible new-post link again opened the editor, which
+still displayed only a loading indicator. No additional reload/sign-in loop,
+draft creation, save or publication was attempted. Console observations did not
+identify the cause. This confirms another observed session reuse, not recovery
+from explicit expiry. A focused search of the connected inquiry mailbox found no
+matching provider reply; this is not proof that no reply exists outside that search.
+Private observation and search-scope receipts are stored separately.
+
 - Google sign-in reached the authenticated creator-contact form. A previously
   authorized inquiry was sent and the page displayed its completion message.
 - A later fresh tab retained authenticated access to that form. This verifies
