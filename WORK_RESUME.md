@@ -1,5 +1,47 @@
 # Work resume handoff
 
+## Completed venue results and pre/result review bridge — 2026-10-08
+
+Verified base: PR #216 is merged at 344c5fb3ed6ff14a51b528cf8aa07f606ed1d047.
+Its private receipt records all six main workflows and 28 regression jobs
+successful; the remote main ref and merged PR were checked again this session.
+This supersedes its pending checkpoint below.
+
+New private captures at 22:00–22:02 JST fill 8–12R. All 12 detailed results
+(84 listed rows, 82 confirmed starters, 80 ranked finishers) match the separate
+venue payout list and the original paper identities. Earlier 1–7R payouts are
+unchanged. 10R has two first-place finishers and two ordered outcomes; both are
+retained. 12R confirms the withdrawal seen on the saved pre-race card. This adds
+five detailed results to existing races, not five new unique observations;
+cumulative unique observations remain 329.
+
+`ml.historical_official_records` replays saved pre/result HTML and receipts,
+checks cross-capture identity and every observed start, and emits hash-bound
+historical review records accepted by the shared preparation runner. Only
+observed style/score are mapped; unknown metric windows stay raw. A pre-known
+withdrawal can be excluded from the candidate population without altering the
+source; a later-only withdrawal, unknown classification or tied rank blocks the
+single-label bridge. Private raw results, including all tied payouts, are retained.
+See HISTORICAL_OFFICIAL_RECORDS.md.
+
+Four saved pre-race cards produced three unapproved records (20 active rows),
+with 10R quarantined for the separate multilabel contract. These are an alternate
+representation of the same races; do not concatenate them with earlier paper
+candidates as additional independent examples. Shared-agent preparation excludes
+all three: source-use/definition/roster and final-record reviews are outstanding.
+There are zero real training runs. Fixed, continuous evaluation data are still
+needed. Historical tests: 120 passed, including 14 new bridge tests; shared-agent
+preparation tests: 10 passed. This increment's remote CI/merge is pending at this
+commit checkpoint; consult the PR and private implementation receipt.
+
+The reply search failed with Gmail RATE_LIMIT_EXCEEDED/PERMISSION_DENIED. This
+is not evidence of no reply. Do not repeat the unchanged request or send a new
+inquiry. note editor access and BLOCKED_SUSPEND_EXPIRY_GAP remain unresolved and
+were not retested here. Production, application DB writes, scheduled collection,
+autonomous learning and hosted activation remain OFF. Next: resolve source-use
+and feature definitions, review exact records, extend dated coverage and add a
+proper multilabel contract while preserving the general-agent/note work.
+
 ## Official detailed intake and working access route — 2026-10-08
 
 Verified base: PR #215 merge 87dfca07ff9a9562c297d4862b5cb8bf2f5e7719,
