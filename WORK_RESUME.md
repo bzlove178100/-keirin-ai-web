@@ -1,5 +1,45 @@
 # Work resume handoff
 
+## Nine-rider pre-race intake and scoped technical review — 2026-10-08
+
+PR #217 is merged at 23bf9689bcbe7d053c813b057c73b35a011863e7.
+Its six main workflows and 28 regression jobs passed. This supersedes the
+pending checkpoint below; the private receipt preserves exact run identities.
+
+A bounded next-day capture saved all 12 Yahiko races for 2026-10-09 before
+start: 108 listed rider rows, all nine-rider fields. Each page passed the existing
+strict capture/date/venue/race/roster checks. One pre-race roster contains an
+additional-entry note, retained for later result reconciliation. Results are
+not available in these pre-race captures. Unique observed races increase from
+329 to 341; these are observations, not approved training examples or predictions.
+
+The prior navigation mismatch is explained by the official page handlers:
+the promotion's prmEnc is used by its result button, whereas its next-day
+vote button uses venue/date. Do not treat that result token as a next-day card
+link. The working read-only route is tomorrow's JSJ057 schedule followed by
+its venue encPrm and returned per-race encParaR values. No login or vote action
+was performed. Validate actual page identity after every navigation. This fixes
+the operator's route selection; it does not claim a server-side repair.
+
+Three existing pre/result records (20 active rows) received a scoped technical
+review against exact saved bytes: capture chronology, identity, roster notes,
+style and score mappings. The reviewed derivatives preserve the original hashes;
+unknown S/H/B windows remain unmapped. Two additional entrants were already on
+the saved pre-race roster; one withdrawal was known before start and confirmed
+in the result. No source-use approval was created. Shared-agent preparation
+now excludes these three only for unconfirmed training use / missing source-use
+evidence, with zero learning runs. Completed resume executes no steps and checks
+the saved report again. Continuous train/validation/test coverage is still absent;
+removing record-level blockers alone would not establish adequate evaluation.
+
+This increment changes handoff documentation only; application code and production,
+DB, autonomous collection/learning and hosted gates remain unchanged/OFF. Private
+captures, reviews, source references and replay scripts are saved separately.
+CI/merge for this documentation checkpoint is pending here; consult its PR and
+private receipt for final status. Next: preserve new pre-race originals, join later
+results without changing features, resolve source-use scope, and extend continuous
+coverage. note and BLOCKED_SUSPEND_EXPIRY_GAP remain unresolved; no unchanged retries.
+
 ## Completed venue results and pre/result review bridge — 2026-10-08
 
 Verified base: PR #216 is merged at 344c5fb3ed6ff14a51b528cf8aa07f606ed1d047.
