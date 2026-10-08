@@ -1,5 +1,39 @@
 # Work status
 
+## Verified local preparation recovery — 2026-10-09
+
+Verified base: main 13940dcd7f689be501e78697d821997d95daea21 (PR #218).
+A saved preparation report could survive interruption before its artifact/state
+commit, leaving explicit reconciliation to a manual caller. The new opt-in
+`--reconcile-verified-output` checks the exact task fingerprint, original input
+hashes, chronology boundaries, sole interrupted step and recomputed report bytes
+under the task lock, then restores the artifact record without rerunning the
+preparation action. Default resume still blocks ambiguous interruption. Missing,
+changed, symlink or unrelated failure evidence remains blocked. See
+HISTORICAL_AGENT_PREPARATION.md for scope and caller storage assumptions.
+
+Local tests: 15 preparation tests (five added recovery cases with rejection
+subcases) and eight shared-core tests passed. A separate private diagnostic run
+using the existing three technically reviewed records was intentionally stopped
+after report creation. Ordinary resume blocked; CLI explicit recovery and its
+repeat both completed with zero action replays and unchanged output bytes/mtime.
+Original inputs and original completed run were preserved. All three remain
+excluded for source-use evidence; real training is still zero. No new races.
+
+A scoped mailbox search now succeeded and returned the note acknowledgement only;
+no substantive reply was found in that query. This does not prove absence across
+all mail. Three inquiries have been sent, including the official data-use contact;
+no source-use permission is established. Private correspondence stays outside git.
+
+This change does not resolve note editor loading or BLOCKED_SUSPEND_EXPIRY_GAP.
+The latter still needs a suspend-inclusive kernel deadline or closed boundary;
+ordinary userspace recovery cannot establish packet revocation during resume.
+No unchanged host experiment was retried. Hosted execution, production prediction,
+DB writes, automatic collection and learning remain OFF. Remote CI and merge are
+pending at this commit checkpoint; consult this change's PR for their final state.
+Next: qualify host suspend boundary separately, diagnose note using new support
+evidence, join later results to immutable pre-race captures and resolve source-use.
+
 ## Nine-rider pre-race intake and scoped technical review — 2026-10-08
 
 PR #217 is merged at 23bf9689bcbe7d053c813b057c73b35a011863e7.
