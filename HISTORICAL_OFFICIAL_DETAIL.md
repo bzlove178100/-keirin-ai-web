@@ -40,7 +40,13 @@ raw and flagged. The single-label review bridge still quarantines tied ranks.
 Listed riders, ranked finishers and confirmed starters are separate counts.
 An explicit withdrawal is not an invented last-place finish. Known fall,
 accident and mechanical retirements count as starts; other non-finisher states
-leave the starter count unknown. Roster additions/withdrawals on pre-race cards
+leave the starter count unknown. A listed finish together with an explicit retirement, or withdrawal
+and retirement together, is contradictory: raw fields remain unchanged, the
+confirmed starter count is unknown and the review bridge quarantines the capture.
+Blank status placeholders do not classify a missing finish; they remain valid
+on a ranked row. Unknown nonblank statuses are retained without inventing a
+meaning. This is internal consistency checking, not correction of source results.
+Roster additions/withdrawals on pre-race cards
 require review. Unknown statistics and their time windows are not automatically
 mapped into model features. These are unapproved observations, not training
 records or prediction snapshots; training and automatic collection stay OFF.
