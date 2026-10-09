@@ -206,6 +206,24 @@ def _observation(header, payload, source_hash, source_url, observed_at,
                        finish_position=int(rank) if isinstance(rank, str) and re.fullmatch(r"[1-9]", rank) else None)
             row["withdrawn_as_observed"] = any(s.get("kojinState") == "欠場" for s in states)
             row["started_but_did_not_finish_as_observed"] = any(s.get("kojinState") in ("落車棄権", "事故棄権", "故障棄権") for s in states)
+            # A disqualified rider's crossing order is not an awarded finish.
+            # Only classify this narrow case with explicit crossing evidence;
+            # missing/unknown evidence remains blocked, even alongside DNF.
+            if any(s.get("kojinState") == "失格" for s in states):
+                crossing = source.get("inLineJyuni")
+                row["disqualified_as_observed"] = True
+                row["crossing_order_as_observed"] = crossing
+                row["disqualified_crossing_verified"] = (
+                    isinstance(crossing, str) and re.fullmatch(r"[1-9]", crossing) is not None
+                    and int(crossing) <= len(expected))
+                if not row["disqualified_crossing_verified"]:
+                    issues.append("disqualified_start_evidence_requires_review")
+                if rank != "":
+                    issues.append("contradictory_disqualification_and_finish")
+                if row["withdrawn_as_observed"]:
+                    issues.append("contradictory_withdrawal_and_disqualification")
+                if row["started_but_did_not_finish_as_observed"] and row["disqualified_crossing_verified"]:
+                    issues.append("contradictory_retirement_and_crossing")
             has_status = any(isinstance(s.get("kojinState"), str) and s["kojinState"].strip()
                              for s in states)
             if row["finish_position"] is None and not has_status:
@@ -232,7 +250,7 @@ def _observation(header, payload, source_hash, source_url, observed_at,
         withdrawals = [r["car_number"] for r in rows if r["withdrawn_as_observed"]]
         ranks = [r["finish_position"] for r in rows if r["finish_position"] is not None]
         summary.update(withdrawn_cars=withdrawals, ranked_rider_count=len(ranks),
-                       confirmed_starter_count=len(rows)-len(withdrawals) if all(r["finish_position"] is not None or r["withdrawn_as_observed"] or r["started_but_did_not_finish_as_observed"] for r in rows) and not issues else None,
+                       confirmed_starter_count=len(rows)-len(withdrawals) if all(r["finish_position"] is not None or r["withdrawn_as_observed"] or r["started_but_did_not_finish_as_observed"] or r.get("disqualified_crossing_verified", False) for r in rows) and not issues else None,
                        repeated_finish_ranks_observed=len(set(ranks)) != len(ranks),
                        weather_as_observed=payload.get("tenki"), wind_as_observed=payload.get("husoku"))
         payouts = payload.get("haraiGakuSubData", {})
