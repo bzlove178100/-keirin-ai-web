@@ -24,9 +24,18 @@ blocks, changed identities and incomplete rosters stop the import.
 Results preserve full rider classifications, withdrawals, retirement states,
 finish margins, closing times, tactics, weather/wind, all offered payout fields
 and refund notes in the raw blocks. A small summary normalizes ordered payouts
-and cross-checks untied top-three finishers. Exceptional payouts remain raw and
-are flagged for review. Repeated ranks are retained; this module does not prove
-all dead-heat payout combinations or make a single training label from them.
+and cross-checks untied top-three finishers. For tied competition ranks such as
+`1, 1, 3`, both exacta and trifecta combinations must exactly match the ordered
+prefixes consistent with every observed rank group. Missing, extra or incorrect
+combinations are flagged even when both payout tables agree with each other,
+including when the only tie is below third place. Other rank conventions and
+insufficient ranked finishers remain raw and require review. Expansion is limited
+to the required two/three places (at most 72/504 combinations for nine riders).
+
+This is an internal rank/payout consistency check, not independent confirmation
+of the result, source-use approval, payout calculation or a new training label.
+Amounts and all original rows are retained unchanged; exceptional payouts stay
+raw and flagged. The single-label review bridge still quarantines tied ranks.
 
 Listed riders, ranked finishers and confirmed starters are separate counts.
 An explicit withdrawal is not an invented last-place finish. Known fall,

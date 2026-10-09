@@ -11,6 +11,7 @@ import json
 import re
 from datetime import date
 from html.parser import HTMLParser
+from itertools import permutations
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -96,6 +97,34 @@ def _ordered_payouts(payload, key, length, cars):
     if len({tuple(x["cars"]) for x in outcomes}) != len(outcomes):
         raise ValueError("duplicate_payout")
     return outcomes
+
+
+def _tied_rank_outcomes(rows, width):
+    """Rank-consistent prefixes only; never derive amounts or training labels.
+
+    Support competition ranks (1, 1, 3), retaining other conventions for review.
+    Expand only the required prefix: at most 9P3, not every complete ordering.
+    """
+    groups = {}
+    for row in rows:
+        rank = row["finish_position"]
+        if rank is not None:
+            groups.setdefault(rank, []).append(row["car_number"])
+    expected_rank = 1
+    for rank, cars in sorted(groups.items()):
+        if rank != expected_rank:
+            raise ValueError("nonstandard_tied_finish_ranks")
+        expected_rank += len(cars)
+    if expected_rank - 1 < width:
+        raise ValueError("insufficient_ranked_finishers")
+    prefixes = {()}
+    for _, cars in sorted(groups.items()):
+        remaining = width - len(next(iter(prefixes)))
+        if remaining == 0:
+            break
+        suffixes = tuple(permutations(sorted(cars), min(len(cars), remaining)))
+        prefixes = {prefix + suffix for prefix in prefixes for suffix in suffixes}
+    return prefixes
 
 
 def ingest(raw: bytes, receipt: dict, race_date: str, venue_code: str, race_number: int, mode: str) -> dict:
@@ -206,6 +235,12 @@ def ingest(raw: bytes, receipt: dict, race_date: str, venue_code: str, race_numb
                 top = [next((r["car_number"] for r in rows if r["finish_position"] == n), None) for n in (1,2,3)]
                 if len(trifecta) != 1 or trifecta[0]["cars"] != top:
                     raise ValueError("finish_order_payout_disagree")
+            else:
+                expected_exacta = _tied_rank_outcomes(rows, 2)
+                expected_trifecta = _tied_rank_outcomes(rows, 3)
+                if ({tuple(e["cars"]) for e in exacta} != expected_exacta
+                        or {tuple(e["cars"]) for e in trifecta} != expected_trifecta):
+                    raise ValueError("tied_finish_order_payout_disagree")
             summary.update(exacta=exacta, trifecta=trifecta)
         except ValueError as exc:
             issues.append(str(exc))

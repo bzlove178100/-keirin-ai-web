@@ -1,5 +1,33 @@
 # Work status
 
+## Tied finish/payout consistency — 2026-10-09
+
+PR #220 is merged at ec63bc6ba7a88af53752eba82890786bf109a070; all five
+independent main-push workflows succeeded. The pending checkpoint below is
+superseded. There were no open PRs when this increment began.
+
+Review found that the detail importer bypassed finish/payout reconciliation
+whenever any repeated rank existed. Consistent prefixes across the two payout
+tables alone could admit missing tied combinations, incorrect third-place cars,
+or a wrong winner when a tie existed only below third place. Synthetic cases
+reproduced nine failing assertions before the fix.
+
+The importer now checks both ordered payout sets against bounded prefixes of
+all observed competition-rank groups. Missing/extra/wrong combinations and
+nonstandard rank gaps are flagged while retaining raw evidence. No payout amount
+or training label is invented. See HISTORICAL_OFFICIAL_DETAIL.md for limits.
+
+Local validation: 127 historical tests and 19 shared preparation tests passed.
+The saved 12-race detailed-result replay, four-pair bridge and separate venue
+reconciliation remain identical to the saved outputs; original bytes were not
+changed. The bridge still has three unapproved records and one tied quarantine.
+This is improved validation of existing observations, not new races or training.
+
+This commit checkpoint precedes its PR/CI/merge; the PR and private receipt hold
+final status. Source-use replies, continuous coverage, multilabel learning,
+note editor access and BLOCKED_SUSPEND_EXPIRY_GAP remain unresolved. Production,
+DB writes, hosted execution, automatic collection and learning remain OFF.
+
 ## Repeated interruption recovery follow-up — 2026-10-09
 
 Verified base: PR #219 merged at 5aa4de7001108ef8c4f360328771a0908434f9e0.
