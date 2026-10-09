@@ -59,6 +59,21 @@ Local artifact readback does not prove durable remote saving or a device downloa
 the receipt deliberately leaves `durable_storage_verified` false. Archive the
 private artifacts and record durable-save receipts separately.
 
+The receipt's `input_accounting` reports entry counts derived from the checked
+input arrays: converted records, upstream quarantines, detail-stage quarantines
+and orphan entrant races, followed by partitioned and preparation-excluded
+records. It does not trust producer summary counters. Missing optional arrays
+produce `null` (unknown), whereas an explicit empty array produces zero; a present
+non-array blocks before task creation. The converted count is reconciled against
+partitioned plus preparation-excluded records. Upstream stages may overlap, so
+their counts are never added into a unique race total. A blocked run has no
+completed accounting. Receipt and activity data contain no upstream identifiers
+or free-text exclusion reasons. Counts do not grant training eligibility.
+
+Accounting is additive receipt/action metadata. It does not change the existing
+preparation report bytes or task fingerprint, so a verified completed task can
+return the new counts without rerunning preparation or rewriting its report.
+
 ## Observed application, 2026-10-08
 
 The previously converted 208 private records were processed once through this

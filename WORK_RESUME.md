@@ -1,5 +1,32 @@
 # Work resume handoff
 
+## Shared preparation stage accounting — 2026-10-09
+
+PR #223 is merged at d7b03860c59fc0b97d8929b61a146241d5707624; all six
+independent main-push workflows succeeded. No open PRs were present on resume.
+
+Preparation receipts previously showed only records that reached preparation,
+so upstream exclusions were invisible. The shared adapter now derives stage
+entry counts from hash-checked arrays and reports converted, quarantined,
+detail-quarantined and orphan entries separately from partitioned/excluded
+preparation records. Missing optional arrays remain unknown; malformed arrays
+block. Producer summary counters are not authoritative, overlapping stages are
+not summed into a unique-race total, and private identifiers/reasons stay out of
+receipt/activity data. Blocked runs do not claim completed accounting.
+
+Persisted preparation bytes and task fingerprints are unchanged. A completed
+resume returns counts without repeating the action or rewriting the report.
+25 preparation tests and 133 historical tests pass. Saved four-pair evidence
+produced three converted / one upstream quarantine / three preparation-excluded
+/ zero partitioned records; a second invocation executed no action and preserved
+the output bytes and modification time. The diagnostic used empty reviews and
+existing diagnostic split dates; no evaluation period or approval was adopted.
+
+PR/CI/merge are pending at this source checkpoint; consult the PR and private
+receipt for final status. No new races or real training. Source replies, later
+results, continuous coverage, note access and BLOCKED_SUSPEND_EXPIRY_GAP remain
+unresolved. Production, DB writes, collection, learning and hosted execution OFF.
+
 ## Result-state consistency — 2026-10-09
 
 PR #222 is merged at dca016068932d00bc6edd9c25c9f3d9d6e45bfcd; all six

@@ -64,6 +64,81 @@ class HistoricalPreparationAgentTests(unittest.TestCase):
         self.assertEqual(sum(receipt['partition_counts'].values()), 0)
         self.assertEqual(receipt['excluded_records'], 4)
 
+    def test_stage_accounting_uses_arrays_and_does_not_add_overlapping_stages(self):
+        data = json.loads(self.records.read_text())
+        data.update(quarantined_records=[{'race_id': 'private-upstream', 'reason': 'private-reason'}],
+                    detail_quarantined_records=[{'race_id': 'private-upstream'}],
+                    orphan_entrant_races=['private-orphan'],
+                    summary={'converted_records': 999, 'quarantined_races': 999})
+        self.records.write_text(json.dumps(data))
+        receipt = self.run_job()
+        counts = receipt['input_accounting']
+        self.assertEqual(counts, {'converted_records': 4, 'quarantined_records': 1,
+            'detail_quarantined_records': 1, 'orphan_entrant_races': 1,
+            'partitioned_records': 4, 'preparation_excluded_records': 0,
+            'converted_records_accounted_for': True,
+            'scope': 'supplied_stage_entries_not_unique_race_total'})
+        for content in (json.dumps(receipt), (self.run_dir/'state/activity.jsonl').read_text()):
+            for secret in ('private-upstream', 'private-reason', 'private-orphan'):
+                self.assertNotIn(secret, content)
+
+    def test_absent_upstream_stages_remain_unknown_and_explicit_empty_is_zero(self):
+        first = self.run_job()['input_accounting']
+        self.assertIsNone(first['quarantined_records'])
+        self.assertIsNone(first['detail_quarantined_records'])
+        self.assertIsNone(first['orphan_entrant_races'])
+        data = json.loads(self.records.read_text())
+        data['quarantined_records'] = []
+        self.records.write_text(json.dumps(data))
+        self.run_dir = self.root/'explicit-empty'
+        second = self.run_job()['input_accounting']
+        self.assertEqual(second['quarantined_records'], 0)
+        self.assertIsNone(second['detail_quarantined_records'])
+
+    def test_excluded_preparation_and_upstream_quarantine_are_distinct(self):
+        data = json.loads(self.records.read_text())
+        data['quarantined_records'] = [{'race_id': 'upstream'}]
+        self.records.write_text(json.dumps(data))
+        self.reviews.write_text('[]')
+        counts = self.run_job()['input_accounting']
+        self.assertEqual(counts['converted_records'], 4)
+        self.assertEqual(counts['quarantined_records'], 1)
+        self.assertEqual(counts['preparation_excluded_records'], 4)
+        self.assertEqual(counts['partitioned_records'], 0)
+        self.assertTrue(counts['converted_records_accounted_for'])
+
+    def test_malformed_stage_cannot_masquerade_as_zero_before_task_creation(self):
+        for field in ('quarantined_records', 'detail_quarantined_records', 'orphan_entrant_races'):
+            for bad in (None, {}, 'private-invalid', 0, False):
+                with self.subTest(field=field, value=bad):
+                    self.write_records()
+                    data = json.loads(self.records.read_text()); data[field] = bad
+                    self.records.write_text(json.dumps(data))
+                    with self.assertRaisesRegex(BlockedAction, 'intake_stage_array_required'):
+                        self.run_job()
+                    self.assertFalse(self.run_dir.exists())
+
+    def test_accounting_resumes_without_rewriting_existing_preparation_format(self):
+        from agent_core.historical_preparation import encoded
+        from ml.historical_training import prepare
+        first = self.run_job()
+        report = prepare(self.rows, json.loads(self.reviews.read_text()),
+                         '2020-01-03T00:00:00+09:00', '2020-01-04T00:00:00+09:00')
+        report['preparation_inputs'] = first['inputs']
+        output = self.run_dir/'preparation.json'
+        self.assertEqual(output.read_bytes(), encoded(report))
+        before = (output.read_bytes(), output.stat().st_mtime_ns)
+        with patch.object(HistoricalPreparationAdapter, 'run', side_effect=AssertionError('replayed')):
+            resumed = self.run_job()
+        self.assertEqual(resumed['input_accounting'], first['input_accounting'])
+        self.assertEqual((output.read_bytes(), output.stat().st_mtime_ns), before)
+
+    def test_blocked_receipt_has_no_completed_accounting(self):
+        self.interrupt_after_output()
+        receipt = self.run_job()
+        self.assertEqual(receipt['outcome']['status'], 'blocked')
+        self.assertIsNone(receipt['input_accounting'])
+
     def test_resume_does_not_repeat_action_and_preserves_report_bytes_and_mtime(self):
         self.run_job()
         output = self.run_dir/'preparation.json'
