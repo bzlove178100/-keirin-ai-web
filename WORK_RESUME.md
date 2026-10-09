@@ -1,5 +1,23 @@
 # Work resume handoff
 
+## Resume Phase 3 boottime candidate — 2026-10-09
+
+The starting main is 33967acdefd9ae04530c67151fb79c43d0263af0, all five main-push
+workflows successful, no open PR at start. Follow the boottime candidate in
+SECRET_CUSTODY_SUSPEND_VM_REVIEW.md: the original nft-only suspend gap remains
+baseline; a guest-only immutable TC boottime deadline is under actual awake/S3
+packet qualification. First candidate CI stopped on nested options.prog readback
+after successful kernel program attachment. The parser is corrected with an
+observed-shape regression; local 28 packet/VM/lease tests pass. Candidate results
+belong in the PR. Require exact final-head success before merge and independent
+main-push success afterward. Do not infer a live fix from local tests or green
+diagnostic CI. No host modification or activation is authorized by this slice.
+Next after scoped packet success: close startup-before-link ordering and retain
+the separate authenticated management / reboot / production binding gaps.
+Source acquisition hold remains active; do not resume historical fetch steps.
+note reply/public API conditions are updated in NOTE_INTEGRATION.md; no purchase
+or live note backend has been activated.
+
 ## Source acquisition hold — 2026-10-09
 
 Newly reviewed private provider correspondence changes the collection plan.

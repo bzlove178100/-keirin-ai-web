@@ -60,7 +60,7 @@ def archive(files):
     return gzip.compress(bytes(result), mtime=0)
 
 
-def payload(path):
+def payload(path, boottime_guard=False):
     files = {}
     def add(source, target=None):
         source = Path(source)
@@ -77,6 +77,15 @@ def payload(path):
     add(HERE / 'fixtures/secret_custody_packet_guest.py', 'probe.py')
     add(HERE.parent / 'review/secret_custody_qualification_lease.py', 'lease.py')
     binaries = ['/usr/bin/python3', '/usr/sbin/ip', '/usr/sbin/nft', '/usr/sbin/modprobe']
+    if boottime_guard:
+        subprocess.run(['/usr/bin/gcc', '-static', '-O2', '-Wall', '-Wextra', '-Werror',
+                        '-o', str(path / 'boot-guard'), str(HERE / 'fixtures/secret_custody_boottime_guard.c')],
+                       check=True, timeout=30)
+        denied = subprocess.run([str(path / 'boot-guard')], capture_output=True, timeout=5)
+        if denied.returncode != 2 or b'BOOTTIME_GUEST_' not in denied.stderr:
+            raise RuntimeError('BOOTTIME_LOADER_HOST_REFUSAL_REQUIRED')
+        add(path / 'boot-guard', 'boot-guard')
+        binaries.append('/usr/sbin/tc')
     for binary in binaries: add(binary)
     add('/usr/sbin/modprobe', '/sbin/modprobe')
     stdlib = Path(sysconfig.get_path('stdlib'))
@@ -97,7 +106,7 @@ def payload(path):
     root = Path('/lib/modules') / version
     empty = path / 'module-config'; empty.mkdir()
     manifest = []
-    for module in MODULES:
+    for module in MODULES + (('sch_ingress', 'cls_bpf') if boottime_guard else ()):
         dependency = subprocess.run(['/usr/sbin/modprobe', '-C', str(empty), '--show-depends', module],
                                     capture_output=True, text=True, timeout=5)
         if dependency.returncode:
@@ -119,10 +128,12 @@ def payload(path):
           'file_count': len(files), 'modules': manifest}), flush=True)
 
 
-def command(path):
+def command(path, boottime_guard=False):
     args = vm.command(path)
     args[args.index('-m') + 1] = '512M'
     args[args.index('-append') + 1] += ' kc_packet_probe=1 end=2'
+    if boottime_guard:
+        args[args.index('-append') + 1] += ' kc_boottime_guard=1 end=3'
     return args
 
 
@@ -152,7 +163,7 @@ def record(lines, event, mode, boot, timeout=30):
         return row
 
 
-def outcome(mode, before, after, host_elapsed):
+def outcome(mode, before, after, host_elapsed, boottime_guard=False):
     if after.get('management') != [True] * 4 or after.get('rule_identity_unchanged') is not True:
         raise RuntimeError('PACKET_MANAGEMENT_AND_IDENTITY_REQUIRED')
     packets = after.get('qualification')
@@ -174,16 +185,30 @@ def outcome(mode, before, after, host_elapsed):
         else: raise RuntimeError('MIXED_SUSPEND_PACKET_EVIDENCE')
     else:
         raise ValueError('FIXED_PACKET_CASE_REQUIRED')
+    if boottime_guard:
+        proof = before.get('boottime_guard')
+        if (not isinstance(proof, dict) or type(proof.get('deadline_ns')) is not int
+                or type(proof.get('program_id')) is not int or proof['program_id'] <= 0
+                or type(proof.get('ifindex')) is not int or proof['ifindex'] <= 0
+                or not re.fullmatch('[0-9a-f]{16}', str(proof.get('tag')))
+                or proof.get('loader_exits') is not True
+                or proof != after.get('boottime_guard')
+                or after.get('tc_identity_unchanged') is not True
+                or not start['boottime'] < proof['deadline_ns'] / 1e9 <= start['boottime'] + 8
+                or after['boottime'] <= proof['deadline_ns'] / 1e9
+                or packets != [False] * 4):
+            raise RuntimeError('IMMUTABLE_BOOTTIME_PACKET_EXPIRY_REQUIRED')
+        result = 'BOOTTIME_' + result
     if after.get('outcome') != result: raise RuntimeError('PACKET_OUTCOME_MISMATCH')
     return result
 
 
-def case(path, mode, host_boot):
+def case(path, mode, host_boot, boottime_guard=False):
     if mode not in ('awake', 'suspend'): raise ValueError('FIXED_PACKET_CASE_REQUIRED')
     process = None
     try:
         with (path / 'stderr').open('wb') as errors:
-            process = subprocess.Popen(command(path), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
+            process = subprocess.Popen(command(path, boottime_guard), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
                                        cwd=path, env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
             with vm.connect(path / 'qmp', process) as monitor, vm.connect(path / 'serial', process) as serial:
                 qmp, lines = vm.QMP(monitor), vm.Lines(serial)
@@ -203,7 +228,7 @@ def case(path, mode, host_boot):
                     time.sleep(vm.SUSPEND_SECONDS)
                     qmp.call('system_wakeup'); qmp.event('WAKEUP', time.monotonic() + 10)
                 after = record(lines, 'after', mode, boot)
-                result = outcome(mode, before, after, time.monotonic() - started)
+                result = outcome(mode, before, after, time.monotonic() - started, boottime_guard)
                 print('PASS PACKET_FIRST_OBSERVATION_CLASSIFIED', mode, result, flush=True)
                 late = record(lines, 'awake_expired', mode, boot)
                 if late.get('qualification') != [False] * 4 or late.get('management') != [True] * 4:
@@ -228,7 +253,7 @@ def case(path, mode, host_boot):
             (path / name).unlink(missing_ok=True)
 
 
-def run_vm():
+def run_vm(boottime_guard=False):
     guard()
     host_boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
     host_netns = os.readlink('/proc/self/ns/net')
@@ -239,11 +264,11 @@ def run_vm():
         kernel = subprocess.run(['sudo', '-n', '/usr/bin/cat', str(source)], check=True, capture_output=True, timeout=10).stdout
         if not 1024 * 1024 <= len(kernel) <= 64 * 1024 * 1024: raise RuntimeError('KERNEL_SIZE_BOUND')
         (path / 'vmlinuz').write_bytes(kernel)
-        payload(path)
+        payload(path, boottime_guard)
         print('PACKET_VM_PROVENANCE', json.dumps({'kernel_release': os.uname().release,
               'kernel_sha256': hashlib.sha256(kernel).hexdigest(), 'qemu_sha256': hashlib.sha256(Path(vm.QEMU).read_bytes()).hexdigest()}), flush=True)
-        awake_boot, _ = case(path, 'awake', host_boot)
-        suspend_boot, measured = case(path, 'suspend', host_boot)
+        awake_boot, _ = case(path, 'awake', host_boot, boottime_guard)
+        suspend_boot, measured = case(path, 'suspend', host_boot, boottime_guard)
         if awake_boot == suspend_boot: raise RuntimeError('FRESH_VM_PER_PACKET_CASE_REQUIRED')
     if path.exists() or Path('/proc/sys/kernel/random/boot_id').read_text().strip() != host_boot or os.readlink('/proc/self/ns/net') != host_netns:
         raise RuntimeError('PACKET_VM_CLEANUP_HOST_CONTEXT_REQUIRED')
@@ -252,6 +277,26 @@ def run_vm():
 
 
 class Tests(unittest.TestCase):
+    def test_actual_iproute2_nested_program_identity_is_required(self):
+        spec = importlib.util.spec_from_file_location('packet_guest', HERE / 'fixtures/secret_custody_packet_guest.py')
+        guest = importlib.util.module_from_spec(spec); spec.loader.exec_module(guest)
+        proof = {'program_id': 1, 'tag': '67a57c06ba353954'}
+        # Shape from failed guest job 113730362212, not a guessed flat schema.
+        header = {'protocol': 'all', 'pref': 1, 'kind': 'bpf', 'chain': 0}
+        options = {'handle': '0x1', 'bpf_name': 'kc_boot_guard', 'direct-action': True,
+                   'not_in_hw': True, 'prog': {'id': 1, 'name': 'kc_boot_guard',
+                                              'tag': proof['tag'], 'jited': 1}}
+        report = [header, dict(header, options=options)]
+        with patch.object(guest, 'run', return_value=json.dumps(report).encode()):
+            self.assertEqual(guest.tc_identity(proof), [report, report])
+        for replacement in ({}, dict(options, prog={'id': 2, 'tag': proof['tag']}),
+                            dict(options, prog={'id': 1, 'tag': '0' * 16}),
+                            dict(options, **{'direct-action': False}),
+                            dict(options, prog=None, id=1, tag=proof['tag'])):
+            with self.subTest(options=replacement), patch.object(guest, 'run',
+                    return_value=json.dumps([header, dict(header, options=replacement)]).encode()), self.assertRaises(RuntimeError):
+                guest.tc_identity(proof)
+
     def test_archive_supplies_guest_random_and_null_device_nodes(self):
         data, offset, devices, links = gzip.decompress(archive({})), 0, {}, {}
         while True:
@@ -305,6 +350,24 @@ class Tests(unittest.TestCase):
         self.assertEqual(outcome('awake', before, after, 10), 'AWAKE_EXPIRY_CONFIRMED')
         with self.assertRaises(RuntimeError): outcome('awake', before, dict(after, qualification=[True] * 4), 10)
 
+    def test_boottime_candidate_cannot_pass_with_old_gap_or_missing_identity(self):
+        before, after = self.sample([False] * 4)
+        proof = {'deadline_ns': 108000000000, 'program_id': 1, 'ifindex': 2,
+                 'tag': 'a' * 16, 'loader_exits': True}
+        before['boottime_guard'] = proof
+        after.update(boottime_guard=proof, tc_identity_unchanged=True,
+                     outcome='BOOTTIME_SUSPEND_EXPIRY_OBSERVED')
+        self.assertEqual(outcome('suspend', before, after, 13, True), 'BOOTTIME_SUSPEND_EXPIRY_OBSERVED')
+        for change in ({'qualification': [True] * 4}, {'tc_identity_unchanged': False},
+                       {'boottime_guard': None}, {'boottime_guard': dict(proof, program_id=2)},
+                       {'outcome': 'SUSPEND_EXPIRY_OBSERVED'}):
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                outcome('suspend', before, dict(after, **change), 13, True)
+        for change in ({'deadline_ns': 109000000000}, {'program_id': 0}, {'loader_exits': False}):
+            wrong = dict(proof, **change)
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                outcome('suspend', dict(before, boottime_guard=wrong), dict(after, boottime_guard=wrong), 13, True)
+
     def test_packet_gate_precedes_any_build_or_launch(self):
         with patch.object(vm, 'guard'), patch.dict(os.environ, {'KC_SUSPEND_PACKET_CI': '0'}), patch.object(subprocess, 'run') as run:
             with self.assertRaisesRegex(RuntimeError, 'OPT_IN'): run_vm()
@@ -322,4 +385,5 @@ class Tests(unittest.TestCase):
 
 if __name__ == '__main__':
     if sys.argv[1:] == ['--vm']: run_vm()
+    elif sys.argv[1:] == ['--boottime-vm']: run_vm(boottime_guard=True)
     else: unittest.main(verbosity=2)

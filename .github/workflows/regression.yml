@@ -546,7 +546,7 @@ jobs:
 
   custody-suspend-packets:
     runs-on: ubuntu-24.04
-    timeout-minutes: 7
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Test guest packet evidence and isolation guards
@@ -558,6 +558,11 @@ jobs:
           KC_SUSPEND_VM_CI: '1'
           KC_SUSPEND_PACKET_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_suspend_packets.py --vm
+      - name: Require immutable kernel boottime expiry across guest S3
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_suspend_packets.py --boottime-vm
 
   custody-suspend-vm:
     runs-on: ubuntu-24.04

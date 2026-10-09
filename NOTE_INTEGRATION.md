@@ -1,5 +1,28 @@
 # note integration checkpoint
 
+## Support and official API update — 2026-10-09
+
+The support reply confirms that the ChatGPT cloud browser is outside note's
+recommended environment and is not covered by their operation checks/support.
+It recommends supported browsers/apps but does not identify the editor failure's
+root cause or provide a repair. Earlier awaiting-reply text below is historical.
+Private correspondence remains outside git; no account/message identifiers are
+published here. No further message or browser retry was sent/performed.
+
+The official API help page now describes a note API for corporate note pro
+customers through supported services (article creation/publication/update and
+management). Direct integration into one's own service is described for contracted
+solution partners. note pro and the supported service have their own fees.
+This supersedes the older no-official-API statement, but does not establish this
+project's eligibility, credential access or a working adapter. Do not substitute
+an undocumented endpoint or purchase a subscription on that assumption.
+https://www.help-note.com/hc/ja/articles/46643492548121
+
+Near-term proposal: prepare content here and use the supported phone environment
+for save/publication when separately requested. A real save/reopen check is still
+unverified; phone editor visibility alone is not a successful save. Autonomous
+posting remains a product goal, not an operational capability.
+
 The user requested note integration alongside work that can proceed while a
 data-provider reply is pending. This document separates the current Work browser
 from the standalone agent. It is not an activation receipt.
@@ -68,6 +91,6 @@ tests use a synthetic backend and do not prove a real browser implementation.
 - Test explicit auth expiry, interruption and reconciliation without duplicate
   side effects. No autonomous scheduler or production runtime is enabled here.
 
-Official reference checked on 2026-10-07: note says it has no officially public
-API, with no announced release plan. This adapter does not call private endpoints.
+Historical reference checked on 2026-10-07 reported no officially public API.
+The 2026-10-09 update above supersedes it. This adapter does not call private endpoints.
 https://www.help-note.com/hc/ja/articles/46643492548121
