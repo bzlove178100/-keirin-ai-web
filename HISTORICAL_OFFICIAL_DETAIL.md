@@ -92,3 +92,20 @@ It also compares the detailed ordered payouts with the separate venue list
 and the rider identities with the unchanged earlier paper. Acquisition, field
 mapping, source-use review, final-record review and actual learning remain
 separate milestones. Existing shared-agent, note and runtime work is unchanged.
+
+## Disqualified crossing evidence (2026-10-09)
+
+An exact `失格` state with blank awarded rank and a string `inLineJyuni`
+within the listed roster size can establish that the rider started and crossed
+the line. Keep `finish_position` null and keep retirement false: crossing order
+is not an awarded placing. Preserve the original value separately. Missing or
+malformed crossing evidence, an awarded rank, withdrawal, or contradictory
+retirement/crossing state requires review. This deliberately does not cover all
+disqualification variants. Unknown states stay unclassified.
+
+Source grounding: the official glossary describes 失格 as a penalty for race
+violations (https://keirin.jp/pc/static/beginner/keirin-glossary/sa-so.html).
+The captured official `commonRace.js` renders `inLineJyuni` as 入線順位.
+Those facts support this limited intake rule, not a guessed awarded finish or
+source-use permission. Ordered payouts must still match awarded top-three
+positions; original pre-race population, chronology and review gates remain.

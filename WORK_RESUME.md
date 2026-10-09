@@ -1,5 +1,30 @@
 # Work resume handoff
 
+## Disqualified crossing intake — 2026-10-09
+
+PR #225 is merged at 62008f14da9a39552548421b027bf1379253dcc7; all six
+main-push CI workflows succeeded. The private noon result checkpoint found
+three complete result captures: two joined, one blocked by unclassified
+disqualification. No fresh source request was needed to diagnose it.
+
+The importer now recognizes exact disqualification with explicit valid crossing
+order as a starter, separately from an awarded finish and retirement. Missing
+evidence and contradictory rank/withdrawal/retirement remain blocked. The
+original crossing value and raw blocks are retained; no rank is fabricated.
+
+Validation: 150 historical tests plus 25 shared preparation tests pass. Saved
+12 historical results/four-pair bridge and 12 pre-race cards replay unchanged.
+The three noon result pairs now join against their immutable pre-race cards;
+technical review covers 27 riders, while preparation excludes all three for
+unconfirmed source use and missing source-use evidence. Training stays zero.
+Prior observations/quarantine receipts remain unchanged; new derived records
+have new hashes and reviews. Private evidence contains exact source receipts.
+
+This checkpoint precedes PR CI/merge. Production, DB writes, continuous external
+collection, learning and hosted execution remain OFF. Follow later results
+against saved pre cards; await provider replies. Unknown DQ variants, broader
+coverage, evaluation periods, note access and suspend-expiry gap remain open.
+
 ## Official JSON result capture bridge — 2026-10-09
 
 PR #224 is merged at 293f1aced5b5c68821f5c62fcb986adac1365969; all five
