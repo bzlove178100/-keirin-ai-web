@@ -1,5 +1,25 @@
 # Work resume handoff
 
+## Source acquisition hold — 2026-10-09
+
+Newly reviewed private provider correspondence changes the collection plan.
+KEIRIN.JP acquisition is now on hold, including bounded scripts and the JSON
+fallback. SOURCE_ACQUISITION_STATUS.md supersedes earlier fetch-next-race
+steps. Do not bypass the hold with another transport or endpoint. Original
+private evidence is retained, with no training/source-use approval. The earlier
+awaiting-reply status is historical, not current.
+
+Before the reply was read, a single header/result pair for the fourth race
+was captured and still showed payouts without all finishes. No acquisition
+was made after the decision to hold. No new complete result or unique race
+was added. Previously reviewed race records remain excluded from learning.
+
+PR #226 is merged at 44f4288cd96e3667cd20e31e661361a27d86a137. Its PR CI
+all six and regression28 passed; main-push CI was still running at resume.
+Do not treat this document checkpoint as final CI proof; private receipts
+carry later status. Common-agent/synthetic development can continue. Seek
+documented licensed data provision; other source inquiries remain separate.
+
 ## Disqualified crossing intake — 2026-10-09
 
 PR #225 is merged at 62008f14da9a39552548421b027bf1379253dcc7; all six

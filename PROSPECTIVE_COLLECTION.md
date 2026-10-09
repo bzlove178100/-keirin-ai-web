@@ -1,5 +1,7 @@
 # Prospective real-race collection protocol
 
+> 2026-10-09: KEIRIN.JP acquisition is on hold. Read SOURCE_ACQUISITION_STATUS.md before using any collection steps below. Prior fetch instructions are superseded.
+
 Purpose: collect leakage-resistant real-race histories for paired Phase32 baseline vs LightGBM offline evaluation.
 
 ## Current historical intake checkpoint — 2026-10-07
