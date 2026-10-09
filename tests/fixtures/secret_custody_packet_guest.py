@@ -144,8 +144,11 @@ def tc_identity(proof):
                for direction in ('ingress', 'egress')]
     for report in reports:
         programs = [row['options'] for row in report if 'options' in row]
-        if (len(programs) != 1 or programs[0].get('id') != proof['program_id']
-                or programs[0].get('tag') != proof['tag']
+        # iproute2 puts kernel program identity inside options.prog, not directly
+        # in options (observed in the first actual guest attachment).
+        if (len(programs) != 1 or not isinstance(programs[0].get('prog'), dict)
+                or programs[0]['prog'].get('id') != proof['program_id']
+                or programs[0]['prog'].get('tag') != proof['tag']
                 or programs[0].get('direct-action') is not True):
             raise RuntimeError('ATTACHED_BOOTTIME_PROGRAM_REQUIRED ' + json.dumps(report))
     return reports

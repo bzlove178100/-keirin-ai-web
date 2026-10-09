@@ -277,6 +277,26 @@ def run_vm(boottime_guard=False):
 
 
 class Tests(unittest.TestCase):
+    def test_actual_iproute2_nested_program_identity_is_required(self):
+        spec = importlib.util.spec_from_file_location('packet_guest', HERE / 'fixtures/secret_custody_packet_guest.py')
+        guest = importlib.util.module_from_spec(spec); spec.loader.exec_module(guest)
+        proof = {'program_id': 1, 'tag': '67a57c06ba353954'}
+        # Shape from failed guest job 113730362212, not a guessed flat schema.
+        header = {'protocol': 'all', 'pref': 1, 'kind': 'bpf', 'chain': 0}
+        options = {'handle': '0x1', 'bpf_name': 'kc_boot_guard', 'direct-action': True,
+                   'not_in_hw': True, 'prog': {'id': 1, 'name': 'kc_boot_guard',
+                                              'tag': proof['tag'], 'jited': 1}}
+        report = [header, dict(header, options=options)]
+        with patch.object(guest, 'run', return_value=json.dumps(report).encode()):
+            self.assertEqual(guest.tc_identity(proof), [report, report])
+        for replacement in ({}, dict(options, prog={'id': 2, 'tag': proof['tag']}),
+                            dict(options, prog={'id': 1, 'tag': '0' * 16}),
+                            dict(options, **{'direct-action': False}),
+                            dict(options, prog=None, id=1, tag=proof['tag'])):
+            with self.subTest(options=replacement), patch.object(guest, 'run',
+                    return_value=json.dumps([header, dict(header, options=replacement)]).encode()), self.assertRaises(RuntimeError):
+                guest.tc_identity(proof)
+
     def test_archive_supplies_guest_random_and_null_device_nodes(self):
         data, offset, devices, links = gzip.decompress(archive({})), 0, {}, {}
         while True:

@@ -6,7 +6,9 @@ The starting main is 33967acdefd9ae04530c67151fb79c43d0263af0, all five main-pus
 workflows successful, no open PR at start. Follow the boottime candidate in
 SECRET_CUSTODY_SUSPEND_VM_REVIEW.md: the original nft-only suspend gap remains
 baseline; a guest-only immutable TC boottime deadline is under actual awake/S3
-packet qualification. Local 27 packet/VM/lease tests pass; candidate CI results
+packet qualification. First candidate CI stopped on nested options.prog readback
+after successful kernel program attachment. The parser is corrected with an
+observed-shape regression; local 28 packet/VM/lease tests pass. Candidate results
 belong in the PR. Require exact final-head success before merge and independent
 main-push success afterward. Do not infer a live fix from local tests or green
 diagnostic CI. No host modification or activation is authorized by this slice.

@@ -2,6 +2,15 @@
 
 ## Boottime packet deadline candidate — 2026-10-09
 
+First candidate job 113730362212 loaded/attached the kernel program but stopped
+before candidate packet evidence: iproute2's readback places ID/tag under
+`options.prog`, whereas the verifier expected flat options fields. Correct that
+parser against the observed JSON and add rejection cases for missing/wrong
+ID/tag or direct-action. Do not weaken timing/packet conditions or interpret
+this failed observation as a deadline result. The original nft-only diagnostic
+again measured BLOCKED_SUSPEND_EXPIRY_GAP. The changed candidate must supply
+actual packet evidence; no unchanged rerun.
+
 The existing measured suspend gap remains the baseline. Add an independent,
 guest-only TC ingress/egress gate using `bpf_ktime_get_boot_ns()` and an immutable
 eight-second absolute deadline embedded in the loaded instructions. There are
@@ -33,7 +42,7 @@ allowlist or authenticated management qualification. Closed startup, reboot,
 privileged filter changes, arbitrary endpoints/protocols and production binding
 remain unresolved even if the fixed packet experiment succeeds.
 
-Local packet/VM/lease tests: 27 passed; C compilation passed with warnings as
+Local packet/VM/lease tests: 28 passed; C compilation passed with warnings as
 errors and ordinary host execution refused. Actual candidate packets are pending
 CI at this checkpoint. All activation gates remain OFF. Require final-head CI,
 review and independent merged-main CI; record measurements in the PR rather than
