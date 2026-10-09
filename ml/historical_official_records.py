@@ -28,6 +28,20 @@ def join(pre_bytes: bytes, pre_receipt: dict, result_bytes: bytes,
          race_number: int) -> dict:
     pre = ingest(pre_bytes, pre_receipt, race_date, venue_code, race_number, "pre")
     result = ingest(result_bytes, result_receipt, race_date, venue_code, race_number, "result")
+    return _join_observations(pre, result, race_date, venue_code, race_number)
+
+
+def join_json_result(pre_bytes, pre_receipt, header_bytes, header_receipt,
+                     result_bytes, result_receipt, race_date, venue_code, race_number):
+    """Join original pre-race HTML with independently receipted result JSON."""
+    from ml.historical_official_json import ingest_json_result
+    pre = ingest(pre_bytes, pre_receipt, race_date, venue_code, race_number, 'pre')
+    result = ingest_json_result(header_bytes, header_receipt, result_bytes, result_receipt,
+                                race_date, venue_code, race_number)
+    return _join_observations(pre, result, race_date, venue_code, race_number)
+
+
+def _join_observations(pre, result, race_date, venue_code, race_number):
     if set(pre["issues"]) - {"pre_race_roster_note_requires_review"} or result["issues"]:
         raise ValueError("capture_issues_require_review")
     starts = pre["listed_start_times_jst"] + result["listed_start_times_jst"]

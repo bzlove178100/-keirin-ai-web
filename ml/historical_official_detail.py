@@ -127,18 +127,17 @@ def _tied_rank_outcomes(rows, width):
     return prefixes
 
 
-def ingest(raw: bytes, receipt: dict, race_date: str, venue_code: str, race_number: int, mode: str) -> dict:
-    """Pin capture/scope, retain both complete blocks, and flag review conditions.
-
-    `pre` is only a claim about the locally observed time before both listed
-    start times. A page's last-update label is never used to backdate features.
-    Result states and refund markers are preserved, not silently dropped.
-    """
+def _scope(race_date, venue_code, race_number, mode):
     date.fromisoformat(race_date)
     if (not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", race_date)
             or not re.fullmatch(r"[0-9]{2}", venue_code)
             or type(race_number) is not int or not 1 <= race_number <= 12 or mode not in ("pre", "result")):
         raise ValueError("invalid_expected_scope")
+
+
+def ingest(raw: bytes, receipt: dict, race_date: str, venue_code: str, race_number: int, mode: str) -> dict:
+    """Pin saved HTML/scope; page-update labels never backdate the capture."""
+    _scope(race_date, venue_code, race_number, mode)
     if not isinstance(raw, bytes) or len(raw) > 5_000_000:
         raise ValueError("invalid_capture_size")
     source_hash = hashlib.sha256(raw).hexdigest()
@@ -156,6 +155,15 @@ def ingest(raw: bytes, receipt: dict, race_date: str, venue_code: str, race_numb
     header = _block(parser.scripts, "PC0201")
     block_name = "PJ0315" if mode == "pre" else "PJ0326"
     payload = _block(parser.scripts, block_name)
+    return _observation(header, payload, source_hash, receipt["final_url"],
+                        receipt["download_completed_at"], race_date, venue_code, race_number, mode)
+
+
+def _observation(header, payload, source_hash, source_url, observed_at,
+                 race_date, venue_code, race_number, mode):
+    """Shared normalization after transport-specific receipt validation."""
+    observed = timestamp(observed_at)
+    block_name = "PJ0315" if mode == "pre" else "PJ0326"
     h = header["C0201data"]
     if (h.get("selKaisai") != race_date.replace("-", "") or h.get("selKjyoCd") != venue_code
             or type(h.get("selRaceNo")) is not int or h["selRaceNo"] != race_number):
@@ -252,8 +260,8 @@ def ingest(raw: bytes, receipt: dict, race_date: str, venue_code: str, race_numb
             issues.append(str(exc))
     result = {"schema_version": "official-race-detail-observation-v1", "mode": mode,
               "race_date": race_date, "venue_code": venue_code, "race_number": race_number,
-              "observed_at": receipt["download_completed_at"], "listed_start_times_jst": starts,
-              "source_sha256": source_hash, "source_url": receipt["final_url"],
+              "observed_at": observed_at, "listed_start_times_jst": starts,
+              "source_sha256": source_hash, "source_url": source_url,
               "raw_blocks": {"PC0201": header, block_name: payload}, "summary": summary,
               "issues": sorted(set(issues)), "training_eligible": False, "training_runs": 0,
               "automatic_collection_enabled": False, "production_enabled": False,

@@ -1,5 +1,35 @@
 # Work resume handoff
 
+## Official JSON result capture bridge — 2026-10-09
+
+PR #224 is merged at 293f1aced5b5c68821f5c62fcb986adac1365969; all five
+main-push workflows succeeded. No open PRs were present on resume.
+
+Fresh result/card HTML requests returned HTTP 500/EC0500E, while the public
+schedule and page JavaScript remained readable. The schedule selection token
+was unchanged. Inspection of the page's own controllers established its GET
+JSJ001 header / JSJ012 result route. Both returned HTTP 200. The HTML failure's
+server-side cause is unknown; no claim of repair, login or access bypass.
+
+Added offline paired-JSON intake with independent byte/receipt checks, closed
+request types/endpoint/query, equal selection tokens, header/scope matching,
+chronology and publication checks. Normalization and pre-race joining reuse
+existing HTML roster/status/tie/payout and review boundaries. Raw JSON blocks,
+original capture hashes and scoped receipts are retained; no HTML is fabricated.
+The composite source hash is explicitly labeled. See HISTORICAL_OFFICIAL_DETAIL.md.
+
+Validation: 11 JSON tests, 133 existing historical tests and 25 agent preparation
+tests pass. Saved 12-race HTML observations and the four-pair bridge are unchanged.
+The first live 1R JSON capture was unpublished; the next contained payouts but
+no finish rows and was correctly rejected as result_not_published. Private
+receipts retain those changing states. Later capture outcomes belong in the
+private follow-up receipt, not an assumed result at this commit checkpoint.
+
+PR/CI/merge remain pending at this source checkpoint. Production, DB writes,
+automatic collection, learning and hosted execution remain OFF. No approval or
+training follows merely from obtaining official JSON. Source replies, continuous
+coverage, note access and BLOCKED_SUSPEND_EXPIRY_GAP remain unresolved.
+
 ## Shared preparation stage accounting — 2026-10-09
 
 PR #223 is merged at d7b03860c59fc0b97d8929b61a146241d5707624; all six
