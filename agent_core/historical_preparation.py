@@ -106,9 +106,28 @@ class HistoricalPreparationAdapter:
         hashes = {r["race_id"]: digest(r) for r in rows}
         if len(hashes) != len(rows) or data.get("record_hashes") != hashes:
             raise BlockedAction("historical_record_hashes_mismatch")
+        counts = {"converted_records": len(rows)}
+        for field in ("quarantined_records", "detail_quarantined_records", "orphan_entrant_races"):
+            if field in data and not isinstance(data[field], list):
+                raise BlockedAction("historical_intake_stage_array_required")
+            counts[field] = len(data[field]) if field in data else None
         report = prepare(rows, reviews, self.inputs["validation_start"], self.inputs["test_start"])
         report["preparation_inputs"] = dict(self.inputs)
+        self.intake_counts = counts
         return report
+
+    def accounting(self, report):
+        """Counts from checked input arrays; no raw identities/reasons in receipts.
+
+        Upstream stages can overlap; their entries are never added into a unique
+        race total. Keep the persisted preparation bytes/task identity unchanged.
+        """
+        prepared = sum(report["partition_counts"].values())
+        excluded = len(report["excluded"])
+        return {**self.intake_counts,
+                "partitioned_records": prepared, "preparation_excluded_records": excluded,
+                "converted_records_accounted_for": prepared + excluded == self.intake_counts["converted_records"],
+                "scope": "supplied_stage_entries_not_unique_race_total"}
 
     def check(self):
         expected = self.expected_report()
@@ -124,7 +143,7 @@ class HistoricalPreparationAdapter:
         self.check()
         return ActionResult(message="offline preparation report verified; no training performed",
             data={"partition_counts": report["partition_counts"], "excluded_records": len(report["excluded"]),
-                  "training_runs": 0},
+                  "training_runs": 0, "input_accounting": self.accounting(report)},
             artifacts=(self.verified_artifact(),))
 
     def verified_artifact(self):
@@ -213,6 +232,7 @@ def run_preparation(records: Path, reviews: Path, run_dir: Path,
             "outcome": asdict(outcome), "inputs": adapter.inputs,
             "partition_counts": report["partition_counts"] if report else None,
             "excluded_records": len(report["excluded"]) if report else None,
+            "input_accounting": adapter.accounting(report) if report else None,
             "preparation_sha256": file_hash(output) if report else None,
             "training_runs": 0, "production_enabled": False,
             "automatic_collection_enabled": False, "autonomous_learning_enabled": False,
