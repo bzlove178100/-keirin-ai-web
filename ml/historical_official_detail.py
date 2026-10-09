@@ -198,10 +198,16 @@ def ingest(raw: bytes, receipt: dict, race_date: str, venue_code: str, race_numb
                        finish_position=int(rank) if isinstance(rank, str) and re.fullmatch(r"[1-9]", rank) else None)
             row["withdrawn_as_observed"] = any(s.get("kojinState") == "欠場" for s in states)
             row["started_but_did_not_finish_as_observed"] = any(s.get("kojinState") in ("落車棄権", "事故棄権", "故障棄権") for s in states)
-            if row["finish_position"] is None and not states:
+            has_status = any(isinstance(s.get("kojinState"), str) and s["kojinState"].strip()
+                             for s in states)
+            if row["finish_position"] is None and not has_status:
                 issues.append("unclassified_result_row")
             if row["withdrawn_as_observed"] and row["finish_position"] is not None:
                 issues.append("contradictory_withdrawal_and_finish")
+            if row["started_but_did_not_finish_as_observed"] and row["finish_position"] is not None:
+                issues.append("contradictory_retirement_and_finish")
+            if row["withdrawn_as_observed"] and row["started_but_did_not_finish_as_observed"]:
+                issues.append("contradictory_withdrawal_and_retirement")
         rows.append(row)
     if seen != set(expected):
         raise ValueError("incomplete_detail_roster")

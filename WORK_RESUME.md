@@ -1,5 +1,29 @@
 # Work resume handoff
 
+## Result-state consistency — 2026-10-09
+
+PR #222 is merged at dca016068932d00bc6edd9c25c9f3d9d6e45bfcd; all six
+independent main-push workflows succeeded. No open PRs were present on resume.
+
+The detail importer accepted a finish rank together with an explicit retirement,
+and accepted withdrawal and retirement on the same row. Such contradictions
+could supply a confirmed starter count; ranked retirement could reach the
+unapproved single-label review bridge. Blank status objects also concealed an
+unclassified missing rank. Six synthetic tests reproduced 12 failing subcases.
+
+The importer now flags those contradictions, leaves the confirmed starter count
+unknown, and retains original fields. The bridge quarantines contradictory
+captures via its existing issue gate. Ranked blank placeholders and separate
+unranked withdrawals/retirements stay valid; unknown statuses are not interpreted.
+
+Validation: 133 historical tests and 19 agent preparation tests pass. The saved
+12-result replay, four-pair bridge and separate venue reconciliation are unchanged.
+No new races, source approvals or real training resulted. PR/CI/merge are pending
+at this source checkpoint; consult the PR and private receipt for final status.
+Source replies, later results, continuous coverage, multilabel learning, note
+access and BLOCKED_SUSPEND_EXPIRY_GAP remain separate unresolved work. Production,
+DB writes, automatic collection, learning and hosted execution remain OFF.
+
 ## Tied finish/payout consistency — 2026-10-09
 
 PR #220 is merged at ec63bc6ba7a88af53752eba82890786bf109a070; all five
