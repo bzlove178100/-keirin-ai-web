@@ -1,5 +1,52 @@
 # Disposable guest suspend/boot foundation — no live activation
 
+## Boottime packet deadline candidate — 2026-10-09
+
+The existing measured suspend gap remains the baseline. Add an independent,
+guest-only TC ingress/egress gate using `bpf_ktime_get_boot_ns()` and an immutable
+eight-second absolute deadline embedded in the loaded instructions. There are
+no mutable maps, periodic renewal, timer callbacks, or resident loader. The loader
+exits before pre-suspend positive probes; kernel filter references retain the
+program. The original nft rules and unrelated sentinel remain unchanged.
+
+The fixed C loader refuses ordinary execution before bpf/netlink operations,
+requires the opted-in QEMU guest and exactly lo/host0, loads a bounded program,
+then exclusively creates clsact and both filters. Existing qdisc/filter ownership
+cannot be replaced. It is a disposable experiment, not a live installer: partial
+attachment failure terminates the experiment and its owned VM, not an automatic
+fallback. No host BPF program, qdisc, module, network policy or power state changes.
+
+Keep the original awake/S3 diagnostic cases mandatory. Run two additional fresh
+guests with the new gate, requiring all four established/new IPv4/IPv6 TCP/443
+probes denied after expiry and all four TCP/22 management echo probes surviving.
+After S3 these probes must still precede any nft/TC read, refresh or mutation and
+finish inside the original monotonic window. Record the exact deadline, program
+ID/tag/interface and unchanged ingress/egress filter readback. Allowed/mixed
+candidate packets, unavailable helper/modules, malformed evidence or changed
+identity fail; the prior BLOCKED outcome is not a passing candidate result.
+
+Scope is plain Ethernet, unfragmented IPv4 without options, and IPv6 without
+extensions. Unknown/truncated packet profiles are denied after expiry. ARP,
+ICMP/ICMPv6 and non-443 TCP are outside this deadline gate; the existing nft
+policy still owns qualification tuple constraints. This is not a complete live
+allowlist or authenticated management qualification. Closed startup, reboot,
+privileged filter changes, arbitrary endpoints/protocols and production binding
+remain unresolved even if the fixed packet experiment succeeds.
+
+Local packet/VM/lease tests: 27 passed; C compilation passed with warnings as
+errors and ordinary host execution refused. Actual candidate packets are pending
+CI at this checkpoint. All activation gates remain OFF. Require final-head CI,
+review and independent merged-main CI; record measurements in the PR rather than
+converting a code/test count into Phase 3 completion.
+
+Primary source inspected: Linux v6.17 `kernel/bpf/helpers.c` maps the helper to
+`ktime_get_boot_fast_ns()`; installed UAPI documentation explicitly includes
+suspend time. These explain the candidate, not version-matched Ubuntu proof:
+https://github.com/torvalds/linux/blob/v6.17/kernel/bpf/helpers.c .
+iproute2 v6.1.0 `tc/f_bpf.c` documents direct-action filter attributes/readback:
+https://github.com/iproute2/iproute2/blob/v6.1.0/tc/f_bpf.c .
+Only the actual CI kernel/image/program receipts establish tested behavior.
+
 ## Measured packet outcome (2026-10-05)
 
 Measured result: **BLOCKED_SUSPEND_EXPIRY_GAP**, not suspend qualification. Packet job `111764224176`, regression run `37310432870`, candidate `9846be0336da33b6d2f11781328b59a6a190ed17`, passed all nine experiment records on 2026-10-05 at 21:36:30 JST. The awake control denied all four old/new IPv4/IPv6 qualification probes while all four management probes survived. After actual S3, all four qualification probes still succeeded, without refresh or any preceding post-resume nft read/write. From original installation to first post-resume clock sampling, boottime advanced 11.145488332 seconds; all explicit probes completed within 0.295390938 monotonic seconds of installation. Suspend-window monotonic advanced 0.036644628 seconds and boottime 10.896148706 seconds. Original rules/handles and sentinel remained unchanged; later ordinary awake expiry denied all qualification probes while management survived. Both guest/peer/image/channel/process cleanups completed. Kernel `6.17.0-1022-azure` and QEMU binary/input hashes are in the job and PR #205. This is measured behavior of these exact inputs, not a claim about all kernels or live systems.

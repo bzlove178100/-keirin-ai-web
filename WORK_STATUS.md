@@ -1,5 +1,20 @@
 # Work status
 
+## Phase 3 resumed: immutable boottime packet deadline — 2026-10-09
+
+Starting main 33967acdefd9ae04530c67151fb79c43d0263af0 has all five independent
+push workflows successful (regression 37879521348). No open PR was present.
+The existing nft-only suspend gap remains a measured blocker. Add a guest-only
+kernel TC deadline based on suspend-inclusive boottime, immutable after loading,
+with the loader exited before all packet observations. Preserve the original
+diagnostic and require new awake/S3 packet denial, management continuity and
+unchanged filter identity. Local 27 packet/VM/lease tests pass; actual candidate
+CI is pending at this checkpoint. See SECRET_CUSTODY_SUSPEND_VM_REVIEW.md.
+No live host, credential, scheduler or data-source activation occurs. Phase 3
+also still requires closed startup and authenticated management qualification.
+KEIRIN.JP hold remains active. note's support reply/public API update is recorded
+in NOTE_INTEGRATION.md; no new outreach, subscription, save or publication.
+
 ## Source acquisition hold — 2026-10-09
 
 Newly reviewed private provider correspondence changes the collection plan.

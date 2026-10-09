@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 
-IP, NFT = '/usr/sbin/ip', '/usr/sbin/nft'
+IP, NFT, TC = '/usr/sbin/ip', '/usr/sbin/nft', '/usr/sbin/tc'
 PEERS = ('192.0.2.2', '2001:db8:1::2')
 UNRELATED = 'kc_vm_unrelated'
 sequence = 0
@@ -139,6 +139,18 @@ def identity(reports):
     return value
 
 
+def tc_identity(proof):
+    reports = [json.loads(run(TC, '-j', 'filter', 'show', 'dev', 'host0', direction))
+               for direction in ('ingress', 'egress')]
+    for report in reports:
+        programs = [row['options'] for row in report if 'options' in row]
+        if (len(programs) != 1 or programs[0].get('id') != proof['program_id']
+                or programs[0].get('tag') != proof['tag']
+                or programs[0].get('direct-action') is not True):
+            raise RuntimeError('ATTACHED_BOOTTIME_PROGRAM_REQUIRED ' + json.dumps(report))
+    return reports
+
+
 def require(values, expected):
     if values['qualification'] != [expected] * 4 or values['management'] != [True] * 4:
         raise RuntimeError('PACKET_CONTROL_REQUIRED ' + json.dumps(values))
@@ -152,9 +164,12 @@ def main():
     mode = sys.stdin.readline(16).strip()
     if mode not in ('awake', 'suspend'):
         raise RuntimeError('FIXED_PACKET_CASE_REQUIRED')
+    boottime_guard = ' kc_boottime_guard=1 ' in Path('/proc/cmdline').read_text()
     spec = importlib.util.spec_from_file_location('lease', '/lease.py')
     lease = importlib.util.module_from_spec(spec); spec.loader.exec_module(lease)
     run('/sbin/modprobe', '-C', '/module-config', '-a', 'ipv6', 'veth', 'nf_tables')
+    if boottime_guard:
+        run('/sbin/modprobe', '-C', '/module-config', '-a', 'sch_ingress', 'cls_bpf')
     if [r for r in json.loads(run(NFT, '-j', 'list', 'ruleset'))['nftables'] if 'metainfo' not in r]:
         raise RuntimeError('EMPTY_GUEST_RULESET_REQUIRED')
     parent, child = socket.socketpair(type=socket.SOCK_SEQPACKET)
@@ -189,15 +204,22 @@ def main():
         run(NFT, '-f', '-', input=f'table inet {UNRELATED} {{ chain sentinel {{ counter drop; }}; }}\n'.encode())
         unrelated = json.loads(run(NFT, '-j', 'list', 'table', 'inet', UNRELATED))
         started = clocks()
+        deadline_ns = int(started['boottime'] * 1e9) + 8000000000
         run(NFT, '-f', '-', input=lease.install(socket.if_nametoindex('host0')).encode())
         initial = reports(lease)
         lease.snapshot(initial) # Real live fixed renderer policy and set required.
         original = identity(initial)
+        proof, original_tc = None, None
+        if boottime_guard:
+            proof = json.loads(run('/boot-guard', str(deadline_ns)))
+            if proof.get('deadline_ns') != deadline_ns or proof.get('loader_exits') is not True:
+                raise RuntimeError('FIXED_DEADLINE_LOADER_EXIT_REQUIRED')
+            original_tc = tc_identity(proof)
         require(probes(old_q, old_m), True)
         before = clocks()
         if before['monotonic'] - started['monotonic'] >= 3:
             raise RuntimeError('LIVE_PRE_SUSPEND_WINDOW_REQUIRED')
-        emit('before', mode=mode, lease_start=started, **before)
+        emit('before', mode=mode, lease_start=started, boottime_guard=proof, **before)
         if mode == 'suspend':
             if 'deep' not in Path('/sys/power/mem_sleep').read_text():
                 raise RuntimeError('ACTUAL_DEEP_SUSPEND_REQUIRED')
@@ -222,12 +244,21 @@ def main():
                 outcome = 'SUSPEND_EXPIRY_OBSERVED'
             else:
                 raise RuntimeError('MIXED_RESUME_OBSERVATION ' + json.dumps(observed))
-        emit('after', mode=mode, outcome=outcome, rule_identity_unchanged=unchanged, **after, **observed)
+        tc_unchanged = tc_identity(proof) == original_tc if boottime_guard else None
+        if boottime_guard:
+            require(observed, False)
+            if not tc_unchanged:
+                raise RuntimeError('BOOTTIME_FILTER_IDENTITY_CHANGED')
+            outcome = 'BOOTTIME_' + outcome
+        emit('after', mode=mode, outcome=outcome, rule_identity_unchanged=unchanged,
+             boottime_guard=proof, tc_identity_unchanged=tc_unchanged, **after, **observed)
         time.sleep(max(0, started['monotonic'] + 10 - time.monotonic()))
         late = probes(old_q, old_m)
         require(late, False)
         if identity(reports(lease)) != original:
             raise RuntimeError('LATE_RULE_IDENTITY_REQUIRED')
+        if boottime_guard and tc_identity(proof) != original_tc:
+            raise RuntimeError('LATE_TC_IDENTITY_REQUIRED')
         emit('awake_expired', mode=mode, **late, **clocks())
     finally:
         for s in opened: s.close()
