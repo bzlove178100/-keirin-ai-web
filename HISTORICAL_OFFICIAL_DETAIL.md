@@ -37,6 +37,31 @@ of the result, source-use approval, payout calculation or a new training label.
 Amounts and all original rows are retained unchanged; exceptional payouts stay
 raw and flagged. The single-label review bridge still quarantines tied ranks.
 
+## Separately captured official JSON results
+
+`ml.historical_official_json.ingest_json_result` accepts original bytes and
+individual receipts for the public page's `JSJ001` header and `JSJ012` result
+responses. Both must be successful GETs to the exact HTTPS `/pc/json` endpoint,
+with the expected request types and the same nonempty `encp` selection. The
+header's selected token and requested date/venue/race must match. Redirect
+parameter changes, duplicate query/JSON keys, nonfinite JSON, changed bytes,
+unpublished finish/payout flags and pre-start captures are rejected.
+
+The normalizer uses the same roster, status, tie and payout checks as saved HTML.
+It retains both complete JSON blocks, the two source hashes and scoped receipt
+fields without synthesizing an HTML source. `source_sha256` is explicitly labeled
+as a digest of the `source_capture_sha256` map for this format; it is not the
+hash of a downloaded HTML page. Observation time is the later completion of the
+two captures, a conservative known-by time, not exact publication time. Capture
+receipts and matching selection tokens do not authenticate the provider or prove
+the separate responses are an atomic snapshot. Keep original bytes/receipts.
+
+`ml.historical_official_records.join_json_result` joins those captures to original
+pre-race HTML through the existing review bridge. It grants no source approval,
+does not backdate features and still quarantines ties or changed withdrawals.
+These functions perform no network requests. A failed HTML route and successful
+JSON route establish a scoped fallback, not a claim that the server is repaired.
+
 Listed riders, ranked finishers and confirmed starters are separate counts.
 An explicit withdrawal is not an invented last-place finish. Known fall,
 accident and mechanical retirements count as starts; other non-finisher states
