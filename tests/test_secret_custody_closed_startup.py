@@ -135,6 +135,10 @@ class Tests(unittest.TestCase):
     def test_closed_policy_rejects_allow_wrong_hook_extra_or_missing_rule(self):
         report = self.fixture()
         sealed = policy.seal(report)
+        # Actual first guest stopped on object ordering. Both nft layouts must
+        # express the same exact chain membership and ordered drop rules.
+        grouped = {'nftables': sorted(report['nftables'], key=lambda row: ('table', 'chain', 'rule').index(next(iter(row))))}
+        self.assertEqual(policy.seal(grouped), sealed)
         changed = copy.deepcopy(report)
         changed['nftables'][2]['rule']['expr'][1]['counter']['packets'] = 7
         self.assertEqual(policy.seal(changed), sealed)
@@ -143,6 +147,7 @@ class Tests(unittest.TestCase):
         wrong = copy.deepcopy(report); wrong['nftables'][1]['chain']['hook'] = 'forward'; changes.append(wrong)
         wrong = copy.deepcopy(report); wrong['nftables'][2]['rule']['expr'][0]['match']['right'] = 22; changes.append(wrong)
         changes += [{'nftables': report['nftables'][:-1]}, {'nftables': report['nftables'] + report['nftables'][-1:]}]
+        wrong = copy.deepcopy(report); wrong['nftables'][2], wrong['nftables'][3] = wrong['nftables'][3], wrong['nftables'][2]; changes.append(wrong)
         for wrong in changes:
             with self.subTest(wrong=wrong), self.assertRaises(ValueError): policy.seal(wrong)
 

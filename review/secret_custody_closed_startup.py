@@ -18,6 +18,22 @@ def seal(report):
     """Require exactly the fixed closed policy; ignore only counters/metainfo."""
     rows = copy.deepcopy(report['nftables'])
     rows = [row for row in rows if 'metainfo' not in row]
+    # nft may list all chains before their rules. Object grouping is not policy
+    # order; preserve rule order within each chain and validate exact membership.
+    if any(len(row) != 1 or next(iter(row)) not in ('table', 'chain', 'rule') for row in rows):
+        raise ValueError('FIXED_STARTUP_OBJECTS_REQUIRED')
+    ordered = [row for row in rows if 'table' in row]
+    if len(ordered) != 1:
+        raise ValueError('FIXED_STARTUP_TABLE_REQUIRED')
+    for hook in ('input', 'output'):
+        chains = [row for row in rows if row.get('chain', {}).get('name') == hook]
+        rules = [row for row in rows if row.get('rule', {}).get('chain') == hook]
+        if len(chains) != 1 or len(rules) != 2:
+            raise ValueError('FIXED_STARTUP_CHAIN_MEMBERS_REQUIRED')
+        ordered += chains + rules
+    if len(ordered) != len(rows):
+        raise ValueError('FIXED_STARTUP_OBJECTS_REQUIRED')
+    rows = ordered
     expected = [('table', None)]
     for hook in ('input', 'output'):
         expected += [('chain', hook), ('rule', hook), ('rule', hook)]

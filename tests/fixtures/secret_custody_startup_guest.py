@@ -73,7 +73,12 @@ def main():
                     text += 'add rule inet kc_nonexistent nonexistent counter drop\n'
                 g.run(g.NFT, '-f', '-', input=text.encode())
             if mode != 'open':
-                original = policy.seal(read_policy())
+                observed = read_policy()
+                try:
+                    original = policy.seal(observed)
+                except (ValueError, KeyError, TypeError):
+                    print('STARTUP_POLICY_DIAGNOSTIC ' + json.dumps(observed), flush=True)
+                    raise
         except (RuntimeError, ValueError, KeyError, TypeError) as exc:
             error = str(exc)
         if mode in ('missing', 'invalid'):

@@ -16,7 +16,11 @@ must retain DOWN and an empty ruleset. Closed startup requires the first new
 IPv4/IPv6 TCP/443 probes denied and both TCP/22 echo controls reachable, with
 unchanged rule identity and complete guest/host-side cleanup. No runtime policy
 is installed on the CI host. Local policy/evidence/packet/VM tests: 19 passed.
-Actual guest evidence and final-head CI remain pending at this checkpoint;
+First CI job 114233949136 passed open/missing/invalid guests; the closed guest
+stopped before link-up because the verifier assumed interleaved object ordering.
+Normalize table/chain grouping while preserving exact per-chain rule order;
+add grouped-layout acceptance and reordered-rule rejection tests. No packet
+condition is relaxed. Closed guest evidence and final-head CI remain pending;
 record final measurements and independent main verification in the PR body.
 
 Scope is this fixed synthetic local TCP path. TCP/22 is an echo listener, not
