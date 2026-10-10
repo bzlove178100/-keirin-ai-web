@@ -60,7 +60,7 @@ def archive(files):
     return gzip.compress(bytes(result), mtime=0)
 
 
-def payload(path, boottime_guard=False):
+def payload(path, boottime_guard=False, startup=False):
     files = {}
     def add(source, target=None):
         source = Path(source)
@@ -74,7 +74,10 @@ def payload(path, boottime_guard=False):
     if denied.returncode != 2 or denied.stderr != b'VM_GUEST_PID1_REQUIRED\n':
         raise RuntimeError('PACKET_GUEST_HOST_REFUSAL_REQUIRED')
     add(path / 'init', 'init')
-    add(HERE / 'fixtures/secret_custody_packet_guest.py', 'probe.py')
+    add(HERE / 'fixtures/secret_custody_packet_guest.py', 'packets.py' if startup else 'probe.py')
+    if startup:
+        add(HERE / 'fixtures/secret_custody_startup_guest.py', 'probe.py')
+        add(HERE.parent / 'review/secret_custody_closed_startup.py', 'startup_policy.py')
     add(HERE.parent / 'review/secret_custody_qualification_lease.py', 'lease.py')
     binaries = ['/usr/bin/python3', '/usr/sbin/ip', '/usr/sbin/nft', '/usr/sbin/modprobe']
     if boottime_guard:

@@ -551,6 +551,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test guest packet evidence and isolation guards
         run: /usr/bin/python3 -I -B tests/test_secret_custody_suspend_packets.py
+      - name: Test closed startup policy and evidence rejection
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_closed_startup.py
       - name: Install disposable guest experiment tools
         run: sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends qemu-system-x86 nftables iproute2 kmod
       - name: Measure original kernel guard with real packets across guest S3
@@ -563,6 +565,12 @@ jobs:
           KC_SUSPEND_VM_CI: '1'
           KC_SUSPEND_PACKET_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_suspend_packets.py --boottime-vm
+      - name: Require policy before first link-up and fail-closed startup errors
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+          KC_CLOSED_STARTUP_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_closed_startup.py --vm
 
   custody-suspend-vm:
     runs-on: ubuntu-24.04
