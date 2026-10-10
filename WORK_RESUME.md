@@ -1,5 +1,31 @@
 # Work resume handoff
 
+## Closed startup candidate — 2026-10-10
+
+PR #228 is merged at 97014583a70460673040576cac73e507ae7dabee;
+its final PR and independent main-push five workflows/28 regression jobs passed.
+It qualified the immutable boottime gate only in fixed isolated awake/S3 guests.
+The nft-only suspend gap remains measured; this is not live host qualification.
+
+The next candidate adds four fresh diskless/no-external-NIC guests: an open
+negative control, missing policy, rejected installation, and closed startup.
+A fixed non-expiring inet TCP/443 drop policy is installed and semantically
+read back while host0 remains administratively DOWN. Only successful readback
+allows the first link-up. Missing policy and a real invalid nft transaction
+must retain DOWN and an empty ruleset. Closed startup requires the first new
+IPv4/IPv6 TCP/443 probes denied and both TCP/22 echo controls reachable, with
+unchanged rule identity and complete guest/host-side cleanup. No runtime policy
+is installed on the CI host. Local policy/evidence/packet/VM tests: 19 passed.
+Actual guest evidence and final-head CI remain pending at this checkpoint;
+record final measurements and independent main verification in the PR body.
+
+Scope is this fixed synthetic local TCP path. TCP/22 is an echo listener, not
+SSH authentication. No claim of a production allowlist, inbound initiated
+traffic qualification, OS service boot ordering, reboot persistence, closed-to-
+leased admission, or integration with the TC deadline. These remain separate
+next steps before a live proposal. Phase 3 remains incomplete. KEIRIN.JP hold,
+training 0, and all activation restrictions remain unchanged.
+
 ## Resume Phase 3 boottime candidate — 2026-10-09
 
 The starting main is 33967acdefd9ae04530c67151fb79c43d0263af0, all five main-push
