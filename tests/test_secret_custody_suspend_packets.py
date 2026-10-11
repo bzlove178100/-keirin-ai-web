@@ -77,7 +77,7 @@ def payload(path, boottime_guard=False, startup=False):
     add(HERE / 'fixtures/secret_custody_packet_guest.py', 'packets.py' if startup else 'probe.py')
     if startup:
         add(HERE / 'fixtures/secret_custody_startup_guest.py', 'probe.py')
-        add(HERE.parent / 'review/secret_custody_closed_startup.py', 'startup_policy.py')
+    add(HERE.parent / 'review/secret_custody_closed_startup.py', 'startup_policy.py')
     add(HERE.parent / 'review/secret_custody_qualification_lease.py', 'lease.py')
     binaries = ['/usr/bin/python3', '/usr/sbin/ip', '/usr/sbin/nft', '/usr/sbin/modprobe']
     if boottime_guard:
@@ -131,12 +131,16 @@ def payload(path, boottime_guard=False, startup=False):
           'file_count': len(files), 'modules': manifest}), flush=True)
 
 
-def command(path, boottime_guard=False):
+def command(path, boottime_guard=False, integrated=False):
+    if integrated and not boottime_guard:
+        raise ValueError('INTEGRATED_BOOTTIME_REQUIRED')
     args = vm.command(path)
     args[args.index('-m') + 1] = '512M'
     args[args.index('-append') + 1] += ' kc_packet_probe=1 end=2'
     if boottime_guard:
         args[args.index('-append') + 1] += ' kc_boottime_guard=1 end=3'
+    if integrated:
+        args[args.index('-append') + 1] += ' kc_integrated_probe=1 end=5'
     return args
 
 
@@ -206,12 +210,28 @@ def outcome(mode, before, after, host_elapsed, boottime_guard=False):
     return result
 
 
-def case(path, mode, host_boot, boottime_guard=False):
+def integrated_evidence(sealed, closed, refused, released, before):
+    rows = (sealed, closed, refused, released, before)
+    if (sealed.get('link_up') is not False or sealed.get('closed_policy') is not True
+            or refused.get('policy_unchanged') is not True
+            or any(row.get('new_connections') != [False, False, True, True]
+                   or any(type(v) is not bool for v in row['new_connections']) for row in (closed, refused))
+            or not isinstance(released.get('boottime_guard'), dict)
+            or released['boottime_guard'] != before.get('boottime_guard')
+            or released.get('lease_start') != before.get('lease_start')):
+        raise RuntimeError('INTEGRATED_CLOSED_TO_LEASE_EVIDENCE_REQUIRED')
+    for earlier, later in zip(rows, rows[1:]):
+        if (earlier['boot'] != later['boot'] or earlier['mode'] != later['mode']
+                or any(later[key] < earlier[key] for key in ('monotonic', 'boottime'))):
+            raise RuntimeError('INTEGRATED_EVIDENCE_ORDER_REQUIRED')
+
+
+def case(path, mode, host_boot, boottime_guard=False, integrated=False):
     if mode not in ('awake', 'suspend'): raise ValueError('FIXED_PACKET_CASE_REQUIRED')
     process = None
     try:
         with (path / 'stderr').open('wb') as errors:
-            process = subprocess.Popen(command(path, boottime_guard), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
+            process = subprocess.Popen(command(path, boottime_guard, integrated), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
                                        cwd=path, env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
             with vm.connect(path / 'qmp', process) as monitor, vm.connect(path / 'serial', process) as serial:
                 qmp, lines = vm.QMP(monitor), vm.Lines(serial)
@@ -220,10 +240,19 @@ def case(path, mode, host_boot, boottime_guard=False):
                 boot = vm.record(lines, 'boot')['boot']
                 if boot == host_boot: raise RuntimeError('DISTINCT_GUEST_BOOT_REQUIRED')
                 serial.sendall((mode + '\n').encode())
-                startup = record(lines, 'startup_unprotected', mode, boot)
-                if startup.get('new_connections') != [True] * 4: raise RuntimeError('OPEN_STARTUP_NEGATIVE_CONTROL_REQUIRED')
-                print('PASS PACKET_UNPROTECTED_BOOT_DETECTED', mode, flush=True)
-                before = record(lines, 'before', mode, boot)
+                if integrated:
+                    sealed = record(lines, 'startup_sealed', mode, boot)
+                    closed = record(lines, 'startup_closed', mode, boot)
+                    refused = record(lines, 'startup_release_refused', mode, boot)
+                    released = record(lines, 'startup_released', mode, boot)
+                    before = record(lines, 'before', mode, boot)
+                    integrated_evidence(sealed, closed, refused, released, before)
+                    print('PASS CLOSED_STARTUP_REFUSED_UNGUARDED_RELEASE_THEN_LEASED', mode, flush=True)
+                else:
+                    startup = record(lines, 'startup_unprotected', mode, boot)
+                    if startup.get('new_connections') != [True] * 4: raise RuntimeError('OPEN_STARTUP_NEGATIVE_CONTROL_REQUIRED')
+                    print('PASS PACKET_UNPROTECTED_BOOT_DETECTED', mode, flush=True)
+                    before = record(lines, 'before', mode, boot)
                 started = time.monotonic()
                 if mode == 'suspend':
                     qmp.event('SUSPEND', time.monotonic() + 20)
@@ -256,7 +285,7 @@ def case(path, mode, host_boot, boottime_guard=False):
             (path / name).unlink(missing_ok=True)
 
 
-def run_vm(boottime_guard=False):
+def run_vm(boottime_guard=False, integrated=False):
     guard()
     host_boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
     host_netns = os.readlink('/proc/self/ns/net')
@@ -270,8 +299,8 @@ def run_vm(boottime_guard=False):
         payload(path, boottime_guard)
         print('PACKET_VM_PROVENANCE', json.dumps({'kernel_release': os.uname().release,
               'kernel_sha256': hashlib.sha256(kernel).hexdigest(), 'qemu_sha256': hashlib.sha256(Path(vm.QEMU).read_bytes()).hexdigest()}), flush=True)
-        awake_boot, _ = case(path, 'awake', host_boot, boottime_guard)
-        suspend_boot, measured = case(path, 'suspend', host_boot, boottime_guard)
+        awake_boot, _ = case(path, 'awake', host_boot, boottime_guard, integrated)
+        suspend_boot, measured = case(path, 'suspend', host_boot, boottime_guard, integrated)
         if awake_boot == suspend_boot: raise RuntimeError('FRESH_VM_PER_PACKET_CASE_REQUIRED')
     if path.exists() or Path('/proc/sys/kernel/random/boot_id').read_text().strip() != host_boot or os.readlink('/proc/self/ns/net') != host_netns:
         raise RuntimeError('PACKET_VM_CLEANUP_HOST_CONTEXT_REQUIRED')
@@ -280,6 +309,43 @@ def run_vm(boottime_guard=False):
 
 
 class Tests(unittest.TestCase):
+    def test_startup_release_never_deletes_gate_with_missing_changed_or_expired_guards(self):
+        spec = importlib.util.spec_from_file_location('packet_guest', HERE / 'fixtures/secret_custody_packet_guest.py')
+        guest = importlib.util.module_from_spec(spec); spec.loader.exec_module(guest)
+        policy, lease = Mock(TABLE='kc_startup_guard'), Mock()
+        policy.seal.return_value = 'closed'
+        lease.snapshot.return_value = 'lease'
+        proof = dict(deadline_ns=108000000000, loader_exits=True)
+        for fault in ('missing', 'closed_changed', 'lease_changed', 'tc_changed', 'expired', 'valid'):
+            policy.seal.return_value = 'wrong' if fault == 'closed_changed' else 'closed'
+            lease.snapshot.return_value = 'wrong' if fault == 'lease_changed' else 'lease'
+            with self.subTest(fault=fault), patch.object(guest, 'run', return_value=b'{}') as run, \
+                    patch.object(guest, 'reports', return_value=[]), \
+                    patch.object(guest, 'tc_identity', return_value='wrong' if fault == 'tc_changed' else 'tc'), \
+                    patch.object(guest, 'clocks', return_value={'boottime': 109 if fault == 'expired' else 101}):
+                args = (policy, 'closed', lease, 'lease', None if fault == 'missing' else proof, 'tc', 108000000000)
+                if fault == 'valid':
+                    guest.release_startup(*args)
+                    self.assertEqual(run.call_args.args, (guest.NFT, 'delete', 'table', 'inet', 'kc_startup_guard'))
+                else:
+                    with self.assertRaisesRegex(RuntimeError, 'STARTUP_RELEASE_GUARDS_REQUIRED'):
+                        guest.release_startup(*args)
+                    self.assertFalse(any('delete' in call.args for call in run.call_args_list))
+
+    def test_integrated_evidence_rejects_open_startup_or_different_deadline(self):
+        sealed = dict(boot='a', mode='suspend', monotonic=1., boottime=1., link_up=False, closed_policy=True)
+        closed = dict(sealed, new_connections=[False, False, True, True])
+        refused = dict(closed, policy_unchanged=True)
+        released = dict(sealed, boottime_guard={'deadline_ns': 9}, lease_start={'boottime': 1})
+        before = dict(released)
+        integrated_evidence(sealed, closed, refused, released, before)
+        for change in ({'new_connections': [True]*4}, {'new_connections': [0, 0, 1, 1]}, {'boot': 'b'}):
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                integrated_evidence(sealed, dict(closed, **change), refused, released, before)
+        with self.assertRaises(RuntimeError):
+            integrated_evidence(sealed, closed, refused, released, dict(before, boottime_guard={'deadline_ns': 10}))
+        with self.assertRaises(ValueError): command(Path('/tmp/owned'), integrated=True)
+
     def test_actual_iproute2_nested_program_identity_is_required(self):
         spec = importlib.util.spec_from_file_location('packet_guest', HERE / 'fixtures/secret_custody_packet_guest.py')
         guest = importlib.util.module_from_spec(spec); spec.loader.exec_module(guest)
@@ -389,4 +455,5 @@ class Tests(unittest.TestCase):
 if __name__ == '__main__':
     if sys.argv[1:] == ['--vm']: run_vm()
     elif sys.argv[1:] == ['--boottime-vm']: run_vm(boottime_guard=True)
+    elif sys.argv[1:] == ['--integrated-vm']: run_vm(boottime_guard=True, integrated=True)
     else: unittest.main(verbosity=2)

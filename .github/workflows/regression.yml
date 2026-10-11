@@ -571,6 +571,11 @@ jobs:
           KC_SUSPEND_PACKET_CI: '1'
           KC_CLOSED_STARTUP_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_closed_startup.py --vm
+      - name: Integrate closed startup with immutable lease across awake and S3 expiry
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_suspend_packets.py --integrated-vm
 
   custody-suspend-vm:
     runs-on: ubuntu-24.04

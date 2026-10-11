@@ -1,5 +1,34 @@
 # Work status
 
+## Closed startup to immutable lease integration — 2026-10-12
+
+PR #229 is merged at 9c1d8a2a34db568748cd8616d06463c851c042d9.
+Its final PR and independent main CI passed five workflows/28 regression jobs;
+all four startup cases were measured. The prior pending text below is historical.
+
+This candidate joins the previously separate fixed guest experiments: install
+and seal the closed TCP/443 policy while host0 is DOWN, enable the internal link,
+measure initial denial and management echo, refuse release with missing guard
+proof and measure continued denial, then install/read back the original nft
+lease and immutable TC boottime program before removing only the startup gate.
+Require old/new IPv4/IPv6 qualification connections during the original lease,
+then denial after awake expiry or actual S3; management connections must survive.
+No guard reinstall, deadline extension or post-resume policy repair is added.
+Original open/nft-only/boottime controls and four startup cases remain mandatory.
+
+Local packet/startup/VM tests: 21 passed. Actual integrated guest results and CI
+are pending at this checkpoint; final receipts belong in the PR body. Changed
+rules, TC identity and exhausted-deadline rejection are local unit cases; the
+actual guest negative control is missing proof before guard installation. This
+is not hostile privileged-writer attestation. Keep the existing 3-second live
+and 7-second first-resume windows unchanged.
+
+Next after scoped integration: authenticated management, actual OS service boot
+ordering/reboot persistence, broader inbound/protocol coverage and production
+binding. TCP/22 is still echo, not SSH. Phase 3 remains incomplete. No live host,
+credential, scheduler, source capture or learning activation. KEIRIN.JP hold and
+training zero remain unchanged.
+
 ## Closed startup candidate — 2026-10-10
 
 PR #228 is merged at 97014583a70460673040576cac73e507ae7dabee;
