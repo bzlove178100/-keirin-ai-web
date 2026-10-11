@@ -39,11 +39,12 @@ def emit(event, **values):
     print('PACKET_RECORD ' + json.dumps(row), flush=True)
 
 
-def setup(name, number):
+def setup(name, number, up=True):
     run(IP, 'link', 'set', name, 'addrgenmode', 'none')
     run(IP, 'addr', 'add', f'192.0.2.{number}/24', 'dev', name)
     run(IP, '-6', 'addr', 'add', f'2001:db8:1::{number}/64', 'dev', name, 'nodad')
-    run(IP, 'link', 'set', name, 'up')
+    if up:
+        run(IP, 'link', 'set', name, 'up')
     run(IP, 'link', 'set', 'lo', 'up')
 
 
@@ -159,6 +160,20 @@ def require(values, expected):
         raise RuntimeError('PACKET_CONTROL_REQUIRED ' + json.dumps(values))
 
 
+def release_startup(policy, sealed, lease, lease_seal, proof, original_tc, deadline_ns):
+    # Guest experiment only. No release on missing proof, changed rules/filters,
+    # or an exhausted immutable deadline. Never reinstall or extend either guard.
+    if (not isinstance(proof, dict) or proof.get('deadline_ns') != deadline_ns
+            or proof.get('loader_exits') is not True or not original_tc):
+        raise RuntimeError('STARTUP_RELEASE_GUARDS_REQUIRED')
+    if (policy.seal(json.loads(run(NFT, '-j', 'list', 'table', 'inet', policy.TABLE))) != sealed
+            or lease.snapshot(reports(lease)) != lease_seal
+            or tc_identity(proof) != original_tc
+            or not 2 <= deadline_ns / 1e9 - clocks()['boottime'] <= 8):
+        raise RuntimeError('STARTUP_RELEASE_GUARDS_REQUIRED')
+    run(NFT, 'delete', 'table', 'inet', policy.TABLE)
+
+
 def main():
     if (os.getpid() != 1 or os.geteuid() != 0 or ' kc_packet_probe=1 ' not in Path('/proc/cmdline').read_text()
             or Path('/sys/class/dmi/id/sys_vendor').read_text().strip() != 'QEMU'
@@ -168,6 +183,13 @@ def main():
     if mode not in ('awake', 'suspend'):
         raise RuntimeError('FIXED_PACKET_CASE_REQUIRED')
     boottime_guard = ' kc_boottime_guard=1 ' in Path('/proc/cmdline').read_text()
+    integrated = ' kc_integrated_probe=1 ' in Path('/proc/cmdline').read_text()
+    if integrated and not boottime_guard:
+        raise RuntimeError('INTEGRATED_BOOTTIME_GUARD_REQUIRED')
+    policy = None
+    if integrated:
+        spec = importlib.util.spec_from_file_location('startup_policy', '/startup_policy.py')
+        policy = importlib.util.module_from_spec(spec); spec.loader.exec_module(policy)
     spec = importlib.util.spec_from_file_location('lease', '/lease.py')
     lease = importlib.util.module_from_spec(spec); spec.loader.exec_module(lease)
     run('/sbin/modprobe', '-C', '/module-config', '-a', 'ipv6', 'veth', 'nf_tables')
@@ -192,25 +214,45 @@ def main():
             raise RuntimeError('DISTINCT_PEER_NAMESPACE_REQUIRED')
         run(IP, 'link', 'add', 'host0', 'type', 'veth', 'peer', 'name', 'peer0')
         run(IP, 'link', 'set', 'peer0', 'netns', str(pid))
-        setup('host0', 1)
+        setup('host0', 1, up=not integrated)
+        sealed = None
+        if integrated:
+            run(NFT, '-f', '-', input=policy.install().encode())
+            sealed = policy.seal(json.loads(run(NFT, '-j', 'list', 'table', 'inet', policy.TABLE)))
+            link = json.loads(run(IP, '-j', 'link', 'show', 'dev', 'host0'))
+            if len(link) != 1 or 'UP' in link[0]['flags']:
+                raise RuntimeError('INTEGRATED_POLICY_BEFORE_LINK_REQUIRED')
+            emit('startup_sealed', mode=mode, link_up=False, closed_policy=True, **clocks())
+            run(IP, 'link', 'set', 'host0', 'up')
         parent.sendall(b'setup\n')
         if parent.recv(32) != b'ready\n':
             raise RuntimeError('PEER_READY_REQUIRED')
-        # Fresh boot WITHOUT a policy is an explicit open negative control.
         startup = [reaches(a, port) for port in (443, 22) for a in PEERS]
-        if startup != [True] * 4:
+        if startup != ([False, False, True, True] if integrated else [True] * 4):
             raise RuntimeError('UNFILTERED_STARTUP_POSITIVE_REQUIRED')
-        emit('startup_unprotected', mode=mode, new_connections=startup, **clocks())
-        old_q = [connect(a, 443) for a in PEERS]; opened.extend(old_q)
+        emit('startup_closed' if integrated else 'startup_unprotected', mode=mode, new_connections=startup, **clocks())
+        if integrated:
+            try:
+                release_startup(policy, sealed, lease, None, None, None, 0)
+            except RuntimeError as exc:
+                if str(exc) != 'STARTUP_RELEASE_GUARDS_REQUIRED': raise
+            else:
+                raise RuntimeError('MISSING_GUARDS_MUST_REFUSE_RELEASE')
+            refused = [reaches(a, port) for port in (443, 22) for a in PEERS]
+            if refused != [False, False, True, True] or policy.seal(json.loads(run(NFT, '-j', 'list', 'table', 'inet', policy.TABLE))) != sealed:
+                raise RuntimeError('REFUSED_RELEASE_MUST_STAY_CLOSED')
+            emit('startup_release_refused', mode=mode, new_connections=refused, policy_unchanged=True, **clocks())
+        old_q = [] if integrated else [connect(a, 443) for a in PEERS]; opened.extend(old_q)
         old_m = [connect(a, 22) for a in PEERS]; opened.extend(old_m)
-        require(probes(old_q, old_m), True)
+        if not integrated:
+            require(probes(old_q, old_m), True)
         run(NFT, '-f', '-', input=f'table inet {UNRELATED} {{ chain sentinel {{ counter drop; }}; }}\n'.encode())
         unrelated = json.loads(run(NFT, '-j', 'list', 'table', 'inet', UNRELATED))
         started = clocks()
         deadline_ns = int(started['boottime'] * 1e9) + 8000000000
         run(NFT, '-f', '-', input=lease.install(socket.if_nametoindex('host0')).encode())
         initial = reports(lease)
-        lease.snapshot(initial) # Real live fixed renderer policy and set required.
+        lease_seal = lease.snapshot(initial) # Real live fixed renderer policy and set required.
         original = identity(initial)
         proof, original_tc = None, None
         if boottime_guard:
@@ -218,6 +260,10 @@ def main():
             if proof.get('deadline_ns') != deadline_ns or proof.get('loader_exits') is not True:
                 raise RuntimeError('FIXED_DEADLINE_LOADER_EXIT_REQUIRED')
             original_tc = tc_identity(proof)
+        if integrated:
+            release_startup(policy, sealed, lease, lease_seal, proof, original_tc, deadline_ns)
+            emit('startup_released', mode=mode, boottime_guard=proof, lease_start=started, **clocks())
+            old_q = [connect(a, 443) for a in PEERS]; opened.extend(old_q)
         require(probes(old_q, old_m), True)
         before = clocks()
         if before['monotonic'] - started['monotonic'] >= 3:
@@ -269,6 +315,8 @@ def main():
         os.kill(pid, signal.SIGTERM); os.waitpid(pid, 0)
         for family, name in (*lease.TABLES, ('inet', UNRELATED)):
             subprocess.run([NFT, 'delete', 'table', family, name], capture_output=True, timeout=5)
+        if policy is not None:
+            subprocess.run([NFT, 'delete', 'table', 'inet', policy.TABLE], capture_output=True, timeout=5)
         subprocess.run([IP, 'link', 'del', 'host0'], capture_output=True, timeout=5)
     remaining = [r for r in json.loads(run(NFT, '-j', 'list', 'ruleset'))['nftables'] if 'metainfo' not in r]
     if remaining or Path(f'/proc/{pid}').exists() or interfaces() != ['lo']:
