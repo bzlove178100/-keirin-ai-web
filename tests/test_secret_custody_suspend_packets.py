@@ -70,7 +70,8 @@ def module_names(boottime_guard=False, storage=False, conntrack=False):
             + (('nft_ct',) if conntrack else ()))
 
 
-def payload(path, boottime_guard=False, startup=False, authenticated=False, systemd=False, storage=False, conntrack=False):
+def payload(path, boottime_guard=False, startup=False, authenticated=False, systemd=False, storage=False, conntrack=False, inbound_lease=False):
+    if inbound_lease and not (systemd and boottime_guard and conntrack): raise ValueError("INBOUND_LEASE_IMAGE_REQUIRED")
     if storage and not systemd: raise ValueError("STORAGE_REQUIRES_SYSTEMD")
     files = {}
     def add(source, target=None):
@@ -123,6 +124,7 @@ def payload(path, boottime_guard=False, startup=False, authenticated=False, syst
     if boottime_guard:
         subprocess.run(['/usr/bin/gcc', '-static', '-O2', '-Wall', '-Wextra', '-Werror',
                         *(['-DKC_SYSTEMD_LEASE_PROBE'] if systemd else []),
+                        *(['-DKC_INBOUND_LEASE_PROBE'] if inbound_lease else []),
                         '-o', str(path / 'boot-guard'), str(HERE / 'fixtures/secret_custody_boottime_guard.c')],
                        check=True, timeout=30)
         denied = subprocess.run([str(path / 'boot-guard')], capture_output=True, timeout=5)

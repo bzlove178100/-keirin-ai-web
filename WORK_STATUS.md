@@ -1,5 +1,47 @@
 # Work status
 
+## Inbound expiry/recovery composition candidate — 2026-10-13
+
+Continuation baseline rechecked: main 9511be129821ef96ebc91c8dff4cc9320a2a1a90,
+PR #241 merged, no open PRs. PR #241 head 1171d3ad687acf91c769d225d9f971fec5fea679
+and main have tree 712e654b0ecfbcd7afb5310f4c5c780d66735471. The final receipts in
+PR #241 supersede the historical pending checkpoints below: all five PR workflows
+and all five independent main workflows passed, regression 36/36 on each, plus
+main Pages. PR regression 38287640635 / inbound job 114939720627; main regression
+38288630733 / inbound job 114942976249. All five boot cases completed, including
+full input matrix and authenticated management. Earlier failures remain recorded.
+
+This candidate adds a separate opt-in diskless QEMU job, after the existing
+sealed-input startup/matrix/auth stage. The two fresh guest cases are awake
+expiry and real S3 expiry. Each retains the original 8-second immutable deadline,
+<3-second live window and <7-second first post-resume packet window. The first
+post-resume network actions are old/fresh IPv4/IPv6 qualification probes, before
+policy reads, SSH checks or recovery. Actual existing/fresh SSH then verifies
+management continuity. Only synthetic documentation addresses and ephemeral
+keys are used; the VM has no external NIC or disk.
+
+The qualification replacement requires unchanged startup identity, a live nft
+lease snapshot and unchanged attached immutable boottime program. A late recovery
+replaces only the owned wide profile with maintenance; original guard identities
+must survive unchanged. After exact maintenance readback, a separate recovery
+service removes the expired experiment guards and reruns all 28 input paths and
+16 loopback controls, plus closed outbound qualification, so outer guards cannot
+mask an incorrect restored profile. Same-boot identity, actual systemd dependencies,
+service timestamps and owned cleanup are required. The new loader build permits
+only the fixed lo/host0/host1 topology with additional command-line opt-ins; old
+loader builds and CI cases retain their previous interface gate.
+
+Local verification: 47 targeted tests pass (inbound 18, systemd 14, packet 15);
+new C loader builds with -Wall/-Wextra/-Werror and refuses host invocation.
+Actual combined guest execution and exact PR/main CI are still UNVERIFIED.
+Next: publish this candidate, inspect actual CI packets/S3/auth/recovery evidence,
+resolve any demonstrated failure, then merge only the verified exact head and
+check independent main CI. Combined restart/durable recovery remains later work.
+
+Real training 0; DB writes, production predictions, external automatic acquisition,
+live activation and real credentials remain OFF. KEIRIN.JP HOLD remains in force.
+No completion percentage or whole-agent readiness claim follows from this test.
+
 ## PR #241 phase observation budget correction — 2026-10-13
 
 Head 5d99b09fb5a82cb86f6e2089fec82f3885b0a41a / regression 38287038436 /
