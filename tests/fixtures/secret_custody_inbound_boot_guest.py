@@ -50,7 +50,10 @@ def rpc(b, *command):
     with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as s:
         s.settimeout(30); s.connect(str(b.STATE / 'inbound-control'))
         s.sendall(json.dumps(command).encode())
-        return json.loads(s.recv(32768))
+        result = json.loads(s.recv(32768))
+        if isinstance(result, dict) and 'peer_error' in result:
+            raise RuntimeError('INBOUND_PEER_FAILED ' + result['peer_error'])
+        return result
 
 
 def up(i, name):
@@ -87,7 +90,9 @@ def peer(b, i):
     # external NIC and never supplies operator addresses or live policy input.
     i.t.nft(i.t.r.profile('maintenance')); expected = shape(i)
     i.t.run(i.t.NFT, 'delete', 'table', 'inet', i.t.r.TABLE)
-    ssh = module('ssh', '/ssh_probe.py').PeerClients()
+    # This namespace deliberately also has an unapproved .9 / ::9 address.
+    # Do not let IPv6 source selection choose that negative-control identity.
+    ssh = module('ssh', '/ssh_probe.py').PeerClients(bind_source=True)
     with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as control:
         control.bind(str(b.STATE / 'inbound-control')); control.listen(4)
         b.write('peer-ready', {'expected': expected})
@@ -99,10 +104,19 @@ def peer(b, i):
                     result = i.fresh(i.FLOWS[op[1]])
                 elif len(op) == 2 and op[0] == 'route':
                     i.route(op[1], peer=True); result = True
-                elif op == ['ssh-start']: result = ssh.start()
-                elif op == ['ssh-check']: result = ssh.check()
-                elif op == ['ssh-stop']:
-                    ssh.stop(); result = {'stopped': True}
+                elif op in (['ssh-start'], ['ssh-check'], ['ssh-stop']):
+                    try:
+                        if op == ['ssh-start']:
+                            routes = [json.loads(i.t.run(i.t.IP, flag, '-j', 'route', 'get', address).stdout)
+                                      for flag, address in (('-4', '192.0.2.1'), ('-6', '2001:db8:1::1'))]
+                            print('INBOUND_SSH_SOURCE_ROUTES ' + json.dumps(routes), file=sys.stderr, flush=True)
+                            result = ssh.start(); result['unbound_routes'] = routes
+                        elif op == ['ssh-check']: result = ssh.check()
+                        else: ssh.stop(); result = {'stopped': True}
+                    except Exception as exc:
+                        # Keep the control channel available for owned cleanup.
+                        # This is an explicit failed response, never success.
+                        result = {'peer_error': repr(exc)}
                 else: raise RuntimeError('FIXED_INBOUND_PEER_COMMAND_REQUIRED')
                 request.sendall(json.dumps(result).encode())
 
@@ -218,8 +232,13 @@ def main(action):
             try:
                 result['ssh_ready'] = rpc(b, 'ssh-start')
                 result['ssh_after'] = rpc(b, 'ssh-check')
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                raise
             finally:
-                rpc(b, 'ssh-stop'); ssh.stop_server(server)
+                try: rpc(b, 'ssh-stop')
+                finally: ssh.stop_server(server)
             require_seal(shape(i), rpc(b, 'expected'))
             result['identity_unchanged'] = identity(i) == b.read('gate')['identity']
             if not result['identity_unchanged']: raise RuntimeError('AUTHENTICATED_POLICY_IDENTITY_REQUIRED')

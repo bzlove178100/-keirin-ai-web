@@ -1,5 +1,26 @@
 # Work resume handoff
 
+## PR #241 SSH control failure and source binding — 2026-10-13
+
+Head 87a4379615692fd9d67708f5a334daa67a6a1669 / regression 38286291962 /
+job 114935359179 included nft_ct and its dependencies and passed the full
+28-path unfiltered control, all 16 loopback checks and cleanup. The closed
+case then failed during check with ConnectionRefusedError from its control
+channel. Cleanup could mask the initial SSH error, and the supervisor did not
+preserve preceding diagnostics on this failure path. Therefore the original
+SSH failure cause is not yet proven.
+
+The peer deliberately has approved .2/.3 and unapproved .9 addresses for both
+IP families. SSH had no explicit source binding, unlike every matrix flow.
+The corrected inbound fixture pins fresh/existing and negative-auth SSH clients
+to .2/::2 using OpenSSH -b; other SSH fixtures retain their unchanged default.
+Unbound route-source readback is now included in evidence to test the source
+selection hypothesis. Peer failures return an explicit error while preserving
+the control channel for cleanup; primary exceptions and bounded preceding
+diagnostics survive shutdown errors. No firewall allowance or authentication
+criterion is widened. Local targeted total: 43 tests pass. Corrected five-guest
+VM and exact PR/main CI remain required; both original failures are retained.
+
 ## PR #241 missing conntrack module correction — 2026-10-13
 
 Initial head ea09e7a13b84d01b29d18e112ac8eda688b5a31b failed regression

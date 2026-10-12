@@ -82,10 +82,12 @@ def start_server(systemd=False):
     raise RuntimeError('SSH_SERVER_READINESS_TIMEOUT')
 
 
-def client_args(address, key='client', hosts='known_hosts'):
+def client_args(address, key='client', hosts='known_hosts', bind_source=False):
     if address not in ADDRESSES or key not in ('client', 'wrong') or hosts not in ('known_hosts', 'wrong_hosts'):
         raise ValueError('FIXED_SSH_CLIENT_REQUIRED')
-    return ['/usr/bin/ssh', '-F', '/dev/null', '-T', '-o', 'BatchMode=yes',
+    if type(bind_source) is not bool: raise ValueError('FIXED_SSH_SOURCE_MODE_REQUIRED')
+    binding = ['-b', {'192.0.2.1': '192.0.2.2', '2001:db8:1::1': '2001:db8:1::2'}[address]] if bind_source else []
+    return ['/usr/bin/ssh', *binding, '-F', '/dev/null', '-T', '-o', 'BatchMode=yes',
             '-o', 'IdentitiesOnly=yes', '-o', 'IdentityAgent=none',
             '-o', 'StrictHostKeyChecking=yes', '-o', 'GlobalKnownHostsFile=/dev/null',
             '-o', 'UserKnownHostsFile=' + str(ROOT / hosts),
@@ -107,7 +109,9 @@ def rejection(result, kind):
 
 
 class PeerClients:
-    def __init__(self):
+    def __init__(self, bind_source=False):
+        if type(bind_source) is not bool: raise ValueError('FIXED_SSH_SOURCE_MODE_REQUIRED')
+        self.bind_source = bind_source
         self.processes = []
         self.logs = {}
         self.rejections = []
@@ -129,7 +133,7 @@ class PeerClients:
 
     def fresh(self, address, key='client', hosts='known_hosts'):
         token = self.token()
-        result = subprocess.run(client_args(address, key, hosts), input=token,
+        result = subprocess.run(client_args(address, key, hosts, self.bind_source), input=token,
                                 capture_output=True, timeout=8, env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
         if key == 'wrong':
             self.rejections.append(dict(address=address, kind='client_key', reason=rejection(result, 'client_key')))
@@ -152,7 +156,7 @@ class PeerClients:
         for address in ADDRESSES:
             started = time.monotonic()
             path = ROOT / ('client-' + str(len(self.processes)) + '.log')
-            args = client_args(address)
+            args = client_args(address, bind_source=self.bind_source)
             args[args.index('LogLevel=ERROR')] = 'LogLevel=DEBUG1'
             with path.open('wb') as log:
                 process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,

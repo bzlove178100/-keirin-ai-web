@@ -37,7 +37,7 @@ def record(lines, event, case):
             raise RuntimeError('INBOUND_BOOT_FATAL ' + '\n'.join(diagnostic)[-8000:])
         if line.startswith('INBOUND_BOOT_STAGE_ERROR '):
             expected_gate = case in ('missing', 'invalid', 'widened') and line.startswith('INBOUND_BOOT_STAGE_ERROR gate ')
-            if not expected_gate: raise RuntimeError('INBOUND_BOOT_STAGE_FAILED ' + line)
+            if not expected_gate: raise RuntimeError('INBOUND_BOOT_STAGE_FAILED ' + '\n'.join(diagnostic)[-8000:])
         # Gate failures are deliberate in the negative cases; final systemd
         # states must prove that link/check never ran. Other failures cannot pass.
         if not line.startswith('INBOUND_BOOT_RECORD '): continue
@@ -138,6 +138,15 @@ def run_vm():
 
 
 class Tests(unittest.TestCase):
+    def test_bound_ssh_uses_only_approved_source_and_preserves_default(self):
+        ssh = b.module('ssh', HERE / 'fixtures/secret_custody_ssh_guest.py')
+        for address, source in (('192.0.2.1', '192.0.2.2'), ('2001:db8:1::1', '2001:db8:1::2')):
+            self.assertNotIn('-b', ssh.client_args(address))
+            for key, hosts in (('client', 'known_hosts'), ('wrong', 'known_hosts'), ('client', 'wrong_hosts')):
+                args = ssh.client_args(address, key, hosts, bind_source=True)
+                self.assertEqual(args[args.index('-b')+1], source)
+        with self.assertRaises(ValueError): ssh.PeerClients(bind_source='arbitrary')
+
     def test_conntrack_module_is_explicit_and_original_payloads_unchanged(self):
         self.assertEqual(p.module_names(), ('ipv6', 'veth', 'nf_tables'))
         self.assertEqual(p.module_names(conntrack=True), ('ipv6', 'veth', 'nf_tables', 'nft_ct'))
