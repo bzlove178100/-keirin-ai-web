@@ -1,5 +1,28 @@
 # Work status
 
+## PR #240 fresh phase fixtures after blocked TCP reuse — 2026-10-12
+
+Head 7593c7bc288d90a67f1c03a75a7f27ff9ffdec91 / regression 38262328563 /
+job 114855718251 passed all unfiltered positive controls, legacy gap
+reproduction and the entire maintenance matrix. The UDP endpoint fix therefore
+restored the required real multi-address control. The next qualification check
+stopped at old ip_wrong_source: expected/observed denial matched, but early,
+late and tracked counters were unchanged (13/4/10 before and after), so no
+actual new packet was available as evidence. Previously blocked TCP writes
+can wait behind outstanding data/retransmission; socket failure alone is not
+accepted as a firewall observation.
+
+Each of maintenance, qualification and restored now runs in a fresh outer CI
+namespace, repeating every positive control and legacy-gap reproduction with
+fresh sockets/conntrack state. Qualification still performs the exact owned
+maintenance-to-qualification transition; restored still performs both owned
+transitions and checks exact maintenance readback. Each phase independently
+requires actual fresh and preexisting original-direction traffic plus early/
+late counters, allowed management and live listeners. No counter or denial
+requirement was removed, no timeout was raised, and no runtime policy changed.
+Local 13 tests pass. All three phase receipts and exact PR/main CI are pending.
+
+
 ## PR #240 initial positive-control failure — 2026-10-12
 
 Head 9036fa164b971c61db85afa4bba319773582c272 failed regression 38261852097 /

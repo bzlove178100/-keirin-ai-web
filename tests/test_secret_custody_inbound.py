@@ -256,8 +256,10 @@ def check(peer_proc, server_proc, label, identity):
     print('PASS INBOUND_IPV4_IPV6_FRESH_EXISTING_TCP_UDP ' + label, flush=True)
 
 
-def kernel():
+def kernel(phase='maintenance'):
     guard()
+    if phase not in ('maintenance', 'qualification', 'restored'):
+        raise ValueError('FIXED_INBOUND_PHASE_REQUIRED')
     host_ns = os.readlink('/proc/1/ns/net')
     if set(name for _, name in socket.if_nameindex()) != {'lo'}:
         raise RuntimeError('EMPTY_INBOUND_NAMESPACE_REQUIRED')
@@ -284,7 +286,7 @@ def kernel():
                 try: measured(child, row, 'fresh' if alternate else 'open', True)
                 finally:
                     if alternate: route(False); t.rpc(child, 'route', False)
-            print('PASS INBOUND_ALL_REACHABLE_POSITIVE_CONTROLS_AND_TRACKING', flush=True)
+            print('PASS INBOUND_ALL_REACHABLE_POSITIVE_CONTROLS_AND_TRACKING ' + phase, flush=True)
             # The old source-only / state-only policy must demonstrably expose
             # each missing-boundary case. No skipped or mocked kernel success.
             t.nft(legacy_control())
@@ -295,15 +297,18 @@ def kernel():
                     route(True); t.rpc(child, 'route', True)
                     try: measured(child, row, 'fresh', True)
                     finally: route(False); t.rpc(child, 'route', False)
-            print('PASS LEGACY_INTERFACE_DESTINATION_AND_REPLY_DIRECTION_GAPS_REPRODUCED', flush=True)
+            print('PASS LEGACY_INTERFACE_DESTINATION_AND_REPLY_DIRECTION_GAPS_REPRODUCED ' + phase, flush=True)
             t.nft(t.r.replacement('maintenance'))
             maintenance = t.shape(t.r.TABLE)
-            check(child, listener, 'maintenance', identity)
-            candidate = t.owned_transition(maintenance, 'qualification')
-            check(child, listener, 'qualification', identity)
-            restored = t.owned_transition(candidate, 'maintenance')
-            if restored != maintenance: raise RuntimeError('EXACT_RESTRICTED_RESTORE_REQUIRED')
-            check(child, listener, 'restored', identity)
+            # Each phase runs in a fresh outer namespace, with all positive and
+            # legacy controls repeated. Do not reuse already-blocked TCP sockets:
+            # an unacknowledged write can remain queued behind retransmission.
+            if phase != 'maintenance':
+                candidate = t.owned_transition(maintenance, 'qualification')
+                if phase == 'restored':
+                    restored = t.owned_transition(candidate, 'maintenance')
+                    if restored != maintenance: raise RuntimeError('EXACT_RESTRICTED_RESTORE_REQUIRED')
+            check(child, listener, phase, identity)
             for process in (child, listener):
                 process.stdin.write('["stop"]\n'); process.stdin.flush()
                 if process.wait(timeout=5) != 0: raise RuntimeError('CHILD_STOP_REQUIRED')
@@ -314,7 +319,7 @@ def kernel():
     if (set(name for _, name in socket.if_nameindex()) != {'lo'} or os.readlink('/proc/1/ns/net') != host_ns
             or any('metainfo' not in row for row in json.loads(t.run(t.NFT, '-j', 'list', 'ruleset').stdout)['nftables'])):
         raise RuntimeError('INBOUND_CLEANUP_AND_HOST_NAMESPACE_REQUIRED')
-    print('PASS INBOUND_OWNED_CHILDREN_LINKS_TABLES_CLEANED_HOST_UNCHANGED NO_LIVE_APPLY', flush=True)
+    print('PASS INBOUND_OWNED_CHILDREN_LINKS_TABLES_CLEANED_HOST_UNCHANGED NO_LIVE_APPLY ' + phase, flush=True)
 
 
 class Tests(unittest.TestCase):
@@ -364,10 +369,13 @@ class Tests(unittest.TestCase):
         self.assertIn('priority -10;', text); self.assertIn('priority 10;', text)
         self.assertNotIn(' accept\n', text); self.assertNotIn(' drop\n', text)
         with self.assertRaises(ValueError): route('host-interface')
+        with patch(__name__ + '.guard'), patch.object(t, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'FIXED_INBOUND_PHASE'): kernel('unknown')
+            run.assert_not_called()
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] == ['--kernel']: kernel()
+    if len(sys.argv) == 3 and sys.argv[1] == '--kernel': kernel(sys.argv[2])
     elif sys.argv[1:] == ['--peer']: peer()
     elif sys.argv[1:] == ['--server']: server()
     else: unittest.main(verbosity=2)
