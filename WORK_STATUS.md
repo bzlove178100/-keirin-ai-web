@@ -1,5 +1,31 @@
 # Work status
 
+## Authenticated management in the integrated guest — 2026-10-12
+
+PR #230 is merged at 5eb1fafad5bd7ed973e88562498424c800e65f20.
+Its PR and independent main CI passed five workflows/28 regression jobs;
+each run retained 50 packet records, including both integrated awake/S3 cases.
+The previous integration-pending paragraph below is historical.
+
+This candidate adds two fresh isolated guests with real OpenSSH management.
+Keys are generated inside each guest; clients pin the ephemeral host key, and
+wrong client keys and wrong host keys must be rejected on IPv4 and IPv6.
+The only permitted remote command echoes bounded synthetic tokens. Existing
+SSH sessions and fresh authenticated connections must succeed after awake
+expiry and actual S3 while the original TCP/443 qualification probes deny.
+SSH setup precedes the lease; SSH after-checks follow the first packet result.
+The original 3-second live and 7-second first-resume windows are unchanged.
+All previous controls remain mandatory. OpenSSH packages are downloaded and
+extracted, never installed or started on the CI host; provenance is recorded.
+
+Local packet/startup/VM tests: 23 passed. Actual SSH guest results and CI are
+pending at this checkpoint; final receipts belong in the PR body. This is
+synthetic guest authentication, not production management qualification.
+Phase 3 still needs actual OS service ordering/reboot persistence, broader
+inbound/protocol coverage and production binding. No live host, credentials,
+scheduler, data acquisition or learning activation. KEIRIN.JP hold and zero
+real training remain unchanged.
+
 ## Closed startup to immutable lease integration — 2026-10-12
 
 PR #229 is merged at 9c1d8a2a34db568748cd8616d06463c851c042d9.

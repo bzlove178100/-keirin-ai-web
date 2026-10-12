@@ -48,7 +48,7 @@ def setup(name, number, up=True):
     run(IP, 'link', 'set', 'lo', 'up')
 
 
-def peer(control):
+def peer(control, ssh=None):
     os.unshare(os.CLONE_NEWNET)
     control.sendall(b'isolated\n')
     if control.recv(16) != b'setup\n':
@@ -63,10 +63,20 @@ def peer(control):
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((address, port)); s.listen(16); servers.append(s)
     control.sendall(b'ready\n')
+    ssh_clients = ssh.PeerClients() if ssh is not None else None
     while True:
         readable, _, _ = select.select([control, *servers, *clients], [], [], 1)
         for s in readable:
             if s is control:
+                request = control.recv(64)
+                if ssh_clients is not None and request in (b'ssh-start', b'ssh-check', b'ssh-stop'):
+                    if request == b'ssh-start': response = ssh_clients.start()
+                    elif request == b'ssh-check': response = ssh_clients.check()
+                    else:
+                        ssh_clients.stop(); response = {'stopped': True}
+                    control.sendall(json.dumps(response).encode())
+                    continue
+                if ssh_clients is not None: ssh_clients.stop()
                 return
             if s in servers:
                 child, _ = s.accept(); child.settimeout(.25); clients.append(child)
@@ -184,6 +194,13 @@ def main():
         raise RuntimeError('FIXED_PACKET_CASE_REQUIRED')
     boottime_guard = ' kc_boottime_guard=1 ' in Path('/proc/cmdline').read_text()
     integrated = ' kc_integrated_probe=1 ' in Path('/proc/cmdline').read_text()
+    authenticated = ' kc_ssh_probe=1 ' in Path('/proc/cmdline').read_text()
+    ssh, ssh_server = None, None
+    if authenticated:
+        if not integrated: raise RuntimeError('SSH_INTEGRATED_GUEST_REQUIRED')
+        spec = importlib.util.spec_from_file_location('ssh_probe', '/ssh_probe.py')
+        ssh = importlib.util.module_from_spec(spec); spec.loader.exec_module(ssh)
+        ssh.prepare()
     if integrated and not boottime_guard:
         raise RuntimeError('INTEGRATED_BOOTTIME_GUARD_REQUIRED')
     policy = None
@@ -202,12 +219,19 @@ def main():
     if pid == 0:
         parent.close()
         try:
-            peer(child)
+            peer(child, ssh)
             os._exit(0)
         except Exception as exc:
             print('PACKET_FAIL peer ' + str(exc), flush=True)
             os._exit(2)
     child.close(); parent.settimeout(8)
+    def ssh_request(command):
+        parent.settimeout(30)
+        try:
+            parent.sendall(command)
+            return json.loads(parent.recv(4096))
+        finally:
+            parent.settimeout(8)
     opened = []
     try:
         if parent.recv(32) != b'isolated\n' or os.readlink(f'/proc/{pid}/ns/net') == os.readlink('/proc/self/ns/net'):
@@ -242,6 +266,10 @@ def main():
             if refused != [False, False, True, True] or policy.seal(json.loads(run(NFT, '-j', 'list', 'table', 'inet', policy.TABLE))) != sealed:
                 raise RuntimeError('REFUSED_RELEASE_MUST_STAY_CLOSED')
             emit('startup_release_refused', mode=mode, new_connections=refused, policy_unchanged=True, **clocks())
+        if authenticated:
+            ssh_server = ssh.start_server()
+            authenticated_start = ssh_request(b'ssh-start')
+            emit('ssh_ready', mode=mode, **authenticated_start, **clocks())
         old_q = [] if integrated else [connect(a, 443) for a in PEERS]; opened.extend(old_q)
         old_m = [connect(a, 22) for a in PEERS]; opened.extend(old_m)
         if not integrated:
@@ -301,6 +329,11 @@ def main():
             outcome = 'BOOTTIME_' + outcome
         emit('after', mode=mode, outcome=outcome, rule_identity_unchanged=unchanged,
              boottime_guard=proof, tc_identity_unchanged=tc_unchanged, **after, **observed)
+        if authenticated:
+            authenticated_after = ssh_request(b'ssh-check')
+            if authenticated_after != {'established': [True]*2, 'fresh': [True]*2}:
+                raise RuntimeError('AUTHENTICATED_MANAGEMENT_CONTINUITY_REQUIRED')
+            emit('ssh_after', mode=mode, **authenticated_after, **clocks())
         time.sleep(max(0, started['monotonic'] + 10 - time.monotonic()))
         late = probes(old_q, old_m)
         require(late, False)
@@ -311,6 +344,12 @@ def main():
         emit('awake_expired', mode=mode, **late, **clocks())
     finally:
         for s in opened: s.close()
+        if ssh_server is not None:
+            try:
+                if ssh_request(b'ssh-stop') != {'stopped': True}:
+                    raise RuntimeError('SSH_CLIENT_CLEANUP_REQUIRED')
+            finally:
+                ssh.stop_server(ssh_server)
         parent.close()
         os.kill(pid, signal.SIGTERM); os.waitpid(pid, 0)
         for family, name in (*lease.TABLES, ('inet', UNRELATED)):
