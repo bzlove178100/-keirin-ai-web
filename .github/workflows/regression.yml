@@ -630,6 +630,22 @@ jobs:
           KC_SYSTEMD_RESTART_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_systemd_restart.py --vm
 
+  custody-persistence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test durable closed configuration and volume guards
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_persistence.py
+      - name: Install isolated guest experiment tools
+        run: sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends qemu-system-x86 nftables iproute2 kmod e2fsprogs
+      - name: Verify guest-written policy survives reboot and invalid state stays closed
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+          KC_PERSISTENCE_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_persistence.py --vm
+
   custody-suspend-vm:
     runs-on: ubuntu-24.04
     timeout-minutes: 7

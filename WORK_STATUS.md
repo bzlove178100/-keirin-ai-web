@@ -1,5 +1,32 @@
 # Work status
 
+## Guest-owned durable closed configuration — 2026-10-12
+
+PR #234 is merged at ef5d0535f4ee61b4258d94b88f360c8223fa637e.
+Its PR and independent main CI passed five workflows/31 regression jobs.
+Each normal reboot/poweroff job produced 48 boot/lease/shutdown records.
+Final receipts in PR #234 supersede the historical pending checkpoint below.
+
+This candidate adds one explicit 64 MiB private regular-file ext4 disk to the
+otherwise isolated synthetic guest. No host disk is mounted or formatted.
+A mounted, strictly validated closed configuration must precede the startup
+gate and link. The guest writes/fsyncs a new policy generation plus an expired
+lease receipt before normal reboot. A different boot must read the exact
+persisted hashes while refusing the prior-boot receipt as authorization.
+Fresh pinned-key SSH and a newly created immutable lease remain required;
+actual S3/expiry checks keep the original eight/three/seven-second bounds.
+Missing configuration, malformed JSON and an injected stale lease field must
+fail the gate and prevent link/observe/auth/lease entry. Shutdown must unmount
+the volume; all synthetic VM/disk files must be removed afterward.
+
+Local tests: 38 passed. Actual persistent-disk experiment and exact-head/main
+CI results pending; final receipts belong in the PR body and private report.
+Atomic writes are implemented, but abrupt power loss, partial multi-file
+writes, storage errors and production configuration migration remain unqualified.
+Broader protocol/inbound coverage and real host/credential/runtime binding
+remain pending. Phase 3 incomplete; KEIRIN.JP acquisition hold and real training
+zero unchanged. No live application or external data acquisition is enabled.
+
 ## Composed normal systemd reboot and poweroff — 2026-10-12
 
 PR #233 is merged at 35e2dc73e504459c8071ba760ff4ee62726a5981.

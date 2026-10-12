@@ -189,6 +189,7 @@ def main(action):
             remaining = [r for r in json.loads(g.run(g.NFT, '-j', 'list', 'ruleset'))['nftables'] if 'metainfo' not in r]
             if remaining or g.interfaces() != ['lo'] or Path(f'/proc/{pid}').exists(): raise RuntimeError('BOOT_CLEANUP_REQUIRED')
             if c: c.after_clean()
+            if Path('/persist_probe.py').exists(): module('persist', '/persist_probe.py').unmounted_store()
             emit('done', mode, interfaces=g.interfaces(), activation_allowed=False)
         else: raise RuntimeError('FIXED_GUEST_COMMAND_REQUIRED')
         while True: time.sleep(1)

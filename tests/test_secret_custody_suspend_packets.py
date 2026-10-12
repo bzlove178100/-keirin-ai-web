@@ -64,7 +64,8 @@ def archive(files, systemd=False):
     return gzip.compress(bytes(result), mtime=0)
 
 
-def payload(path, boottime_guard=False, startup=False, authenticated=False, systemd=False):
+def payload(path, boottime_guard=False, startup=False, authenticated=False, systemd=False, storage=False):
+    if storage and not systemd: raise ValueError("STORAGE_REQUIRES_SYSTEMD")
     files = {}
     def add(source, target=None):
         source = Path(source)
@@ -84,6 +85,7 @@ def payload(path, boottime_guard=False, startup=False, authenticated=False, syst
     add(HERE.parent / 'review/secret_custody_closed_startup.py', 'startup_policy.py')
     add(HERE.parent / 'review/secret_custody_qualification_lease.py', 'lease.py')
     binaries = ['/usr/bin/python3', '/usr/sbin/ip', '/usr/sbin/nft', '/usr/sbin/modprobe']
+    if storage: binaries += ['/usr/bin/mount', '/usr/bin/umount']
     if authenticated:
         add(HERE / 'fixtures/secret_custody_ssh_guest.py', 'ssh_probe.py')
         add(HERE / 'fixtures/secret_custody_ssh_echo.py', 'ssh_echo.py')
@@ -144,7 +146,7 @@ def payload(path, boottime_guard=False, startup=False, authenticated=False, syst
     root = Path('/lib/modules') / version
     empty = path / 'module-config'; empty.mkdir()
     manifest = []
-    for module in MODULES + (('sch_ingress', 'cls_bpf') if boottime_guard else ()):
+    for module in MODULES + (('sch_ingress', 'cls_bpf') if boottime_guard else ()) + (('virtio_pci', 'virtio_blk', 'ext4') if storage else ()):
         dependency = subprocess.run(['/usr/sbin/modprobe', '-C', str(empty), '--show-depends', module],
                                     capture_output=True, text=True, timeout=5)
         if dependency.returncode:
