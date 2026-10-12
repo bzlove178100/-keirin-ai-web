@@ -138,6 +138,7 @@ def main(action):
         STATE.mkdir(mode=0o700)
         g.run('/sbin/modprobe', '-C', '/module-config', '-a', 'ipv6', 'veth', 'nf_tables')
         if composed:
+            with (STATE / 'suspend-marker').open('x') as marker: marker.write(boot())
             g.run('/sbin/modprobe', '-C', '/module-config', '-a', 'sch_ingress', 'cls_bpf')
             module('ssh', '/ssh_probe.py').prepare(systemd=True)
         if [r for r in json.loads(g.run(g.NFT, '-j', 'list', 'ruleset'))['nftables'] if 'metainfo' not in r]:

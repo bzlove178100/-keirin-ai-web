@@ -29,10 +29,14 @@ def request(command):
         return json.loads(data)
 
 
+def marker(path=Path('/run/kc-boot/suspend-marker'), boot_path=Path('/proc/sys/kernel/random/boot_id')):
+    return int(path.is_file() and path.read_text() == boot_path.read_text().strip())
+
+
 def emit(event, mode, **values):
     print('SYSTEMD_LEASE_RECORD ' + json.dumps(dict(event=event, mode=mode,
           boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
-          monotonic=time.monotonic(), boottime=time.clock_gettime(time.CLOCK_BOOTTIME), **values)), flush=True)
+          monotonic=time.monotonic(), boottime=time.clock_gettime(time.CLOCK_BOOTTIME), marker=marker(), **values)), flush=True)
 
 
 def main(action):
@@ -89,7 +93,7 @@ def main(action):
         outcome = 'BOOTTIME_AWAKE_EXPIRY_CONFIRMED' if mode == 'awake' else 'BOOTTIME_SUSPEND_EXPIRY_OBSERVED'
         # Use pre-probe clocks for suspend accounting, as the existing harness does.
         print('SYSTEMD_LEASE_RECORD ' + json.dumps(dict(event='after', mode=mode, boot=b.boot(),
-              **after_clock, **observed, outcome=outcome, rule_identity_unchanged=unchanged,
+              **after_clock, **observed, marker=marker(), outcome=outcome, rule_identity_unchanged=unchanged,
               tc_identity_unchanged=tc_unchanged, boottime_guard=proof)), flush=True)
         authenticated = request(b'ssh-check')
         if authenticated != {'established': [True]*2, 'fresh': [True]*2}: raise RuntimeError('SSH_CONTINUITY_REQUIRED')

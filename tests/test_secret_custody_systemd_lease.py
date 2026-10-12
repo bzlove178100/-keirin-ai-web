@@ -37,6 +37,7 @@ def record(lines, event, mode, boot):
         if not line.startswith('SYSTEMD_LEASE_RECORD '): continue
         row = json.loads(line[len('SYSTEMD_LEASE_RECORD '):])
         if (row.get('event') != event or row.get('mode') != mode or row.get('boot') != boot
+                or type(row.get('marker')) is not int or row['marker'] != 1
                 or any(type(row.get(k)) not in (int, float) or not math.isfinite(row[k]) or row[k] < 0 for k in ('monotonic', 'boottime'))):
             raise RuntimeError('COMPOSED_RECORD_SEQUENCE_REQUIRED')
         print(line, flush=True); return row
@@ -125,6 +126,16 @@ def run_vm():
 
 
 class Tests(unittest.TestCase):
+    def test_suspend_marker_requires_preserved_same_boot_file(self):
+        guest = b.module('composed', HERE / 'fixtures/secret_custody_composed_guest.py')
+        with tempfile.TemporaryDirectory() as directory:
+            marker, boot = Path(directory) / 'marker', Path(directory) / 'boot'
+            boot.write_text('boot-one\n')
+            self.assertEqual(guest.marker(marker, boot), 0)
+            marker.write_text('boot-one'); self.assertEqual(guest.marker(marker, boot), 1)
+            boot.write_text('boot-two\n'); self.assertEqual(guest.marker(marker, boot), 0)
+            marker.unlink(); self.assertEqual(guest.marker(marker, boot), 0)
+
     def test_original_units_unchanged_and_composition_requires_link_auth(self):
         self.assertNotIn('kc-lease.service', b.u.units())
         units = b.u.units(composed=True)

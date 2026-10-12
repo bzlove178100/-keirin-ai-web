@@ -18,7 +18,7 @@ Missing/invalid startup policy must prevent observe/auth/lease units executing.
 All owned guest services, SSH processes, rules, interfaces and VM files must
 clean up. No real host, external NIC, credential or application activation.
 
-Local tests: 28 passed; both original/systemd boottime loader variants compiled
+Local tests: 29 passed; both original/systemd boottime loader variants compiled
 and refused ordinary-host execution. Actual composed guest/CI results pending;
 final receipts belong in the PR body. This composition does not yet establish
 combined reboot/shutdown recovery or writable production configuration
