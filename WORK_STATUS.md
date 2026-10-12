@@ -1,5 +1,90 @@
 # Work status
 
+## PR #240 fresh phase fixtures after blocked TCP reuse — 2026-10-12
+
+Head 7593c7bc288d90a67f1c03a75a7f27ff9ffdec91 / regression 38262328563 /
+job 114855718251 passed all unfiltered positive controls, legacy gap
+reproduction and the entire maintenance matrix. The UDP endpoint fix therefore
+restored the required real multi-address control. The next qualification check
+stopped at old ip_wrong_source: expected/observed denial matched, but early,
+late and tracked counters were unchanged (13/4/10 before and after), so no
+actual new packet was available as evidence. Previously blocked TCP writes
+can wait behind outstanding data/retransmission; socket failure alone is not
+accepted as a firewall observation.
+
+Each of maintenance, qualification and restored now runs in a fresh outer CI
+namespace, repeating every positive control and legacy-gap reproduction with
+fresh sockets/conntrack state. Qualification still performs the exact owned
+maintenance-to-qualification transition; restored still performs both owned
+transitions and checks exact maintenance readback. Each phase independently
+requires actual fresh and preexisting original-direction traffic plus early/
+late counters, allowed management and live listeners. No counter or denial
+requirement was removed, no timeout was raised, and no runtime policy changed.
+Local 13 tests pass. All three phase receipts and exact PR/main CI are pending.
+
+
+## PR #240 initial positive-control failure — 2026-10-12
+
+Head 9036fa164b971c61db85afa4bba319773582c272 failed regression 38261852097 /
+inbound job 114854082274 at ip6_udp22 before any candidate filter was installed.
+Existing transition/recovery jobs passed. The wildcard UDP echo helper used
+sendto without received packet information on a host with two IPv6 addresses;
+reply-source selection was not bound to the original local destination. The
+log did not record that address, so this is the hypothesis to verify, not a
+claim that the rejected policy caused the failure. The corrected UDP helper
+uses recvmsg destination/interface information and sendmsg to preserve the
+reply endpoint for both IP families. Local real loopback UDP checks pass;
+actual multi-address namespace controls remain required. Failure diagnostics
+now include per-flow result and before/after counters. No policy or negative
+acceptance criterion changed. Local total is now 13 tests, including 5 inbound.
+Corrected exact-head CI remains pending; retain the initial failure evidence.
+
+
+## Exact inbound path and connection direction — 2026-10-12
+
+PR #239 merged at a954a6ee062fc0c937422ac072221127e810850a. The corrected
+PR and independent main each passed five project workflows and 34 regression
+jobs; main Pages deployment also succeeded. Main regression 38256307958,
+I/O job 114835180821, crash 114835180860 and normal persistence 114835181213
+are final receipts. Both ENOSPC/EROFS cases and all eight normal storage cases
+passed. The observed 327 free blocks exactly matched 327 reserved clusters,
+with zero available blocks, confirming the corrected ext4 accounting. These
+receipts supersede the old pending checkpoints below; the initial failure stays
+part of the history.
+
+This increment tightens the existing pure synthetic network rehearsal profile.
+Every non-loopback allowance now fixes host0, both endpoint addresses and the
+connection direction: management ingress is original / response is reply;
+DNS/time/qualification egress is original / ingress is reply. Source-only and
+state-only allowances did not encode those boundaries. No live host is changed.
+
+The new CI-only experiment uses two empty private network namespaces and two
+internal veth paths, with fixed documentation addresses/static neighbours.
+Wildcard TCP22/80/443/8080 and UDP22/53/443/8080 echo listeners are deliberately
+active positive controls. Twenty-eight IPv4/IPv6 cases cover approved management,
+wrong source/destination/interface, other transports and preexisting inbound
+TCP/UDP flows using source port 53. A reconstructed legacy control exactly
+matches the prior main renderer; it must reproduce the destination/interface
+and DNS-reply-direction gaps before the corrected rules can pass. Independent
+counters before/after the policy distinguish input drops from lost replies;
+old flows must still be observed as established in the original direction.
+Maintenance, qualification and restricted restoration all retain the boundary,
+working approved management and live loopback listeners. Owned processes, links
+and tables must disappear; the runner host network namespace remains unchanged.
+
+Local validation: 12 tests pass (inbound 4, transition 4, watchdog 4), legacy
+control matches the old renderer exactly, and diff whitespace check passes.
+Actual kernel reproduction/acceptance and exact PR/main CI remain pending.
+Final receipts in this increment's PR supersede this candidate checkpoint.
+This is transport-level isolated evidence: actual SSH authentication is covered
+separately, and this does not establish live cloud policy, application bind
+configuration, full boot/lease/recovery composition, all IP protocols/fragments,
+or physical storage power-loss durability. Phase 3 remains incomplete. Next is
+composition of the wider boundary with sealed startup and the authenticated
+management path; no production binding or credentials are activated.
+KEIRIN.JP hold, real training zero, DB write OFF and live activation OFF persist.
+
+
 
 ## PR #239 initial CI failure and correction — 2026-10-12
 
