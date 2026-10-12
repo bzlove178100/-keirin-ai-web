@@ -27,7 +27,8 @@ vm = p.vm
 u = module('units', HERE.parent / 'review/secret_custody_boot_units.py')
 
 
-def payload(path, composed=False):
+def payload(path, composed=False, restart=False):
+    if restart and not composed: raise ValueError("RESTART_REQUIRES_COMPOSITION")
     files = p.payload(path, boottime_guard=composed, authenticated=composed, systemd=composed)
     def add(source, target=None):
         source = Path(source)
@@ -39,6 +40,10 @@ def payload(path, composed=False):
     add(path / 'systemd-init', 'init')
     add(HERE / 'fixtures/secret_custody_boot_guest.py', 'boot_probe.py')
     if composed: add(HERE / 'fixtures/secret_custody_composed_guest.py', 'composed.py')
+    shutdown_units = ('reboot.target', 'systemd-reboot.service', 'poweroff.target', 'systemd-poweroff.service',
+                      'shutdown.target', 'umount.target', 'final.target') if restart else ()
+    for name in shutdown_units: add('/usr/lib/systemd/system/' + name)
+    if restart: add(HERE / 'fixtures/secret_custody_restart_guest.py', 'restart_probe.py')
     binaries = ['/usr/lib/systemd/systemd', '/usr/lib/systemd/systemd-executor',
                 '/usr/lib/systemd/systemd-shutdown', '/usr/bin/systemctl']
     for binary in binaries: add(binary)
@@ -51,10 +56,11 @@ def payload(path, composed=False):
     if not composed:
         files['etc/passwd'] = (b'root:x:0:0:Synthetic root:/root:/bin/false\n', 0o644)
         files['etc/group'] = (b'root:x:0:\n', 0o644)
-    for name, content in u.units(composed).items(): files['etc/systemd/system/' + name] = (content.encode(), 0o644)
+    for name, content in u.units(composed, restart).items(): files['etc/systemd/system/' + name] = (content.encode(), 0o644)
     image = p.archive(files, systemd=True)
     (path / 'initramfs').write_bytes(image)
     print('SYSTEMD_BOOT_PROVENANCE', json.dumps({'initramfs_sha256': hashlib.sha256(image).hexdigest(),
+          'shutdown_units': {name: hashlib.sha256(Path('/usr/lib/systemd/system/' + name).read_bytes()).hexdigest() for name in shutdown_units},
           'binaries': {name: hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in binaries},
           'kernel_release': os.uname().release, 'kernel_sha256': hashlib.sha256((path / 'vmlinuz').read_bytes()).hexdigest(),
           'qemu_sha256': hashlib.sha256(Path(vm.QEMU).read_bytes()).hexdigest(),

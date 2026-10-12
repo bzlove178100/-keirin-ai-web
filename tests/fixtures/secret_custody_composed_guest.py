@@ -102,7 +102,8 @@ def main(action):
         late = g.probes(old_q, old_m); g.require(late, False)
         if g.identity(g.reports(lease)) != original or g.tc_identity(proof) != original_tc: raise RuntimeError('LATE_IDENTITY_REQUIRED')
         emit('awake_expired', mode, **late)
-        b.write('lease', dict(boot=b.boot(), outcome=outcome, deadline_ns=deadline_ns))
+        b.write('lease', dict(boot=b.boot(), outcome=outcome, deadline_ns=deadline_ns,
+                              boottime_guard=proof, rule_identity=original, tc_identity=original_tc))
     finally:
         for s in opened: s.close()
 

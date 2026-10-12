@@ -69,6 +69,31 @@ def sequence_evidence(first, ready, refused, released, before):
         if earlier['boot'] != later['boot'] or later['monotonic'] < earlier['monotonic']: raise RuntimeError('SAME_ORDERED_BOOT_REQUIRED')
 
 
+def cycle(lines, qmp, boot_case, mode, host_boot):
+    first = b.record(lines, 'observed', boot_case); b.evidence(first); boot = first['boot']
+    if boot == host_boot: raise RuntimeError('DISTINCT_GUEST_REQUIRED')
+    if boot_case == 'closed':
+        ready = record(lines, 'ssh_ready', mode, boot)
+        refused = record(lines, 'release_refused', mode, boot)
+        released = record(lines, 'released', mode, boot)
+        before = record(lines, 'before', mode, boot)
+        sequence_evidence(first, ready, refused, released, before)
+        started = time.monotonic()
+        if mode == 'suspend':
+            qmp.event('SUSPEND', time.monotonic() + 20)
+            if qmp.call('query-status').get('status') != 'suspended': raise RuntimeError('REAL_S3_REQUIRED')
+            time.sleep(vm.SUSPEND_SECONDS)
+            qmp.call('system_wakeup'); qmp.event('WAKEUP', time.monotonic() + 10)
+        after = record(lines, 'after', mode, boot)
+        result = p.outcome(mode, before, after, time.monotonic() - started, boottime_guard=True)
+        p.ssh_evidence(record(lines, 'ssh_after', mode, boot))
+        late = record(lines, 'awake_expired', mode, boot)
+        if late.get('qualification') != [False]*4 or late.get('management') != [True]*4: raise RuntimeError('LATE_CLOSED_REQUIRED')
+        print('PASS SYSTEMD_AUTHENTICATED_IMMUTABLE_LEASE ' + mode + ' ' + result, flush=True)
+    service_evidence(record(lines, 'completed', mode, boot), boot_case)
+    return first
+
+
 def case(path, boot_case, mode, host_boot):
     process = None
     try:
@@ -78,27 +103,7 @@ def case(path, boot_case, mode, host_boot):
             with vm.connect(path / 'qmp', process) as monitor, vm.connect(path / 'serial', process) as serial:
                 qmp, lines = vm.QMP(monitor), vm.Lines(serial)
                 if qmp.call('query-block') != [] or qmp.call('query-current-machine').get('wakeup-suspend-support') is not True: raise RuntimeError('DISKLESS_S3_MACHINE_REQUIRED')
-                first = b.record(lines, 'observed', boot_case); b.evidence(first); boot = first['boot']
-                if boot == host_boot: raise RuntimeError('DISTINCT_GUEST_REQUIRED')
-                if boot_case == 'closed':
-                    ready = record(lines, 'ssh_ready', mode, boot)
-                    refused = record(lines, 'release_refused', mode, boot)
-                    released = record(lines, 'released', mode, boot)
-                    before = record(lines, 'before', mode, boot)
-                    sequence_evidence(first, ready, refused, released, before)
-                    started = time.monotonic()
-                    if mode == 'suspend':
-                        qmp.event('SUSPEND', time.monotonic() + 20)
-                        if qmp.call('query-status').get('status') != 'suspended': raise RuntimeError('REAL_S3_REQUIRED')
-                        time.sleep(vm.SUSPEND_SECONDS)
-                        qmp.call('system_wakeup'); qmp.event('WAKEUP', time.monotonic() + 10)
-                    after = record(lines, 'after', mode, boot)
-                    result = p.outcome(mode, before, after, time.monotonic() - started, boottime_guard=True)
-                    p.ssh_evidence(record(lines, 'ssh_after', mode, boot))
-                    late = record(lines, 'awake_expired', mode, boot)
-                    if late.get('qualification') != [False]*4 or late.get('management') != [True]*4: raise RuntimeError('LATE_CLOSED_REQUIRED')
-                    print('PASS SYSTEMD_AUTHENTICATED_IMMUTABLE_LEASE ' + mode + ' ' + result, flush=True)
-                service_evidence(record(lines, 'completed', mode, boot), boot_case)
+                first = cycle(lines, qmp, boot_case, mode, host_boot); boot = first['boot']
                 serial.sendall(b'clean\n')
                 done = b.record(lines, 'done', boot_case)
                 if done['boot'] != boot or done.get('interfaces') != ['lo'] or done.get('activation_allowed') is not False: raise RuntimeError('COMPOSED_CLEANUP_REQUIRED')
