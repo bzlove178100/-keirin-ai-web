@@ -1,5 +1,36 @@
 # Work status
 
+## Actual VM interruption between durable writes — 2026-10-12
+
+PR #237 is merged at c77bea236b89439484eeef710ec2f25703fc1f78.
+Its exact PR and independent main CI passed five workflows and 32 regression
+jobs each, including all eight persistence cases and cleanup. Main regression
+38247234674 and persistence job 114804079555 are the verified predecessor.
+These receipts supersede PR #237's historical pending checkpoint below.
+
+The next increment adds an explicit isolated-guest crash barrier after the
+receipt has been written, fsynced and read back, before policy replacement or
+saved-marker publication. The guest first completes authenticated SSH and the
+unchanged awake lease expiry checks; IPv4/IPv6 TCP443 must remain denied at the
+barrier. The supervisor SIGKILLs only its own QEMU process, requires the actual
+signal exit, then starts a fresh guest using that same private 64 MiB disk.
+No reseeding, repair, host mount or normal guest shutdown occurs between boots.
+The new boot must refuse the orphan receipt, read identical policy/receipt
+hashes, keep its link down and never execute observe/auth/lease services.
+Owned processes, image and disk must be removed and host boot/netns unchanged.
+
+Local validation: 30 tests passed (crash 5, persistence 11, restart 4, boot 5,
+lease 5). Actual VM experiment and exact PR/main CI are pending. A bounded
+barrier timeout refuses continuation. Existing normal persistence/S3 and
+seeded-negative tests remain required and unchanged in their acceptance rules.
+
+This qualifies only the controlled crash point if the VM experiment succeeds.
+It does not prove physical power-loss durability, arbitrary torn writes, real
+storage I/O failures, automatic repair or production readiness. Next unverified
+storage work is actual filesystem write failure; wider protocol/inbound and
+production binding also remain. Phase 3 incomplete. KEIRIN.JP hold, real
+training zero and no live activation remain unchanged.
+
 ## Interrupted checkpoint refusal — 2026-10-12
 
 PR #236 is merged at cb49614cc051109430dc03a0b456e9b30d875fe3.
