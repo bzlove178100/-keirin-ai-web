@@ -53,12 +53,6 @@ static void no_network(void) {
 }
 static void record(const char *event, const char *boot, int marker) {
     no_network();
-#ifdef KC_SYSTEMD_PROBE
-    if (!strstr(cmdline, " kc_systemd_probe=1 ")) fail("FIXED_SYSTEMD_OPT_IN_REQUIRED");
-    if (mount("tmpfs", "/run", "tmpfs", MS_NOSUID | MS_NODEV, "size=16m,mode=0755")) fail("SYSTEMD_RUN_REQUIRED");
-    execl("/usr/lib/systemd/systemd", "systemd", (char *)NULL);
-    fail("SYSTEMD_GUEST_EXEC_FAILED");
-#endif
     printf("VM_RECORD {\"event\":\"%s\",\"boot\":\"%s\",\"monotonic\":%.9f,\"boottime\":%.9f,\"marker\":%d,\"only_loopback\":true}\n",
            event, boot, clock_seconds(CLOCK_MONOTONIC), clock_seconds(CLOCK_BOOTTIME), marker);
     fflush(stdout);
@@ -78,6 +72,12 @@ int main(void) {
     read_text("/sys/class/dmi/id/sys_vendor", vendor, sizeof(vendor));
     if (!strstr(cmdline, " kc_vm_probe=1 ") || strcmp(vendor, "QEMU")) fail("FIXED_QEMU_GUEST_REQUIRED");
     no_network();
+#ifdef KC_SYSTEMD_PROBE
+    if (!strstr(cmdline, " kc_systemd_probe=1 ")) fail("FIXED_SYSTEMD_OPT_IN_REQUIRED");
+    if (mount("tmpfs", "/run", "tmpfs", MS_NOSUID | MS_NODEV, "size=16m,mode=0755")) fail("SYSTEMD_RUN_REQUIRED");
+    execl("/usr/lib/systemd/systemd", "systemd", (char *)NULL);
+    fail("SYSTEMD_GUEST_EXEC_FAILED");
+#endif
     if (mount("tmpfs", "/run", "tmpfs", MS_NOSUID | MS_NODEV | MS_NOEXEC, "size=1m,mode=0700")) fail("PRIVATE_RUN_REQUIRED");
     if (!access("/run/probe.marker", F_OK)) fail("FRESH_RUN_REQUIRED");
     read_text("/proc/sys/kernel/random/boot_id", boot, sizeof(boot));
