@@ -1,7 +1,8 @@
 """Fixed units for an isolated synthetic guest; not a production installer."""
 
 
-def units(composed=False):
+def units(composed=False, restart=False):
+    if restart and not composed: raise ValueError("RESTART_REQUIRES_COMPOSITION")
     def service(action, dependencies=''):
         return ('[Unit]\nDefaultDependencies=no\n' + dependencies +
                 '[Service]\nType=oneshot\nRemainAfterExit=yes\nTimeoutStartSec=90\n'
@@ -19,4 +20,14 @@ def units(composed=False):
         for action, dependency in (('auth', 'observe'), ('lease', 'auth')):
             result['kc-' + action + '.service'] = service(action, 'Requires=kc-' + dependency + '.service\nAfter=kc-' + dependency + '.service\n').replace('/boot_probe.py ', '/composed.py ')
         result['kc-report.service'] = service('report', 'Wants=kc-lease.service\nAfter=kc-lease.service\n') + 'StandardInput=tty\n'
+    if restart:
+        # The report waits for supervisor commands; it is a running process,
+        # not a finite oneshot. Normal SIGTERM is clean for an exec service.
+        result['kc-report.service'] = result['kc-report.service'].replace('Type=oneshot', 'Type=exec')
+        for name in tuple(result):
+            if name.startswith('kc-'):
+                result[name] = result[name].replace('[Service]', 'Conflicts=shutdown.target\nBefore=shutdown.target\n[Service]')
+        result['kc-link.service'] += 'ExecStop=/usr/bin/python3 -I -B /restart_probe.py link-down\n'
+        result['kc-shutdown-check.service'] = service('check', 'Requires=shutdown.target\nAfter=shutdown.target\nBefore=final.target\n').replace('/boot_probe.py ', '/restart_probe.py ')
+        result['final.target.d/kc-check.conf'] = '[Unit]\nRequires=kc-shutdown-check.service\nAfter=kc-shutdown-check.service\n'
     return result

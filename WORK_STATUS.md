@@ -1,5 +1,31 @@
 # Work status
 
+## Composed normal systemd reboot and poweroff — 2026-10-12
+
+PR #233 is merged at 35e2dc73e504459c8071ba760ff4ee62726a5981.
+Its PR and independent main CI passed five workflows/30 regression jobs,
+with eight boot and 18 lease/authentication records per run. Final receipts
+in PR #233 supersede the historical pending checkpoint below.
+
+This candidate retains the same closed startup, pinned-key SSH, immutable
+eight-second lease and awake/actual-S3 expiry checks. It adds the installed
+systemd normal reboot/poweroff target transaction (no force CLI), ordered
+owned-service shutdown, packet denial and unchanged guards through link-down,
+then retained inet policy and absent SSH/peer processes after services stop.
+Device removal may remove TC/netdev attachments; unchanged full guards are
+checked while the link exists, not falsely claimed after device destruction.
+A real guest-origin reset must lead to a different boot ID and repeat the full
+closed-before-link/authentication/expiry cycle. Normal guest poweroff must
+exit QEMU successfully. Both awake and S3 modes are exercised. Installed
+shutdown unit hashes join image/binary provenance.
+
+Local tests: 33 passed. Actual new guest transactions and exact-head/main CI
+are pending; final receipts belong in this PR body and private progress record.
+Writable configuration persistence, wider protocols/inbound paths and live
+production bindings remain unqualified. Phase 3 remains incomplete.
+KEIRIN.JP acquisition remains on hold; real training and new race acquisition
+remain zero. No host power/network/service change or live activation.
+
 ## systemd startup composed with authenticated immutable lease — 2026-10-12
 
 PR #232 is merged at cd8429d5b4f29a0536aa2f0c29f69f7952420224.

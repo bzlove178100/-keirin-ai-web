@@ -178,6 +178,8 @@ def main(action):
             emit('reboot_requested', mode)
             # Ask the actual guest PID1 to reboot; no host power operation.
             g.run('/usr/bin/systemctl', 'reboot', '--force')
+        elif command in ('restart', 'halt') and mode == 'closed' and composed:
+            module('restart', '/restart_probe.py').main(command)
         elif command == 'clean':
             pid = read('setup')['peer_pid']
             if c: c.before_clean(g, mode)

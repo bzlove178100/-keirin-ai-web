@@ -614,6 +614,22 @@ jobs:
           KC_SYSTEMD_LEASE_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_systemd_lease.py --vm
 
+  custody-systemd-restart:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test normal shutdown ordering and host refusal
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_systemd_restart.py
+      - name: Install isolated guest experiment tools
+        run: sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends qemu-system-x86 nftables iproute2 kmod
+      - name: Verify composed expiry normal reboot fresh sealed boot and poweroff
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+          KC_SYSTEMD_RESTART_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_systemd_restart.py --vm
+
   custody-suspend-vm:
     runs-on: ubuntu-24.04
     timeout-minutes: 7
