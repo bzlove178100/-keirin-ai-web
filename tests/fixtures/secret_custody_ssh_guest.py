@@ -127,8 +127,14 @@ class PeerClients:
 
     def start(self):
         # A one-shot exchange preserves stderr if initial authentication fails.
-        for address in ADDRESSES: self.fresh(address)
+        fresh_seconds, session_seconds, established = [], [], []
         for address in ADDRESSES:
+            started = time.monotonic(); self.fresh(address)
+            fresh_seconds.append(time.monotonic() - started)
+        # Complete each initial handshake before starting the next on this
+        # single-vCPU emulated guest. Both sessions stay open for expiry/S3.
+        for address in ADDRESSES:
+            started = time.monotonic()
             path = ROOT / ('client-' + str(len(self.processes)) + '.log')
             args = client_args(address)
             args[args.index('LogLevel=ERROR')] = 'LogLevel=DEBUG1'
@@ -137,12 +143,14 @@ class PeerClients:
                                            stderr=log, env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
             self.processes.append(process)
             self.logs[process.pid] = path
-        established = [self.exchange(p) for p in self.processes]
+            established.append(self.exchange(process))
+            session_seconds.append(time.monotonic() - started)
         wrong_keys = [self.fresh(a, key='wrong') for a in ADDRESSES]
         wrong_hosts = [self.fresh(a, hosts='wrong_hosts') for a in ADDRESSES]
         if wrong_keys != [True]*2 or wrong_hosts != [True]*2:
             raise RuntimeError('SSH_NEGATIVE_AUTH_CONTROLS_REQUIRED')
-        return dict(established=established, wrong_keys_rejected=wrong_keys, wrong_hosts_rejected=wrong_hosts)
+        return dict(established=established, wrong_keys_rejected=wrong_keys, wrong_hosts_rejected=wrong_hosts,
+                    initial_fresh_seconds=fresh_seconds, session_setup_seconds=session_seconds)
 
     def check(self):
         return dict(established=[self.exchange(p) for p in self.processes],
