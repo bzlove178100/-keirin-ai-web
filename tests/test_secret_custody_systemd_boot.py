@@ -175,6 +175,28 @@ def run_vm():
 
 
 class Tests(unittest.TestCase):
+    def test_ready_marker_is_absent_while_json_is_partial(self):
+        guest = module('bootguest', HERE / 'fixtures/secret_custody_boot_guest.py')
+        original = Path.write_text
+        with tempfile.TemporaryDirectory() as value, patch.object(guest, 'STATE', Path(value)):
+            def partial_write(path, data, *args, **kwargs):
+                original(path, data[:1], *args, **kwargs)
+                self.assertFalse((guest.STATE / 'peer-isolated').exists())
+                return original(path, data, *args, **kwargs)
+            with patch.object(Path, 'write_text', partial_write):
+                guest.write('peer-isolated', {'pid': 123})
+            self.assertEqual(guest.read('peer-isolated'), {'pid': 123})
+            self.assertEqual([p.name for p in guest.STATE.iterdir()], ['peer-isolated'])
+
+    def test_failed_publication_keeps_previous_complete_marker(self):
+        guest = module('bootguest', HERE / 'fixtures/secret_custody_boot_guest.py')
+        with tempfile.TemporaryDirectory() as value, patch.object(guest, 'STATE', Path(value)):
+            guest.write('state', {'version': 1})
+            with patch.object(guest.os, 'replace', side_effect=OSError('synthetic replacement fault')):
+                with self.assertRaises(OSError): guest.write('state', {'version': 2})
+            self.assertEqual(guest.read('state'), {'version': 1})
+            self.assertEqual([p.name for p in guest.STATE.iterdir()], ['state'])
+
     def test_fixed_units_require_success_and_order(self):
         units = u.units()
         self.assertIn('Requires=kc-gate.service\nAfter=kc-gate.service', units['kc-link.service'])

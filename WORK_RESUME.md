@@ -1,5 +1,29 @@
 # Work resume handoff
 
+## Atomic guest readiness publication after main failure — 2026-10-12
+
+PR #235 merged at 1e53a38e0d7354038bceaf52764f08bed9ad306d after
+five PR workflows/32 regression jobs passed, including all four persistence
+cases. Its independent main persistence job 114732244394 failed: positive
+two-boot storage/S3/shutdown passed, but the following guest hit JSONDecodeError
+reading a transient readiness marker before host0 existed. Main qualification
+is incomplete; this supersedes any implication that PR success verified main.
+
+The setup peer published its final path before JSON writing finished, while
+the parent waited only for existence. A controlled empty-write window reproduces
+this exposure in the old writer. This fix writes a sibling then atomically
+replaces the final path; readers cannot see partial JSON. A failed replacement
+retains the previous complete marker. These are transient /run publication
+tests, not durable-disk power-loss claims. Unexpected startup errors now stop
+the persistence supervisor immediately with diagnostics.
+
+Local tests: 40 passed, including two readiness-publication regressions.
+Exact follow-up PR and independent main CI pending; final receipts belong
+in the PR body and private progress record. No timing/acceptance relaxation,
+unchanged rerun or production activation. Source hold and real training zero
+remain. Durable storage fault injection and broader production qualification
+are still pending; Phase 3 incomplete.
+
 ## Guest-owned durable closed configuration — 2026-10-12
 
 PR #234 is merged at ef5d0535f4ee61b4258d94b88f360c8223fa637e.

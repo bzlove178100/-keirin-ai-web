@@ -39,7 +39,15 @@ def boot():
 
 
 def write(name, value):
-    (STATE / name).write_text(json.dumps(value))
+    # Peers wait for path existence, so never expose a partially written JSON
+    # marker. /run is transient: this is atomic publication, not disk durability.
+    data = json.dumps(value)
+    temporary = STATE / (name + '.next')
+    try:
+        temporary.write_text(data)
+        os.replace(temporary, STATE / name)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def read(name):

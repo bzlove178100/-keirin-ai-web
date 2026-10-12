@@ -73,7 +73,7 @@ def record(lines, event, case):
             if row.get('event') != event or row.get('link_up') is not False or row.get('activation_allowed') is not False:
                 raise RuntimeError('MATCHED_CLOSED_DURABLE_RECORD_REQUIRED')
             print(line, flush=True); return row
-        if line.startswith(('SYSTEMD_PERSIST_STAGE_ERROR', 'SYSTEMD_LEASE_FAIL', 'SYSTEMD_RESTART_FAIL')) or 'Kernel panic' in line:
+        if line.startswith(('SYSTEMD_PERSIST_STAGE_ERROR', 'SYSTEMD_BOOT_STAGE_ERROR', 'SYSTEMD_LEASE_FAIL', 'SYSTEMD_RESTART_FAIL')) or 'Kernel panic' in line:
             raise RuntimeError('DURABLE_BOOT_FAILED ' + '\n'.join(diagnostic)[-6000:])
 
 
