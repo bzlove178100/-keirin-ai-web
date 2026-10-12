@@ -31,9 +31,20 @@ static void text(const char *path, char *buf, size_t size) {
 }
 static void guard(void) {
     /* Refuse normal host invocation before any bpf/netlink syscall. */
+#ifdef KC_SYSTEMD_LEASE_PROBE
+    char manager[64], command[2048];
+    text("/proc/1/comm", manager, sizeof(manager));
+    text("/proc/cmdline", command, sizeof(command));
+    if (getuid() != 0 || strcmp(manager, "systemd\n")
+            || !strstr(command, " kc_systemd_probe=1 ")
+            || (!strstr(command, " kc_systemd_lease=awake ") && !strstr(command, " kc_systemd_lease=suspend "))) {
+        fputs("BOOTTIME_GUEST_SYSTEMD_REQUIRED\n", stderr); exit(2);
+    }
+#else
     if (getppid() != 1 || getuid() != 0) {
         fputs("BOOTTIME_GUEST_CHILD_REQUIRED\n", stderr); exit(2);
     }
+#endif
     char buf[2048];
     text("/proc/cmdline", buf, sizeof(buf));
     if (!strstr(buf, " kc_boottime_guard=1 ")) die("BOOTTIME_GUEST_OPT_IN");

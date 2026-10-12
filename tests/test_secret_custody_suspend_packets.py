@@ -64,7 +64,7 @@ def archive(files, systemd=False):
     return gzip.compress(bytes(result), mtime=0)
 
 
-def payload(path, boottime_guard=False, startup=False, authenticated=False):
+def payload(path, boottime_guard=False, startup=False, authenticated=False, systemd=False):
     files = {}
     def add(source, target=None):
         source = Path(source)
@@ -114,6 +114,7 @@ def payload(path, boottime_guard=False, startup=False, authenticated=False):
         print('SSH_PACKAGE_PROVENANCE', json.dumps(receipts), flush=True)
     if boottime_guard:
         subprocess.run(['/usr/bin/gcc', '-static', '-O2', '-Wall', '-Wextra', '-Werror',
+                        *(['-DKC_SYSTEMD_LEASE_PROBE'] if systemd else []),
                         '-o', str(path / 'boot-guard'), str(HERE / 'fixtures/secret_custody_boottime_guard.c')],
                        check=True, timeout=30)
         denied = subprocess.run([str(path / 'boot-guard')], capture_output=True, timeout=5)

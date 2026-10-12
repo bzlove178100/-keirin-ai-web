@@ -27,8 +27,8 @@ vm = p.vm
 u = module('units', HERE.parent / 'review/secret_custody_boot_units.py')
 
 
-def payload(path):
-    files = p.payload(path)
+def payload(path, composed=False):
+    files = p.payload(path, boottime_guard=composed, authenticated=composed, systemd=composed)
     def add(source, target=None):
         source = Path(source)
         files[(target or str(source)).lstrip('/')] = (source.read_bytes(), source.stat().st_mode & 0o777)
@@ -38,6 +38,7 @@ def payload(path):
     if refused.returncode != 2 or refused.stderr != b'VM_GUEST_PID1_REQUIRED\n': raise RuntimeError('HOST_REFUSAL_REQUIRED')
     add(path / 'systemd-init', 'init')
     add(HERE / 'fixtures/secret_custody_boot_guest.py', 'boot_probe.py')
+    if composed: add(HERE / 'fixtures/secret_custody_composed_guest.py', 'composed.py')
     binaries = ['/usr/lib/systemd/systemd', '/usr/lib/systemd/systemd-executor',
                 '/usr/lib/systemd/systemd-shutdown', '/usr/bin/systemctl']
     for binary in binaries: add(binary)
@@ -47,9 +48,10 @@ def payload(path):
         if Path(library).is_file(): add(library)
     files['etc/os-release'] = (b'ID=kc-guest\nPRETTY_NAME="Isolated systemd experiment"\n', 0o644)
     files['etc/machine-id'] = (b'', 0o644)
-    files['etc/passwd'] = (b'root:x:0:0:Synthetic root:/root:/bin/false\n', 0o644)
-    files['etc/group'] = (b'root:x:0:\n', 0o644)
-    for name, content in u.units().items(): files['etc/systemd/system/' + name] = (content.encode(), 0o644)
+    if not composed:
+        files['etc/passwd'] = (b'root:x:0:0:Synthetic root:/root:/bin/false\n', 0o644)
+        files['etc/group'] = (b'root:x:0:\n', 0o644)
+    for name, content in u.units(composed).items(): files['etc/systemd/system/' + name] = (content.encode(), 0o644)
     image = p.archive(files, systemd=True)
     (path / 'initramfs').write_bytes(image)
     print('SYSTEMD_BOOT_PROVENANCE', json.dumps({'initramfs_sha256': hashlib.sha256(image).hexdigest(),
@@ -75,7 +77,7 @@ def record(lines, event, mode):
         except Exception:
             print('SYSTEMD_BOOT_DIAGNOSTIC ' + '\n'.join(diagnostic)[-6000:], flush=True); raise
         diagnostic.append(line[-1000:]); diagnostic = diagnostic[-40:]
-        if line.startswith('VM_FAIL') or 'Kernel panic' in line or 'Freezing execution' in line:
+        if line.startswith(('VM_FAIL', 'SYSTEMD_LEASE_FAIL')) or 'Kernel panic' in line or 'Freezing execution' in line:
             raise RuntimeError('SYSTEMD_BOOT_FATAL ' + '\n'.join(diagnostic)[-6000:])
         if not line.startswith('SYSTEMD_BOOT_RECORD '): continue
         row = json.loads(line[len('SYSTEMD_BOOT_RECORD '):])
