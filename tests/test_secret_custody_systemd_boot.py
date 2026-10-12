@@ -27,10 +27,11 @@ vm = p.vm
 u = module('units', HERE.parent / 'review/secret_custody_boot_units.py')
 
 
-def payload(path, composed=False, restart=False, persistence=False):
+def payload(path, composed=False, restart=False, persistence=False, inbound=False):
+    if inbound and (composed or restart or persistence): raise ValueError("SEPARATE_INBOUND_BOOT_REQUIRED")
     if persistence and not restart: raise ValueError("PERSISTENCE_REQUIRES_RESTART")
     if restart and not composed: raise ValueError("RESTART_REQUIRES_COMPOSITION")
-    files = p.payload(path, boottime_guard=composed, authenticated=composed, systemd=composed, storage=persistence)
+    files = p.payload(path, boottime_guard=composed, authenticated=composed or inbound, systemd=composed or inbound, storage=persistence)
     def add(source, target=None):
         source = Path(source)
         files[(target or str(source)).lstrip('/')] = (source.read_bytes(), source.stat().st_mode & 0o777)
@@ -41,6 +42,11 @@ def payload(path, composed=False, restart=False, persistence=False):
     add(path / 'systemd-init', 'init')
     add(HERE / 'fixtures/secret_custody_boot_guest.py', 'boot_probe.py')
     if composed: add(HERE / 'fixtures/secret_custody_composed_guest.py', 'composed.py')
+    if inbound:
+        add(HERE / 'fixtures/secret_custody_inbound_boot_guest.py', 'inbound_boot.py')
+        for name in ('test_secret_custody_inbound.py', 'test_secret_custody_network_transition.py'):
+            add(HERE / name, 'tests/' + name)
+        add(HERE.parent / 'review/secret_custody_network_rehearsal.py', 'review/secret_custody_network_rehearsal.py')
     shutdown_units = ('reboot.target', 'systemd-reboot.service', 'poweroff.target', 'systemd-poweroff.service',
                       'shutdown.target', 'umount.target', 'final.target') if restart else ()
     for name in shutdown_units: add('/usr/lib/systemd/system/' + name)
@@ -58,10 +64,11 @@ def payload(path, composed=False, restart=False, persistence=False):
         if Path(library).is_file(): add(library)
     files['etc/os-release'] = (b'ID=kc-guest\nPRETTY_NAME="Isolated systemd experiment"\n', 0o644)
     files['etc/machine-id'] = (b'', 0o644)
-    if not composed:
+    if not composed and not inbound:
         files['etc/passwd'] = (b'root:x:0:0:Synthetic root:/root:/bin/false\n', 0o644)
         files['etc/group'] = (b'root:x:0:\n', 0o644)
-    for name, content in u.units(composed, restart, persistence).items(): files['etc/systemd/system/' + name] = (content.encode(), 0o644)
+    selected_units = module('inbound_boot', HERE / 'fixtures/secret_custody_inbound_boot_guest.py').units() if inbound else u.units(composed, restart, persistence)
+    for name, content in selected_units.items(): files['etc/systemd/system/' + name] = (content.encode(), 0o644)
     image = p.archive(files, systemd=True)
     (path / 'initramfs').write_bytes(image)
     print('SYSTEMD_BOOT_PROVENANCE', json.dumps({'initramfs_sha256': hashlib.sha256(image).hexdigest(),

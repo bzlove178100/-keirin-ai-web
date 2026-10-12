@@ -1,5 +1,62 @@
 # Work status
 
+## GitHub publication authorization — 2026-10-13
+
+The user replied “続けて” at 2026-10-13 02:37 JST to the explicit request
+to publish this change, create the PR, inspect CI and merge only after success.
+This authorizes resuming that bounded publication flow. The earlier rejection
+below is historical; actual VM/CI verification remains required.
+
+Local branch `codex/boot-inbound-composition` contains the six-file inbound
+startup/authentication increment below. All 25 targeted tests and diff checks
+passed. The automatic approval reviewer rejected the GitHub push because the
+continuation instruction did not explicitly authorize disclosure of this new
+payload and work-history changes to the destination. No alternate write route
+or push retry was attempted. The GitHub connector subsequently confirmed the
+repository is public, owned by bzlove178100, and has push permission; the new
+remote branch returned 404. No PR, new CI result or main update exists for this
+increment. GitHub publication still needs the user's explicit approval under
+that review decision. After approval, push this existing branch, create its PR,
+inspect all CI results, fix any actual failures, and merge only after success.
+Do not count the five-guest experiment as executed from local unit-test results.
+
+## Sealed inbound startup with authenticated management — 2026-10-13
+
+PR #240 is merged at c2bc2df0f336fb8a70fcef223e39e7fffe0adc8c. Its exact
+PR and independent main passed all five project workflows and 35 regression
+jobs; main Pages also passed. Main regression 38264361449 and inbound job
+114862648919 are final predecessor receipts. This supersedes the candidate
+pending checkpoints below without erasing either earlier fixture failure.
+
+This increment composes the fixed PR #240 maintenance profile with actual
+systemd startup and ephemeral authenticated OpenSSH in diskless QEMU guests.
+Both internal links stay down until the compiled complete policy matches the
+independent peer-namespace reference and its exact identity is sealed. The
+link service checks the same boot, policy and still-down links before first
+activation. Missing, invalid and widened policies must prevent both link and
+check service entry. The original boot/lease/storage jobs remain unchanged.
+
+A separate explicitly unfiltered control boot requires all 28 IPv4/IPv6 TCP
+and UDP paths to reach active wildcard listeners. The closed boot repeats all
+28 fresh paths, including wrong source, destination, interface and source port
+53, with before/after input counters distinguishing drops from lost replies.
+All 16 loopback listener controls must work. The echo listeners are stopped
+before real SSH starts; approved fresh and existing SSH, wrong client key and
+wrong server identity checks run under the unchanged sealed maintenance policy.
+Owned services, SSH children, links, tables and VM images must be cleaned.
+No external NIC, disk, live key or host service/network change is introduced.
+
+Local: 25 tests passed (inbound boot 6, boot 5, inbound 5, lease 5, restart 4),
+and whitespace validation passed. Actual five-guest execution and exact PR/main
+CI are pending. Final PR receipts will supersede this candidate checkpoint.
+This verifies sealed startup plus authentication only if the VM test passes;
+it does not qualify the wider policy with lease/S3/recovery or durable reboot,
+all protocols/fragments, live application binding or production deployment.
+Next: compose the verified wider startup profile with immutable qualification
+expiry and recovery, retaining the existing timing and packet acceptance gates.
+Phase 3 incomplete; KEIRIN.JP hold, real training zero, DB write OFF and live
+activation OFF remain unchanged.
+
 ## PR #240 fresh phase fixtures after blocked TCP reuse — 2026-10-12
 
 Head 7593c7bc288d90a67f1c03a75a7f27ff9ffdec91 / regression 38262328563 /
