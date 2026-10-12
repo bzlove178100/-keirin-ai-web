@@ -227,6 +227,7 @@ def main(action):
     elif action == 'check':
         if case not in ('closed', 'control'): raise RuntimeError('FAILED_GATE_MUST_PREVENT_CHECK')
         result = matrix(b, i, case)
+        emit(b, 'matrix', case, checked=result)
         if case == 'closed':
             ssh = module('ssh', '/ssh_probe.py'); server = ssh.start_server(systemd=True)
             try:

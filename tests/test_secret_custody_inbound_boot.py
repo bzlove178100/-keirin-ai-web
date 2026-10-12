@@ -104,7 +104,13 @@ def case(path, mode, host_boot):
             with vm.connect(path / 'qmp', process) as monitor, vm.connect(path / 'serial', process) as serial:
                 qmp, lines = vm.QMP(monitor), vm.Lines(serial)
                 if qmp.call('query-block') != []: raise RuntimeError('DISKLESS_INBOUND_GUEST_REQUIRED')
+                # Bound startup/matrix and subsequent authentication/reporting
+                # separately; the old single budget hid SSH completion after
+                # the deliberately exhaustive matrix. Every guest service keeps
+                # its 90-second bound and every RPC its 30-second bound.
+                matrix = record(lines, 'matrix', mode) if mode in ('control', 'closed') else None
                 first = record(lines, 'observed', mode); evidence(first)
+                if matrix is not None: matrix_sequence(matrix, first)
                 if first['boot'] == host_boot: raise RuntimeError('DISTINCT_INBOUND_BOOT_REQUIRED')
                 serial.sendall(b'clean\n'); done = record(lines, 'done', mode)
                 if done['boot'] != first['boot'] or done.get('interfaces') != ['lo'] or done.get('activation_allowed') is not False:
@@ -117,6 +123,14 @@ def case(path, mode, host_boot):
             try: process.wait(timeout=5)
             except subprocess.TimeoutExpired: process.kill(); process.wait(timeout=5)
         for name in ('qmp', 'serial'): (path / name).unlink(missing_ok=True)
+
+
+def matrix_sequence(matrix, observed):
+    if (matrix['boot'] != observed['boot'] or matrix['case'] != observed['case']
+            or matrix['monotonic'] > observed['monotonic']
+            or any(matrix.get('checked', {}).get(k) != observed.get('checked', {}).get(k)
+                   for k in ('packets', 'loopback'))):
+        raise RuntimeError('SAME_BOOT_COMPLETED_MATRIX_REQUIRED')
 
 
 def run_vm():
@@ -138,6 +152,13 @@ def run_vm():
 
 
 class Tests(unittest.TestCase):
+    def test_phase_boundary_requires_same_boot_and_full_unchanged_matrix(self):
+        row = dict(boot='same', case='closed', monotonic=1, checked=dict(packets=['synthetic'], loopback=[True]))
+        observed = copy.deepcopy(row); observed['monotonic'] = 2
+        matrix_sequence(row, observed)
+        for change in ({'boot':'other'}, {'case':'control'}, {'monotonic':0}, {'checked':{}}):
+            with self.assertRaisesRegex(RuntimeError, 'MATRIX'): matrix_sequence(row, dict(observed, **change))
+
     def test_bound_ssh_uses_only_approved_source_and_preserves_default(self):
         ssh = b.module('ssh', HERE / 'fixtures/secret_custody_ssh_guest.py')
         for address, source in (('192.0.2.1', '192.0.2.2'), ('2001:db8:1::1', '2001:db8:1::2')):

@@ -1,5 +1,26 @@
 # Work resume handoff
 
+## PR #241 phase observation budget correction — 2026-10-13
+
+Head 5d99b09fb5a82cb86f6e2089fec82f3885b0a41a / regression 38287038436 /
+job 114937778223 passed the full control again. On the closed boot its unbound
+route readback measured IPv4 source 192.0.2.2 and IPv6 source 2001:db8:1::9.
+That establishes the multi-address selection hazard; it does not retroactively
+provide the missing original SSH exception. The source-bound attempt reached
+SSH setup, then the supervisor's single 100-second whole-boot observation
+budget expired without an SSH outcome. Successful authentication is still
+unverified on that head.
+
+The exhaustive matrix now publishes a distinct required same-boot completion
+record before SSH. The supervisor bounds startup/matrix and auth/report as
+separate 100-second phases, instead of incorrectly budgeting both as one.
+This explicitly increases the supervisor's possible total observation window;
+packet timeouts, SSH/RPC limits, 90-second per-service bounds and all preexisting
+lease/S3 timing requirements are unchanged. Final evidence must contain the
+exact same complete matrix, same boot and ordered timestamps, plus real SSH
+results; a phase marker alone cannot pass. Local targeted total: 44 tests pass.
+Corrected complete five-case guest run and exact PR/main CI remain pending.
+
 ## PR #241 SSH control failure and source binding — 2026-10-13
 
 Head 87a4379615692fd9d67708f5a334daa67a6a1669 / regression 38286291962 /
