@@ -646,6 +646,23 @@ jobs:
           KC_PERSISTENCE_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_persistence.py --vm
 
+  custody-persistence-crash:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test crash barriers, exact recovery evidence and host refusal
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_persistence_crash.py
+      - name: Install isolated guest experiment tools
+        run: sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends qemu-system-x86 nftables iproute2 kmod e2fsprogs
+      - name: Kill owned VM between writes and refuse the same disk on fresh boot
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+          KC_PERSISTENCE_CI: '1'
+          KC_PERSISTENCE_CRASH_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_persistence_crash.py --vm
+
   custody-suspend-vm:
     runs-on: ubuntu-24.04
     timeout-minutes: 7

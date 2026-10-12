@@ -79,10 +79,49 @@ def load_state(durable, boot, now):
     return durable.pair(read_bytes('policy.json'), receipt, boot, now)
 
 
+def crash_mode():
+    values = [x for x in Path('/proc/cmdline').read_text().split() if x.startswith('kc_persistence_crash=')]
+    if not values: return None
+    if len(values) != 1 or values[0] not in ('kc_persistence_crash=after-receipt', 'kc_persistence_crash=recover'):
+        raise RuntimeError('FIXED_PERSISTENCE_CRASH_MODE_REQUIRED')
+    return values[0].split('=', 1)[1]
+
+
+def crash_state(durable):
+    policy_bytes, receipt_bytes = read_bytes('policy.json'), read_bytes('receipt.json')
+    config, receipt = durable.decode(policy_bytes), durable.object_bytes(receipt_bytes)
+    if config != durable.policy() or set(receipt) != {'boot', 'deadline_ns'}:
+        raise RuntimeError('SEED_AND_ORPHAN_CRASH_STATE_REQUIRED')
+    return dict(generation=config['generation'], receipt_boot=receipt['boot'],
+                policy_sha256=hashlib.sha256(policy_bytes).hexdigest(),
+                receipt_sha256=hashlib.sha256(receipt_bytes).hexdigest())
+
+
+def await_crash(b, g, durable, receipt_sha):
+    # Only the explicit synthetic guest case pauses. Never resume this write:
+    # the owner must SIGKILL its QEMU process before the bounded timeout.
+    b.guard()
+    if not enabled() or b.composition() != 'awake' or crash_mode() != 'after-receipt' or not mounted():
+        raise RuntimeError('ISOLATED_CRASH_BARRIER_REQUIRED')
+    state = crash_state(durable)
+    blocked = [g.reaches(address, 443) for address in g.PEERS]
+    if (state['receipt_boot'] != b.boot() or state['receipt_sha256'] != receipt_sha
+            or blocked != [False, False] or (b.STATE / 'saved').exists()):
+        raise RuntimeError('CLOSED_UNPUBLISHED_PARTIAL_SAVE_REQUIRED')
+    emit(b, 'crash-ready', crash_state=state, qualification=blocked,
+         saved_marker_present=False, link_up=b.link_up(g))
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline: time.sleep(.1)
+    raise RuntimeError('CRASH_BARRIER_TIMEOUT_NO_SAVE_CONTINUATION')
+
+
 def save():
     b, g, durable = context()
+    crash = crash_mode()
     if not mounted(): raise RuntimeError('MOUNTED_STATE_REQUIRED')
     config = durable.decode(read_bytes('policy.json'))
+    if crash is not None and (crash != 'after-receipt' or config != durable.policy()):
+        raise RuntimeError('FRESH_SEED_CRASH_WRITE_REQUIRED')
     lease = b.read('lease')
     if lease['boot'] != b.boot() or time.clock_gettime_ns(time.CLOCK_BOOTTIME) <= lease['deadline_ns']:
         raise RuntimeError('ONLY_COMPLETED_EXPIRED_RECEIPT_CAN_BE_SAVED')
@@ -90,6 +129,7 @@ def save():
     candidate = durable.policy(generation, b.boot()); durable.decode(json.dumps(candidate).encode())
     receipt = dict(boot=b.boot(), deadline_ns=lease['deadline_ns'])
     receipt_sha = atomic('receipt.json', receipt)
+    if crash == 'after-receipt': await_crash(b, g, durable, receipt_sha)
     policy_sha = atomic('policy.json', candidate)
     b.write('saved', dict(boot=b.boot(), generation=generation, policy_sha256=policy_sha, receipt_sha256=receipt_sha))
     return b.read('saved')
@@ -138,7 +178,8 @@ def main(action):
         try:
             config, receipt, reason = load_state(durable, b.boot(), time.clock_gettime_ns(time.CLOCK_BOOTTIME))
         except (ValueError, OSError, RuntimeError) as exc:
-            emit(b, 'refused', reason=type(exc).__name__, link_up=False)
+            recovery = dict(crash_state=crash_state(durable), recovery_refusal=str(exc)) if crash_mode() == 'recover' else {}
+            emit(b, 'refused', reason=type(exc).__name__, link_up=False, **recovery)
             raise RuntimeError('INVALID_DURABLE_CLOSED_POLICY') from exc
         policy = module('policy', '/startup_policy.py')
         g.run(g.NFT, '-f', '-', input=policy.install().encode())
