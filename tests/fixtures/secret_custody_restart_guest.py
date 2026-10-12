@@ -70,8 +70,9 @@ def main(action):
         link = b.read('shutdown-link')
         if link['boot'] != b.boot() or link['target'] != request['target']: raise RuntimeError('ORDERED_LINK_STOP_REQUIRED')
         states = {n: b.properties(g, 'kc-' + n) for n in ('report', 'lease', 'auth', 'observe', 'link', 'gate', 'setup')}
-        if any(s['ActiveState'] != 'inactive' or s['Result'] != 'success' for s in states.values()):
-            raise RuntimeError('ALL_OWNED_SERVICES_STOPPED_REQUIRED ' + json.dumps(states))
+        failed = {n: {k: s[k] for k in ('ActiveState', 'Result', 'ExecMainStatus')} for n, s in states.items()
+                  if s['ActiveState'] != 'inactive' or s['Result'] != 'success'}
+        if failed: raise RuntimeError('ALL_OWNED_SERVICES_STOPPED_REQUIRED ' + json.dumps(failed))
         if 'host0' in g.interfaces() and b.link_up(g): raise RuntimeError('NO_ACTIVE_LINK_AFTER_STOP_REQUIRED')
         if any(n not in ('lo', 'host0') for n in g.interfaces()): raise RuntimeError('INTERNAL_INTERFACES_ONLY')
         if Path('/proc/' + str(b.read('setup')['peer_pid'])).exists(): raise RuntimeError('PEER_PROCESS_STOPPED_REQUIRED')

@@ -21,6 +21,9 @@ def units(composed=False, restart=False):
             result['kc-' + action + '.service'] = service(action, 'Requires=kc-' + dependency + '.service\nAfter=kc-' + dependency + '.service\n').replace('/boot_probe.py ', '/composed.py ')
         result['kc-report.service'] = service('report', 'Wants=kc-lease.service\nAfter=kc-lease.service\n') + 'StandardInput=tty\n'
     if restart:
+        # The report waits for supervisor commands; it is a running process,
+        # not a finite oneshot. Normal SIGTERM is clean for an exec service.
+        result['kc-report.service'] = result['kc-report.service'].replace('Type=oneshot', 'Type=exec')
         for name in tuple(result):
             if name.startswith('kc-'):
                 result[name] = result[name].replace('[Service]', 'Conflicts=shutdown.target\nBefore=shutdown.target\n[Service]')

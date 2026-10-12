@@ -24,7 +24,7 @@ def record(lines, event, boot, target):
         try: line = lines.line(deadline)
         except Exception:
             print('SYSTEMD_RESTART_DIAGNOSTIC ' + '\n'.join(diagnostic)[-6000:], flush=True); raise
-        diagnostic.append(line[-1500:]); diagnostic = diagnostic[-30:]
+        diagnostic.append(line[:1500] + (' ... ' + line[-1500:] if len(line) > 1500 else '')); diagnostic = diagnostic[-30:]
         if line.startswith(('SYSTEMD_RESTART_FAIL', 'SYSTEMD_BOOT_STAGE_ERROR', 'SYSTEMD_LEASE_FAIL')) or 'Kernel panic' in line:
             raise RuntimeError('NORMAL_SHUTDOWN_FAILED ' + '\n'.join(diagnostic)[-6000:])
         if not line.startswith('SYSTEMD_RESTART_RECORD '): continue
@@ -103,6 +103,7 @@ class Tests(unittest.TestCase):
         with self.assertRaises(ValueError): b.u.units(restart=True)
         self.assertNotIn('shutdown.target', ''.join(b.u.units(composed=True).values()))
         units = b.u.units(composed=True, restart=True)
+        self.assertIn('Type=exec', units['kc-report.service'])
         for name in ('report', 'lease', 'auth', 'observe', 'link', 'gate', 'setup'):
             self.assertIn('Conflicts=shutdown.target\nBefore=shutdown.target', units['kc-' + name + '.service'])
         self.assertIn('ExecStop=', units['kc-link.service'])
