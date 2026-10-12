@@ -96,6 +96,7 @@ def client_args(address, key='client', hosts='known_hosts'):
 class PeerClients:
     def __init__(self):
         self.processes = []
+        self.logs = {}
         self.sequence = 0
 
     def token(self):
@@ -106,7 +107,9 @@ class PeerClients:
         token = self.token()
         if process.poll() is not None: raise RuntimeError('SSH_SESSION_EXITED')
         process.stdin.write(token); process.stdin.flush()
-        if not select.select([process.stdout], [], [], 5)[0]: raise RuntimeError('SSH_RESPONSE_TIMEOUT')
+        if not select.select([process.stdout], [], [], 5)[0]:
+            diagnostic = self.logs[process.pid].read_text(errors='replace')[-3500:]
+            raise RuntimeError('SSH_RESPONSE_TIMEOUT pid=' + str(process.pid) + ' status=' + str(process.poll()) + ' ' + json.dumps(diagnostic))
         if process.stdout.readline() != token: raise RuntimeError('SSH_RESPONSE_MISMATCH')
         return True
 
@@ -126,8 +129,14 @@ class PeerClients:
         # A one-shot exchange preserves stderr if initial authentication fails.
         for address in ADDRESSES: self.fresh(address)
         for address in ADDRESSES:
-            self.processes.append(subprocess.Popen(client_args(address), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                  stderr=subprocess.DEVNULL, env={'PATH': '/usr/bin:/bin', 'LANG': 'C'}))
+            path = ROOT / ('client-' + str(len(self.processes)) + '.log')
+            args = client_args(address)
+            args[args.index('LogLevel=ERROR')] = 'LogLevel=DEBUG1'
+            with path.open('wb') as log:
+                process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                           stderr=log, env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
+            self.processes.append(process)
+            self.logs[process.pid] = path
         established = [self.exchange(p) for p in self.processes]
         wrong_keys = [self.fresh(a, key='wrong') for a in ADDRESSES]
         wrong_hosts = [self.fresh(a, hosts='wrong_hosts') for a in ADDRESSES]

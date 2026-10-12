@@ -555,6 +555,11 @@ jobs:
         run: /usr/bin/python3 -I -B tests/test_secret_custody_closed_startup.py
       - name: Install disposable guest experiment tools
         run: sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends qemu-system-x86 nftables iproute2 kmod
+      - name: Authenticate management SSH before and after guest expiry and S3
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_suspend_packets.py --ssh-vm
       - name: Measure original kernel guard with real packets across guest S3
         env:
           KC_SUSPEND_VM_CI: '1'
@@ -576,11 +581,6 @@ jobs:
           KC_SUSPEND_VM_CI: '1'
           KC_SUSPEND_PACKET_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_suspend_packets.py --integrated-vm
-      - name: Authenticate management SSH before and after guest expiry and S3
-        env:
-          KC_SUSPEND_VM_CI: '1'
-          KC_SUSPEND_PACKET_CI: '1'
-        run: /usr/bin/python3 -I -B tests/test_secret_custody_suspend_packets.py --ssh-vm
 
   custody-suspend-vm:
     runs-on: ubuntu-24.04
