@@ -1,5 +1,30 @@
 # Work status
 
+## systemd startup composed with authenticated immutable lease — 2026-10-12
+
+PR #232 is merged at cd8429d5b4f29a0536aa2f0c29f69f7952420224.
+Its PR and independent main CI passed five workflows/29 regression jobs.
+Actual systemd boot/reboot, missing/invalid policy and cleanup yielded eight
+boot records per run. The previous pending checkpoint is historical; PR #232
+contains the final receipts.
+
+This candidate joins real systemd setup -> closed policy -> link -> observed
+closed startup -> SSH authentication -> immutable lease in each isolated guest.
+Initial SSH includes pinned host keys and wrong-client/wrong-host-key refusal.
+The original eight-second absolute boottime deadline, three-second live window
+and seven-second first-resume window remain unchanged. Awake expiry and actual
+S3 must deny old/new IPv4/IPv6 TCP/443 while established/fresh SSH succeeds.
+Missing/invalid startup policy must prevent observe/auth/lease units executing.
+All owned guest services, SSH processes, rules, interfaces and VM files must
+clean up. No real host, external NIC, credential or application activation.
+
+Local tests: 29 passed; both original/systemd boottime loader variants compiled
+and refused ordinary-host execution. Actual composed guest/CI results pending;
+final receipts belong in the PR body. This composition does not yet establish
+combined reboot/shutdown recovery or writable production configuration
+persistence. Broader protocol/inbound coverage and production binding remain.
+Phase 3 incomplete; KEIRIN.JP acquisition hold and real training zero unchanged.
+
 ## Actual systemd closed boot and guest reboot — 2026-10-12
 
 PR #231 is merged at d90198582f3e167c4b1e332436ac9f6dbd4a62f2.

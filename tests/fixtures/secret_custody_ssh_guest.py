@@ -11,8 +11,10 @@ ADDRESSES = ('192.0.2.1', '2001:db8:1::1')
 ROOT = Path('/run/ssh-probe')
 
 
-def guest_guard():
-    if (os.getpid() != 1 or os.geteuid() != 0
+def guest_guard(systemd=False):
+    identity = (os.getpid() != 1 and Path('/proc/1/comm').read_text().strip() == 'systemd'
+                and ' kc_systemd_probe=1 ' in Path('/proc/cmdline').read_text()) if systemd else os.getpid() == 1
+    if (not identity or os.geteuid() != 0
             or ' kc_ssh_probe=1 ' not in Path('/proc/cmdline').read_text()
             or Path('/sys/class/dmi/id/sys_vendor').read_text().strip() != 'QEMU'):
         raise RuntimeError('FIXED_SSH_GUEST_REQUIRED')
@@ -44,8 +46,8 @@ LogLevel ERROR
 '''
 
 
-def prepare():
-    guest_guard()
+def prepare(systemd=False):
+    guest_guard(systemd)
     ROOT.mkdir(mode=0o700)
     Path('/run/sshd').mkdir(mode=0o755)
     # All material is generated afresh inside this VM, never on CI's host.
@@ -61,8 +63,8 @@ def prepare():
     (ROOT / 'config').write_text(configuration())
 
 
-def start_server():
-    guest_guard()
+def start_server(systemd=False):
+    guest_guard(systemd)
     args = ['/usr/sbin/sshd', '-f', str(ROOT / 'config')]
     subprocess.run(args + ['-t'], check=True, capture_output=True, timeout=5)
     log = (ROOT / 'server.log').open('wb')

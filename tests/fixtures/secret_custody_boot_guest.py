@@ -46,6 +46,13 @@ def read(name):
     return json.loads((STATE / name).read_text())
 
 
+def composition():
+    values = [p.split('=', 1)[1] for p in Path('/proc/cmdline').read_text().split() if p.startswith('kc_systemd_lease=')]
+    if not values: return None
+    if len(values) != 1 or values[0] not in ('awake', 'suspend'): raise RuntimeError('FIXED_COMPOSED_MODE_REQUIRED')
+    return values[0]
+
+
 def link_up(g):
     rows = json.loads(g.run(g.IP, '-j', 'link', 'show', 'dev', 'host0'))
     if len(rows) != 1: raise RuntimeError('SINGLE_INTERNAL_LINK_REQUIRED')
@@ -63,10 +70,26 @@ def peer(g):
         for port in (22, 443):
             s = socket.socket(socket.AF_INET6 if ':' in address else socket.AF_INET, socket.SOCK_STREAM)
             s.bind((address, port)); s.listen(8); servers.append(s)
+    control, ssh_clients = None, None
+    if composition():
+        ssh_clients = module('ssh', '/ssh_probe.py').PeerClients()
+        control = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        control.bind(str(STATE / 'control')); control.listen(4)
+        servers.append(control)
     write('peer-ready', True)
     while True:
         ready, _, _ = select.select(servers + clients, [], [], 1)
         for s in ready:
+            if s is control:
+                with control.accept()[0] as request:
+                    command = request.recv(32)
+                    if command == b'ssh-start': response = ssh_clients.start()
+                    elif command == b'ssh-check': response = ssh_clients.check()
+                    elif command == b'ssh-stop':
+                        ssh_clients.stop(); response = {'stopped': True}
+                    else: raise RuntimeError('FIXED_PEER_CONTROL_REQUIRED')
+                    request.sendall(json.dumps(response).encode())
+                continue
             if s in servers:
                 child, _ = s.accept(); child.settimeout(.25); clients.append(child)
             else:
@@ -88,6 +111,19 @@ def emit(event, mode, **values):
           pid1=Path('/proc/1/comm').read_text().strip(), monotonic=time.monotonic(), **values)), flush=True)
 
 
+def observe(g, policy, mode):
+    states = {n: properties(g, 'kc-' + n) for n in ('setup', 'gate', 'link')}
+    qualification = [g.reaches(a, 443) for a in g.PEERS]
+    management = [g.reaches(a, 22) for a in g.PEERS]
+    sealed = read('gate') if (STATE / 'gate').exists() else None
+    rules = [r for r in json.loads(g.run(g.NFT, '-j', 'list', 'ruleset'))['nftables'] if 'metainfo' not in r]
+    emit('observed', mode, states=states, link_up=link_up(g), link_entered=(STATE / 'link-entered').exists(),
+         qualification=qualification, management=management, fresh=read('setup')['fresh'],
+         sealed=sealed, linked=read('link') if (STATE / 'link').exists() else None,
+         policy_unchanged=policy.seal({'nftables': rules}) == sealed['seal'] if sealed else None,
+         ruleset_empty=not rules)
+
+
 def main(action):
     guard()
     g = module('packets', '/probe.py')
@@ -95,11 +131,16 @@ def main(action):
     modes = [part.split('=', 1)[1] for part in Path('/proc/cmdline').read_text().split() if part.startswith('kc_boot_case=')]
     if len(modes) != 1 or modes[0] not in ('closed', 'missing', 'invalid'): raise RuntimeError('FIXED_BOOT_CASE_REQUIRED')
     mode = modes[0]
+    composed = composition()
     if action == 'peer': peer(g); return
     if action == 'setup':
         if g.interfaces() != ['lo'] or STATE.exists(): raise RuntimeError('FRESH_BOOT_REQUIRED')
         STATE.mkdir(mode=0o700)
         g.run('/sbin/modprobe', '-C', '/module-config', '-a', 'ipv6', 'veth', 'nf_tables')
+        if composed:
+            with (STATE / 'suspend-marker').open('x') as marker: marker.write(boot())
+            g.run('/sbin/modprobe', '-C', '/module-config', '-a', 'sch_ingress', 'cls_bpf')
+            module('ssh', '/ssh_probe.py').prepare(systemd=True)
         if [r for r in json.loads(g.run(g.NFT, '-j', 'list', 'ruleset'))['nftables'] if 'metainfo' not in r]:
             raise RuntimeError('EMPTY_BOOT_RULESET_REQUIRED')
         subprocess.Popen(['/usr/bin/python3', '-I', '-B', '/boot_probe.py', 'peer'],
@@ -127,17 +168,11 @@ def main(action):
             raise RuntimeError('SEALED_POLICY_BEFORE_LINK_REQUIRED')
         g.run(g.IP, 'link', 'set', 'host0', 'up')
         write('link', {'boot': boot(), 'up_ns': time.monotonic_ns()})
-    elif action == 'report':
-        states = {n: properties(g, 'kc-' + n) for n in ('setup', 'gate', 'link')}
-        qualification = [g.reaches(a, 443) for a in g.PEERS]
-        management = [g.reaches(a, 22) for a in g.PEERS]
-        sealed = read('gate') if (STATE / 'gate').exists() else None
-        rules = [r for r in json.loads(g.run(g.NFT, '-j', 'list', 'ruleset'))['nftables'] if 'metainfo' not in r]
-        emit('observed', mode, states=states, link_up=link_up(g), link_entered=(STATE / 'link-entered').exists(),
-             qualification=qualification, management=management, fresh=read('setup')['fresh'],
-             sealed=sealed, linked=read('link') if (STATE / 'link').exists() else None,
-             policy_unchanged=policy.seal({'nftables': rules}) == sealed['seal'] if sealed else None,
-             ruleset_empty=not rules)
+    elif action in ('observe', 'report'):
+        if action == 'observe' or not composed or mode != 'closed': observe(g, policy, mode)
+        if action == 'observe': return
+        c = module('composed', '/composed.py') if composed else None
+        if c: c.completion(g, mode)
         command = sys.stdin.readline(8).strip()
         if command == 'reboot' and mode == 'closed':
             emit('reboot_requested', mode)
@@ -145,11 +180,13 @@ def main(action):
             g.run('/usr/bin/systemctl', 'reboot', '--force')
         elif command == 'clean':
             pid = read('setup')['peer_pid']
+            if c: c.before_clean(g, mode)
             g.run('/usr/bin/systemctl', 'stop', 'kc-link.service', 'kc-gate.service', 'kc-setup.service')
             subprocess.run([g.NFT, 'delete', 'table', 'inet', policy.TABLE], capture_output=True, timeout=5)
             if 'host0' in g.interfaces(): g.run(g.IP, 'link', 'del', 'host0')
             remaining = [r for r in json.loads(g.run(g.NFT, '-j', 'list', 'ruleset'))['nftables'] if 'metainfo' not in r]
             if remaining or g.interfaces() != ['lo'] or Path(f'/proc/{pid}').exists(): raise RuntimeError('BOOT_CLEANUP_REQUIRED')
+            if c: c.after_clean()
             emit('done', mode, interfaces=g.interfaces(), activation_allowed=False)
         else: raise RuntimeError('FIXED_GUEST_COMMAND_REQUIRED')
         while True: time.sleep(1)

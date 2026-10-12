@@ -598,6 +598,22 @@ jobs:
           KC_SYSTEMD_BOOT_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_systemd_boot.py --vm
 
+  custody-systemd-lease:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test composition ordering and host refusal
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_systemd_lease.py
+      - name: Install isolated guest experiment tools
+        run: sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends qemu-system-x86 nftables iproute2 kmod
+      - name: Verify systemd startup SSH and immutable expiry across real S3
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+          KC_SYSTEMD_LEASE_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_systemd_lease.py --vm
+
   custody-suspend-vm:
     runs-on: ubuntu-24.04
     timeout-minutes: 7
