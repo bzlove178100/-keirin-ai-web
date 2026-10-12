@@ -49,7 +49,8 @@ def main(action):
         state, blocked = intact(b, g, lease)
         target = {'restart': 'reboot.target', 'halt': 'poweroff.target'}[action]
         b.write('shutdown-request', dict(boot=b.boot(), target=target, deadline_ns=state['deadline_ns']))
-        emit(b, 'requested', target=target, qualification=blocked, guards_unchanged=True)
+        saved = module('persist', '/persist_probe.py').save() if Path('/persist_probe.py').exists() else None
+        emit(b, 'requested', target=target, qualification=blocked, guards_unchanged=True, persistence=saved)
         # Starting the installed target asks PID1 for its normal dependency/stop
         # transaction. No force option, host command or QMP reset is used.
         g.run('/usr/bin/systemctl', '--no-block', 'start', target)
@@ -82,7 +83,8 @@ def main(action):
         # and after link-down while the interface still existed.
         retained = g.identity([json.loads(g.run(g.NFT, '-j', 'list', 'table', *lease.TABLES[0]))])[0]
         if retained != b.read('lease')['rule_identity'][0]: raise RuntimeError('INET_GUARD_RETAINED_REQUIRED')
-        emit(b, 'stopped', target=request['target'], states=states, interfaces=g.interfaces(),
+        persisted = module('persist', '/persist_probe.py').shutdown_check() if Path('/persist_probe.py').exists() else None
+        emit(b, 'stopped', target=request['target'], states=states, interfaces=g.interfaces(), persistence=persisted,
              inet_guard_unchanged=True, peer_stopped=True, ssh_stopped=True, link_stopped_at=link['monotonic'])
     else: raise RuntimeError('FIXED_RESTART_ACTION_REQUIRED')
 

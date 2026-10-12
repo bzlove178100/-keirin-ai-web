@@ -27,9 +27,10 @@ vm = p.vm
 u = module('units', HERE.parent / 'review/secret_custody_boot_units.py')
 
 
-def payload(path, composed=False, restart=False):
+def payload(path, composed=False, restart=False, persistence=False):
+    if persistence and not restart: raise ValueError("PERSISTENCE_REQUIRES_RESTART")
     if restart and not composed: raise ValueError("RESTART_REQUIRES_COMPOSITION")
-    files = p.payload(path, boottime_guard=composed, authenticated=composed, systemd=composed)
+    files = p.payload(path, boottime_guard=composed, authenticated=composed, systemd=composed, storage=persistence)
     def add(source, target=None):
         source = Path(source)
         files[(target or str(source)).lstrip('/')] = (source.read_bytes(), source.stat().st_mode & 0o777)
@@ -44,6 +45,9 @@ def payload(path, composed=False, restart=False):
                       'shutdown.target', 'umount.target', 'final.target') if restart else ()
     for name in shutdown_units: add('/usr/lib/systemd/system/' + name)
     if restart: add(HERE / 'fixtures/secret_custody_restart_guest.py', 'restart_probe.py')
+    if persistence:
+        add(HERE / 'fixtures/secret_custody_persistence_guest.py', 'persist_probe.py')
+        add(HERE.parent / 'review/secret_custody_durable_policy.py', 'durable_policy.py')
     binaries = ['/usr/lib/systemd/systemd', '/usr/lib/systemd/systemd-executor',
                 '/usr/lib/systemd/systemd-shutdown', '/usr/bin/systemctl']
     for binary in binaries: add(binary)
@@ -56,7 +60,7 @@ def payload(path, composed=False, restart=False):
     if not composed:
         files['etc/passwd'] = (b'root:x:0:0:Synthetic root:/root:/bin/false\n', 0o644)
         files['etc/group'] = (b'root:x:0:\n', 0o644)
-    for name, content in u.units(composed, restart).items(): files['etc/systemd/system/' + name] = (content.encode(), 0o644)
+    for name, content in u.units(composed, restart, persistence).items(): files['etc/systemd/system/' + name] = (content.encode(), 0o644)
     image = p.archive(files, systemd=True)
     (path / 'initramfs').write_bytes(image)
     print('SYSTEMD_BOOT_PROVENANCE', json.dumps({'initramfs_sha256': hashlib.sha256(image).hexdigest(),
