@@ -241,6 +241,18 @@ jobs:
         # Tests refuse PID 1's network namespace, non-CI and nonempty fixtures.
         run: sudo -n env GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_network_transition.py --kernel
 
+  custody-inbound-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test inbound isolation guards and counter evidence rejection
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_inbound.py
+      - name: Reproduce legacy gaps then verify exact inbound flow boundaries
+        # Two private namespaces, two veth paths, fixed synthetic addresses only.
+        # Active wildcard listeners and pre-policy connections are positive controls.
+        run: sudo -n env KC_INBOUND_CI=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" unshare --net /usr/bin/python3 -I -B tests/test_secret_custody_inbound.py --kernel
+
   custody-network-recovery:
     runs-on: ubuntu-24.04
     timeout-minutes: 3

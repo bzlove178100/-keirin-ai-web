@@ -16,18 +16,21 @@ def profile(mode):
     for family, prefix in FAMILIES:
         # Two synthetic administration sources: phone-like and recovery-like.
         # Real Lightsail browser source ranges are still unknown.
+        # Bind both endpoints and the exact path. Conntrack state alone cannot
+        # distinguish a dependency reply from a preexisting inbound connection
+        # whose initiator chose the same source port as that dependency.
         for suffix in ("2", "3"):
             source = prefix + suffix
-            inbound.append(f'{family} saddr {source} tcp dport 22 ct state {{ new, established }} accept')
-            outbound.append(f'{family} daddr {source} tcp sport 22 ct state established accept')
+            inbound.append(f'iifname "host0" {family} saddr {source} {family} daddr {prefix}1 tcp dport 22 ct direction original ct state {{ new, established }} accept')
+            outbound.append(f'oifname "host0" {family} saddr {prefix}1 {family} daddr {source} tcp sport 22 ct direction reply ct state established accept')
         # Synthetic DNS and time-sync transport, not live service discovery.
         destinations = [("tcp", 53), ("udp", 53), ("udp", 123)]
         if mode == "qualification":
             destinations.append(("tcp", 443))
         for protocol, port in destinations:
             address = prefix + "2"
-            outbound.append(f'{family} daddr {address} {protocol} dport {port} ct state {{ new, established }} accept')
-            inbound.append(f'{family} saddr {address} {protocol} sport {port} ct state established accept')
+            outbound.append(f'oifname "host0" {family} saddr {prefix}1 {family} daddr {address} {protocol} dport {port} ct direction original ct state {{ new, established }} accept')
+            inbound.append(f'iifname "host0" {family} saddr {address} {family} daddr {prefix}1 {protocol} sport {port} ct direction reply ct state established accept')
     # No blanket established/related exemption: removing a qualification
     # destination must also block an already-established flow to that destination.
     chunks = [f'table inet {TABLE} {{']
