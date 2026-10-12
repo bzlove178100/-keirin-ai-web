@@ -47,6 +47,7 @@ def payload(path, composed=False, restart=False, persistence=False):
     if restart: add(HERE / 'fixtures/secret_custody_restart_guest.py', 'restart_probe.py')
     if persistence:
         add(HERE / 'fixtures/secret_custody_persistence_guest.py', 'persist_probe.py')
+        add(HERE / 'fixtures/secret_custody_persistence_fault_guest.py', 'persist_fault.py')
         add(HERE.parent / 'review/secret_custody_durable_policy.py', 'durable_policy.py')
     binaries = ['/usr/lib/systemd/systemd', '/usr/lib/systemd/systemd-executor',
                 '/usr/lib/systemd/systemd-shutdown', '/usr/bin/systemctl']

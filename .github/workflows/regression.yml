@@ -663,6 +663,24 @@ jobs:
           KC_PERSISTENCE_CRASH_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_persistence_crash.py --vm
 
+  custody-persistence-io:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test bounded filesystem fault guards and error propagation
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_persistence_io.py
+      - name: Install isolated guest experiment tools
+        run: sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends qemu-system-x86 nftables iproute2 kmod e2fsprogs
+      - name: Observe actual ENOSPC and EROFS then refuse partial saves on fresh boot
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+          KC_PERSISTENCE_CI: '1'
+          KC_PERSISTENCE_CRASH_CI: '1'
+          KC_PERSISTENCE_IO_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_persistence_crash.py --io-vm
+
   custody-suspend-vm:
     runs-on: ubuntu-24.04
     timeout-minutes: 7

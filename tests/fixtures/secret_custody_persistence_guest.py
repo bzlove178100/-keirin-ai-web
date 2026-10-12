@@ -30,12 +30,15 @@ def context():
     return b, module('packets', '/probe.py'), module('durable', '/durable_policy.py')
 
 
-def mounted():
+def mounted(mode='rw'):
+    if mode not in ('rw', 'ro'): raise ValueError('FIXED_STATE_MOUNT_MODE_REQUIRED')
     rows = [line.split() for line in Path('/proc/self/mountinfo').read_text().splitlines() if line.split()[4] == str(ROOT)]
     if not rows: return False
     if len(rows) != 1: raise RuntimeError('SINGLE_STATE_MOUNT_REQUIRED')
     row = rows[0]; split = row.index('-')
-    if row[split+1:split+3] != ['ext4', '/dev/vda'] or not {'rw', 'nodev', 'nosuid', 'noexec'} <= set(row[5].split(',')):
+    options = set(row[5].split(','))
+    if (row[split+1:split+3] != ['ext4', '/dev/vda'] or not {mode, 'nodev', 'nosuid', 'noexec'} <= options
+            or ({'rw', 'ro'} - {mode}) & options):
         raise RuntimeError('PRIVATE_EXT4_MOUNT_REQUIRED')
     return True
 
@@ -87,6 +90,14 @@ def crash_mode():
     return values[0].split('=', 1)[1]
 
 
+def fault_mode():
+    values = [x for x in Path('/proc/cmdline').read_text().split() if x.startswith('kc_persistence_fault=')]
+    if not values: return None
+    if len(values) != 1 or values[0] not in ('kc_persistence_fault=enospc', 'kc_persistence_fault=erofs'):
+        raise RuntimeError('FIXED_PERSISTENCE_FAULT_MODE_REQUIRED')
+    return values[0].split('=', 1)[1]
+
+
 def crash_state(durable):
     policy_bytes, receipt_bytes = read_bytes('policy.json'), read_bytes('receipt.json')
     config, receipt = durable.decode(policy_bytes), durable.object_bytes(receipt_bytes)
@@ -117,11 +128,13 @@ def await_crash(b, g, durable, receipt_sha):
 
 def save():
     b, g, durable = context()
-    crash = crash_mode()
+    crash, fault = crash_mode(), fault_mode()
+    if fault is not None and crash is not None: raise RuntimeError('ONE_STORAGE_FAULT_MODE_REQUIRED')
     if not mounted(): raise RuntimeError('MOUNTED_STATE_REQUIRED')
     config = durable.decode(read_bytes('policy.json'))
     if crash is not None and (crash != 'after-receipt' or config != durable.policy()):
         raise RuntimeError('FRESH_SEED_CRASH_WRITE_REQUIRED')
+    if fault is not None and config != durable.policy(): raise RuntimeError('FRESH_SEED_FAULT_WRITE_REQUIRED')
     lease = b.read('lease')
     if lease['boot'] != b.boot() or time.clock_gettime_ns(time.CLOCK_BOOTTIME) <= lease['deadline_ns']:
         raise RuntimeError('ONLY_COMPLETED_EXPIRED_RECEIPT_CAN_BE_SAVED')
@@ -130,7 +143,14 @@ def save():
     receipt = dict(boot=b.boot(), deadline_ns=lease['deadline_ns'])
     receipt_sha = atomic('receipt.json', receipt)
     if crash == 'after-receipt': await_crash(b, g, durable, receipt_sha)
-    policy_sha = atomic('policy.json', candidate)
+    helper = module('io_fault', '/persist_fault.py') if fault is not None else None
+    if helper: helper.prepare(fault)
+    try:
+        policy_sha = atomic('policy.json', candidate)
+    except OSError as exc:
+        if helper: helper.observe(fault, exc)
+        raise
+    if helper: raise RuntimeError('EXPECTED_REAL_FILESYSTEM_ERROR_NOT_OBSERVED')
     b.write('saved', dict(boot=b.boot(), generation=generation, policy_sha256=policy_sha, receipt_sha256=receipt_sha))
     return b.read('saved')
 

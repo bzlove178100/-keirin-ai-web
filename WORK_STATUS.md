@@ -1,5 +1,35 @@
 # Work status
 
+## Actual bounded filesystem write failures — 2026-10-12
+
+PR #238 is merged at 13b14c70c040fe106d9d4fc02e0b5e1439782782.
+Its exact PR and independent main passed five workflows and 33 regression
+jobs. Main regression 38249212919, crash job 114810836644 and normal storage
+job 114810836520 verify SIGKILL/same-disk refusal and all eight existing cases.
+These final receipts supersede the historical pending checkpoint below.
+
+This increment adds real filesystem faults only inside the fixed 64 MiB
+synthetic guest volume. After a durable receipt, an explicit mode either
+allocates bounded blocks until ENOSPC or remounts that guest filesystem ro.
+The ordinary second atomic policy write must raise actual ENOSPC/EROFS.
+The original OSError is re-raised; no saved marker or normal shutdown can be
+published. Evidence requires exact unchanged policy/receipt bytes, blocked
+IPv4/IPv6 TCP443, observed mount mode, bounded capacity and no leftover temp.
+A supervisor kills only its owned QEMU and reopens the same disk in a fresh
+guest: orphan refusal, no link/auth/lease execution and cleanup are required.
+No host disk mount, live credentials, source capture or production activation.
+The existing default writable mount check remains strict; readonly acceptance
+is explicit only for the fault observer. All previous storage jobs remain.
+
+Local validation: 36 tests pass (I/O 6, crash 5, persistence 11, restart 4,
+boot 5, lease 5). Real VM ENOSPC/EROFS and exact PR/main CI are pending.
+Final receipts in this increment's PR supersede this candidate checkpoint.
+This is not physical media EIO, sudden host power loss, arbitrary torn-write
+coverage or automatic repair. Phase 3 remains incomplete. Next work after
+qualification is the remaining broader protocol/inbound and production-binding
+scope; physical-device failures and repair remain separate unqualified areas.
+KEIRIN.JP hold, real training zero and live activation OFF remain unchanged.
+
 ## Actual VM interruption between durable writes — 2026-10-12
 
 PR #237 is merged at c77bea236b89439484eeef710ec2f25703fc1f78.

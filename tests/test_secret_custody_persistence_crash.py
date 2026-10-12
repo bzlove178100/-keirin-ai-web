@@ -4,6 +4,7 @@ This is a process-crash experiment after an acknowledged fsync, not host power
 loss, storage-controller failure, arbitrary torn-write or production validation.
 """
 import hashlib
+import errno
 import importlib.util
 import json
 import os
@@ -24,9 +25,10 @@ b, c, p, vm = s.b, s.c, s.p, s.vm
 
 
 def command(path, phase):
-    if phase not in ('after-receipt', 'recover'): raise ValueError('FIXED_CRASH_PHASE_REQUIRED')
-    args = s.command(path, 'closed' if phase == 'after-receipt' else 'invalid', 'awake')
-    args[args.index('-append') + 1] += ' kc_persistence_crash=' + phase + ' end=11'
+    if phase not in ('after-receipt', 'recover', 'enospc', 'erofs'): raise ValueError('FIXED_CRASH_PHASE_REQUIRED')
+    args = s.command(path, 'invalid' if phase == 'recover' else 'closed', 'awake')
+    flag = 'kc_persistence_fault=' if phase in ('enospc', 'erofs') else 'kc_persistence_crash='
+    args[args.index('-append') + 1] += ' ' + flag + phase + ' end=11'
     return args
 
 
@@ -55,9 +57,22 @@ def recovery_evidence(row, ready, host_boot):
         raise RuntimeError('EXACT_CRASH_STATE_REFUSED_ON_FRESH_BOOT_REQUIRED')
 
 
-def case(path, host_boot):
+def fault_evidence(row, mode):
+    info = row.get('filesystem_fault', {})
+    expected = {'enospc': errno.ENOSPC, 'erofs': errno.EROFS}
+    if mode not in expected or info.get('mode') != mode or info.get('errno') != expected[mode]:
+        raise RuntimeError('EXACT_REAL_FILESYSTEM_ERROR_REQUIRED')
+    required_mount = 'ro' if mode == 'erofs' else 'rw'
+    if any(info.get(key, {}).get('mount_mode') != required_mount for key in ('prepared', 'after')):
+        raise RuntimeError('ACTUAL_FAULT_MOUNT_MODE_REQUIRED')
+    if mode == 'enospc' and (info['prepared'].get('free_blocks') != 0 or not 0 < info.get('allocated_bytes', 0) <= s.SIZE):
+        raise RuntimeError('BOUNDED_GUEST_EXHAUSTION_REQUIRED')
+
+
+def case(path, host_boot, fault=None):
+    if fault not in (None, 'enospc', 'erofs'): raise ValueError('FIXED_FILESYSTEM_FAULT_REQUIRED')
     ready = None
-    for phase in ('after-receipt', 'recover'):
+    for phase in (fault or 'after-receipt', 'recover'):
         process = None
         try:
             with (path / ('stderr-' + phase)).open('wb') as err:
@@ -66,12 +81,13 @@ def case(path, host_boot):
                 with vm.connect(path / 'qmp', process) as monitor, vm.connect(path / 'serial', process) as serial:
                     qmp, lines = vm.QMP(monitor), vm.Lines(serial)
                     s.block_evidence(qmp.call('query-block'), path)
-                    if phase == 'after-receipt':
+                    if phase != 'recover':
                         loaded = s.record(lines, 'loaded', 'valid')
                         first = c.cycle(lines, qmp, 'closed', 'awake', host_boot)
                         s.loaded_evidence(loaded, first, None)
                         serial.sendall(b'restart\n')
                         ready = barrier(lines, first['boot'])
+                        if fault is not None: fault_evidence(ready, fault)
                         process.kill()
                         if process.wait(timeout=10) != -signal.SIGKILL:
                             raise RuntimeError('OWNED_QEMU_SIGKILL_REQUIRED')
@@ -89,6 +105,7 @@ def case(path, host_boot):
                         if done['boot'] != first['boot'] or done.get('interfaces') != ['lo'] or done.get('activation_allowed') is not False:
                             raise RuntimeError('CRASH_RECOVERY_CLEANUP_REQUIRED')
                         print('PASS ACTUAL_QEMU_SIGKILL_SAME_DISK_ORPHAN_REFUSED NO_LIVE_APPLY', flush=True)
+                        if fault is not None: print('PASS REAL_FILESYSTEM_FAULT_RECOVERY ' + fault, flush=True)
         finally:
             if process is not None and process.poll() is None:
                 process.terminate()
@@ -97,10 +114,11 @@ def case(path, host_boot):
             for name in ('qmp', 'serial'): (path / name).unlink(missing_ok=True)
 
 
-def run_vm():
+def run_vm(io_faults=False):
     p.guard()
     if os.environ.get('KC_PERSISTENCE_CRASH_CI') != '1' or os.environ.get('KC_PERSISTENCE_CI') != '1':
         raise RuntimeError('PERSISTENCE_CRASH_OPT_IN_REQUIRED')
+    if io_faults and os.environ.get('KC_PERSISTENCE_IO_CI') != '1': raise RuntimeError('PERSISTENCE_IO_OPT_IN_REQUIRED')
     host_boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
     netns = os.readlink('/proc/self/ns/net')
     with tempfile.TemporaryDirectory(prefix='kc-persist-crash-') as name:
@@ -110,8 +128,14 @@ def run_vm():
         if not 1024*1024 <= len(kernel) <= 64*1024*1024: raise RuntimeError('KERNEL_SIZE_BOUND')
         (path / 'vmlinuz').write_bytes(kernel)
         b.payload(path, composed=True, restart=True, persistence=True)
-        s.disk(path, 'valid')
-        case(path, host_boot)  # No reseeding, repair, host mount or image replacement.
+        if io_faults:
+            for fault in ('enospc', 'erofs'):
+                child = path / fault; child.mkdir(mode=0o700)
+                for name in ('vmlinuz', 'initramfs'): (child / name).symlink_to(path / name)
+                s.disk(child, 'valid'); case(child, host_boot, fault)
+        else:
+            s.disk(path, 'valid')
+            case(path, host_boot)  # No reseeding, repair, host mount or image replacement.
     if path.exists() or Path('/proc/sys/kernel/random/boot_id').read_text().strip() != host_boot or os.readlink('/proc/self/ns/net') != netns:
         raise RuntimeError('HOST_UNCHANGED_CRASH_CLEANUP_REQUIRED')
     print('PASS CRASH_VOLUME_IMAGES_PROCESSES_CLEANED_HOST_UNCHANGED NO_LIVE_APPLY', flush=True)
@@ -182,4 +206,5 @@ class Tests(unittest.TestCase):
 
 if __name__ == '__main__':
     if sys.argv[1:] == ['--vm']: run_vm()
+    elif sys.argv[1:] == ['--io-vm']: run_vm(io_faults=True)
     else: unittest.main(verbosity=2)
