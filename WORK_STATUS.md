@@ -1,5 +1,22 @@
 # Work status
 
+## PR #240 initial positive-control failure — 2026-10-12
+
+Head 9036fa164b971c61db85afa4bba319773582c272 failed regression 38261852097 /
+inbound job 114854082274 at ip6_udp22 before any candidate filter was installed.
+Existing transition/recovery jobs passed. The wildcard UDP echo helper used
+sendto without received packet information on a host with two IPv6 addresses;
+reply-source selection was not bound to the original local destination. The
+log did not record that address, so this is the hypothesis to verify, not a
+claim that the rejected policy caused the failure. The corrected UDP helper
+uses recvmsg destination/interface information and sendmsg to preserve the
+reply endpoint for both IP families. Local real loopback UDP checks pass;
+actual multi-address namespace controls remain required. Failure diagnostics
+now include per-flow result and before/after counters. No policy or negative
+acceptance criterion changed. Local total is now 13 tests, including 5 inbound.
+Corrected exact-head CI remains pending; retain the initial failure evidence.
+
+
 ## Exact inbound path and connection direction — 2026-10-12
 
 PR #239 merged at a954a6ee062fc0c937422ac072221127e810850a. The corrected

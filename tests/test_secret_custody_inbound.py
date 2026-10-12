@@ -12,6 +12,8 @@ from pathlib import Path
 import socket
 import subprocess
 import sys
+import struct
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -108,13 +110,59 @@ def peer():
             print(json.dumps(result), flush=True)
 
 
+def udp_reply(sock):
+    """Preserve the addressed endpoint of a wildcard UDP socket's reply."""
+    data, ancillary, flags, source = sock.recvmsg(64, socket.CMSG_SPACE(20))
+    if flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC): raise RuntimeError('BOUNDED_UDP_PACKET_REQUIRED')
+    if sock.family == socket.AF_INET6:
+        expected = (socket.IPPROTO_IPV6, socket.IPV6_PKTINFO)
+        info = [value for level, kind, value in ancillary if (level, kind) == expected]
+        if len(info) != 1 or len(info[0]) != 20: raise RuntimeError('IPV6_DESTINATION_REQUIRED')
+        reply = info[0]
+    else:
+        expected = (socket.IPPROTO_IP, 8)  # Linux IP_PKTINFO.
+        info = [value for level, kind, value in ancillary if (level, kind) == expected]
+        if len(info) != 1 or len(info[0]) != 12: raise RuntimeError('IPV4_DESTINATION_REQUIRED')
+        index, _, destination = struct.unpack('=I4s4s', info[0])
+        reply = struct.pack('=I4s4s', index, destination, b'\0' * 4)
+    sock.sendmsg([data], [(*expected, reply)], 0, source)
+
+
+def udp_listener(stack, address, port):
+    family = socket.AF_INET6 if ':' in address else socket.AF_INET
+    sock = socket.socket(family, socket.SOCK_DGRAM)
+    stop = threading.Event()
+    try:
+        if family == socket.AF_INET6:
+            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_RECVPKTINFO, 1)
+        else: sock.setsockopt(socket.IPPROTO_IP, 8, 1)
+        sock.bind((address, port)); sock.settimeout(.2)
+    except BaseException:
+        sock.close(); raise
+    def serve():
+        while not stop.is_set():
+            try: udp_reply(sock)
+            except socket.timeout: continue
+            except OSError:
+                if not stop.is_set(): raise
+    thread = threading.Thread(target=serve, daemon=True); thread.start()
+    def close():
+        stop.set(); sock.close(); thread.join(timeout=1)
+        if thread.is_alive(): raise RuntimeError('UDP_LISTENER_CLEANUP_REQUIRED')
+    stack.callback(close)
+    return sock
+
+
 def server():
     guard()
     if os.readlink('/proc/self/ns/net') != os.environ.get('FIXTURE_PARENT_NETNS'):
         raise RuntimeError('OWNED_SERVER_NAMESPACE_REQUIRED')
     with ExitStack() as stack:
         for address in ('0.0.0.0', '::'):
-            for protocol, port in PORTS: t.listen(stack, address, port, udp=protocol == 'udp')
+            for protocol, port in PORTS:
+                if protocol == 'udp': udp_listener(stack, address, port)
+                else: t.listen(stack, address, port)
         print('READY', flush=True)
         for line in sys.stdin:
             op = json.loads(line)
@@ -185,7 +233,9 @@ def measured(peer_proc, row, operation, allowed):
     after, _ = report()
     key = row['key']
     if value is not allowed or after['early_' + key] <= before['early_' + key]:
-        raise RuntimeError('ACTUAL_PACKET_REQUIRED ' + key + ' ' + operation)
+        raise RuntimeError('ACTUAL_PACKET_REQUIRED ' + json.dumps(dict(key=key, operation=operation,
+            result=value, expected=allowed, counters={part: [before[part + key], after[part + key]]
+                for part in ('early_', 'late_', 'tracked_')})))
     if (after['late_' + key] > before['late_' + key]) is not allowed:
         raise RuntimeError('INPUT_DROP_REQUIRED_BEFORE_REPLY_FILTER ' + key)
     if operation == 'old' and after['tracked_' + key] <= before['tracked_' + key]:
@@ -268,6 +318,15 @@ def kernel():
 
 
 class Tests(unittest.TestCase):
+    def test_udp_reply_uses_received_local_destination(self):
+        # Real unprivileged loopback sockets; no namespace/sysctl or host changes.
+        for address, family in (('127.0.0.1', socket.AF_INET), ('::1', socket.AF_INET6)):
+            with self.subTest(address=address), ExitStack() as stack:
+                server_sock = udp_listener(stack, address, 0)
+                client = stack.enter_context(socket.socket(family, socket.SOCK_DGRAM)); client.settimeout(1)
+                client.connect(server_sock.getsockname()); client.sendall(b'endpoint')
+                self.assertEqual(client.recv(64), b'endpoint')
+
     def test_host_non_ci_and_missing_optin_stop_before_commands(self):
         for ci, uid, namespaces in (('true', 0, ['same', 'same']), ('false', 0, []), ('true', 1000, [])):
             with patch.dict(os.environ, {'GITHUB_ACTIONS': ci, 'KC_INBOUND_CI': '1'}), patch.object(os, 'geteuid', return_value=uid), \
