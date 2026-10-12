@@ -357,6 +357,18 @@ def run_vm(boottime_guard=False, integrated=False, authenticated=False):
 
 
 class Tests(unittest.TestCase):
+    def test_ssh_rejection_requires_auth_failure_exit_and_no_command_output(self):
+        spec = importlib.util.spec_from_file_location('ssh_guest', HERE / 'fixtures/secret_custody_ssh_guest.py')
+        ssh = importlib.util.module_from_spec(spec); spec.loader.exec_module(ssh)
+        for reason in (b'Permission denied (publickey)', b'Too many authentication failures'):
+            self.assertEqual(ssh.rejection(subprocess.CompletedProcess([], 255, b'', reason), 'client_key'), reason.decode())
+        for rc, output, error in ((0, b'', b'Too many authentication failures'),
+                                  (255, b'ssh-synthetic-1\n', b'Permission denied (publickey)'),
+                                  (255, b'', b'Connection reset by peer'),
+                                  (255, b'', b'Host key verification failed')):
+            with self.assertRaisesRegex(RuntimeError, 'SSH_NEGATIVE_CONTROL_FAILED'):
+                ssh.rejection(subprocess.CompletedProcess([], rc, output, error), 'client_key')
+
     def test_ssh_evidence_requires_real_boolean_authentication_and_negative_controls(self):
         good = {'established': [True]*2, 'fresh': [True]*2,
                 'wrong_keys_rejected': [True]*2, 'wrong_hosts_rejected': [True]*2}

@@ -93,10 +93,22 @@ def client_args(address, key='client', hosts='known_hosts'):
             '-o', 'LogLevel=ERROR', '-i', str(ROOT / key), 'root@' + address, 'probe']
 
 
+def rejection(result, kind):
+    reasons = ((b'Permission denied (publickey)', b'Too many authentication failures')
+               if kind == 'client_key' else (b'Host key verification failed',))
+    if result.returncode == 255 and not result.stdout:
+        for reason in reasons:
+            if reason in result.stderr: return reason.decode()
+    raise RuntimeError('SSH_NEGATIVE_CONTROL_FAILED ' + kind + ' rc=' + str(result.returncode)
+                       + ' stdout_bytes=' + str(len(result.stdout)) + ' '
+                       + json.dumps(result.stderr.decode(errors='replace')[-1500:]))
+
+
 class PeerClients:
     def __init__(self):
         self.processes = []
         self.logs = {}
+        self.rejections = []
         self.sequence = 0
 
     def token(self):
@@ -118,9 +130,11 @@ class PeerClients:
         result = subprocess.run(client_args(address, key, hosts), input=token,
                                 capture_output=True, timeout=8, env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
         if key == 'wrong':
-            return result.returncode == 255 and not result.stdout and b'Permission denied (publickey)' in result.stderr
+            self.rejections.append(dict(address=address, kind='client_key', reason=rejection(result, 'client_key')))
+            return True
         if hosts == 'wrong_hosts':
-            return result.returncode == 255 and not result.stdout and b'Host key verification failed' in result.stderr
+            self.rejections.append(dict(address=address, kind='host_key', reason=rejection(result, 'host_key')))
+            return True
         if result.returncode != 0 or result.stdout != token:
             raise RuntimeError('SSH_FRESH_FAILED ' + result.stderr.decode(errors='replace')[-1500:])
         return True
@@ -150,7 +164,8 @@ class PeerClients:
         if wrong_keys != [True]*2 or wrong_hosts != [True]*2:
             raise RuntimeError('SSH_NEGATIVE_AUTH_CONTROLS_REQUIRED')
         return dict(established=established, wrong_keys_rejected=wrong_keys, wrong_hosts_rejected=wrong_hosts,
-                    initial_fresh_seconds=fresh_seconds, session_setup_seconds=session_seconds)
+                    initial_fresh_seconds=fresh_seconds, session_setup_seconds=session_seconds,
+                    rejection_reasons=self.rejections)
 
     def check(self):
         return dict(established=[self.exchange(p) for p in self.processes],
