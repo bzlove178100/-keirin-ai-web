@@ -227,6 +227,9 @@ def outcome(mode, before, after, host_elapsed, boottime_guard=False):
         raise ValueError('FIXED_PACKET_CASE_REQUIRED')
     if boottime_guard:
         proof = before.get('boottime_guard')
+        # Match the guest's integer-nanosecond construction exactly. Float
+        # addition can round start+8 below deadline_ns/1e9 at exponent changes.
+        start_ns = int(start['boottime'] * 1e9)
         if (not isinstance(proof, dict) or type(proof.get('deadline_ns')) is not int
                 or type(proof.get('program_id')) is not int or proof['program_id'] <= 0
                 or type(proof.get('ifindex')) is not int or proof['ifindex'] <= 0
@@ -234,8 +237,8 @@ def outcome(mode, before, after, host_elapsed, boottime_guard=False):
                 or proof.get('loader_exits') is not True
                 or proof != after.get('boottime_guard')
                 or after.get('tc_identity_unchanged') is not True
-                or not start['boottime'] < proof['deadline_ns'] / 1e9 <= start['boottime'] + 8
-                or after['boottime'] <= proof['deadline_ns'] / 1e9
+                or not start_ns < proof['deadline_ns'] <= start_ns + 8000000000
+                or int(after['boottime'] * 1e9) <= proof['deadline_ns']
                 or packets != [False] * 4):
             raise RuntimeError('IMMUTABLE_BOOTTIME_PACKET_EXPIRY_REQUIRED')
         result = 'BOOTTIME_' + result
@@ -520,6 +523,21 @@ class Tests(unittest.TestCase):
             wrong = dict(proof, **change)
             with self.subTest(change=change), self.assertRaises(RuntimeError):
                 outcome('suspend', dict(before, boottime_guard=wrong), dict(after, boottime_guard=wrong), 13, True)
+
+    def test_deadline_uses_exact_nanoseconds_without_tolerance_or_extension(self):
+        before, after = self.sample([False] * 4)
+        before['lease_start'] = {'monotonic': 25.540520284, 'boottime': 25.540526456}
+        proof = {'deadline_ns': 33540526456, 'program_id': 1, 'ifindex': 3,
+                 'tag': 'a4e3f9e7631a3501', 'loader_exits': True}
+        before['boottime_guard'] = proof
+        after.update(monotonic=36.462182233, boottime=36.462204986,
+                     probe_finished_monotonic=37.474899962, boottime_guard=proof,
+                     tc_identity_unchanged=True, outcome='BOOTTIME_AWAKE_EXPIRY_CONFIRMED')
+        self.assertEqual(outcome('awake', before, after, 12, True), 'BOOTTIME_AWAKE_EXPIRY_CONFIRMED')
+        for deadline in (33540526457, int(before['lease_start']['boottime'] * 1e9)):
+            wrong = dict(proof, deadline_ns=deadline)
+            with self.assertRaisesRegex(RuntimeError, 'IMMUTABLE_BOOTTIME_PACKET_EXPIRY_REQUIRED'):
+                outcome('awake', dict(before, boottime_guard=wrong), dict(after, boottime_guard=wrong), 12, True)
 
     def test_packet_gate_precedes_any_build_or_launch(self):
         with patch.object(vm, 'guard'), patch.dict(os.environ, {'KC_SUSPEND_PACKET_CI': '0'}), patch.object(subprocess, 'run') as run:
