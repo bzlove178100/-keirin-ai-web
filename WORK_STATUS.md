@@ -1,5 +1,24 @@
 # Work status
 
+
+## PR #239 initial CI failure and correction — 2026-10-12
+
+Regression 38254192708 / job 114827886531 failed before the actual policy
+write: the test incorrectly required statvfs free blocks to equal zero after
+single-block fallocate ENOSPC. ext4 retains an internal reserved-cluster pool,
+including for uid 0 (kernel ext4_has_free_clusters; admin-guide/ext4 sysfs).
+The corrected fixture records free/available blocks and reserved clusters;
+it requires no more free blocks than that observed pool and bounded allocation.
+A cluster is at least one block, so this comparison is conservative. It also
+records the allocator ENOSPC separately. The independent real atomic policy
+ENOSPC, unchanged durable bytes, no saved marker, and fresh-boot orphan refusal
+remain mandatory. No mount/reservation configuration or product acceptance
+was changed. The initial log did not include counts, so reservation accounting
+is the source-supported hypothesis to check with the corrected VM evidence.
+Sources: https://www.kernel.org/doc/html/latest/admin-guide/ext4.html
+and https://github.com/torvalds/linux/blob/master/fs/ext4/balloc.c .
+Corrected exact-head PR/main VM results remain pending; no unchanged rerun.
+
 ## Actual bounded filesystem write failures — 2026-10-12
 
 PR #238 is merged at 13b14c70c040fe106d9d4fc02e0b5e1439782782.

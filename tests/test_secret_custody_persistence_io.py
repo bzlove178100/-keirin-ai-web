@@ -72,13 +72,19 @@ class Tests(unittest.TestCase):
 
     def test_wrong_error_writable_readonly_claim_and_unbounded_fill_rejected(self):
         for mode, number, mount in (('enospc', errno.ENOSPC, 'rw'), ('erofs', errno.EROFS, 'ro')):
-            info=dict(mode=mode, errno=number, allocated_bytes=4096,
-                      prepared=dict(mount_mode=mount, free_blocks=0), after=dict(mount_mode=mount))
+            info=dict(mode=mode, errno=number, allocated_bytes=4096, allocator_errno=errno.ENOSPC,
+                      prepared=dict(mount_mode=mount, free_blocks=0, reserved_clusters=0, block_size=4096),
+                      after=dict(mount_mode=mount))
             c.fault_evidence(dict(filesystem_fault=info), mode)
             for change in (dict(errno=errno.EIO), dict(mode='other'), dict(after=dict(mount_mode='wrong'))):
                 with self.assertRaises(RuntimeError): c.fault_evidence(dict(filesystem_fault=dict(info, **change)), mode)
             if mode == 'enospc':
-                for change in (dict(allocated_bytes=c.s.SIZE+1), dict(prepared=dict(mount_mode='rw',free_blocks=1))):
+                c.fault_evidence(dict(filesystem_fault=dict(info, prepared=dict(info['prepared'],
+                    free_blocks=327, reserved_clusters=327))), mode)
+                for change in (dict(allocated_bytes=c.s.SIZE+1), dict(allocator_errno=errno.EIO),
+                               dict(prepared=dict(info['prepared'], free_blocks=1)),
+                               dict(prepared=dict(info['prepared'], reserved_clusters=c.s.SIZE)),
+                               dict(prepared=dict(info['prepared'], block_size=0))):
                     with self.assertRaises(RuntimeError): c.fault_evidence(dict(filesystem_fault=dict(info, **change)), mode)
 
     def test_fault_flags_reject_duplicates_unknown_and_mixed_crash(self):

@@ -65,8 +65,14 @@ def fault_evidence(row, mode):
     required_mount = 'ro' if mode == 'erofs' else 'rw'
     if any(info.get(key, {}).get('mount_mode') != required_mount for key in ('prepared', 'after')):
         raise RuntimeError('ACTUAL_FAULT_MOUNT_MODE_REQUIRED')
-    if mode == 'enospc' and (info['prepared'].get('free_blocks') != 0 or not 0 < info.get('allocated_bytes', 0) <= s.SIZE):
-        raise RuntimeError('BOUNDED_GUEST_EXHAUSTION_REQUIRED')
+    if mode == 'enospc':
+        prepared = info['prepared']
+        block = prepared.get('block_size', 0)
+        reserved, free = prepared.get('reserved_clusters', -1), prepared.get('free_blocks', -1)
+        if (block not in (1024, 2048, 4096) or not 0 <= free <= reserved <= s.SIZE // block
+                or info.get('allocator_errno') != errno.ENOSPC
+                or not 0 < info.get('allocated_bytes', 0) <= s.SIZE):
+            raise RuntimeError('BOUNDED_GUEST_EXHAUSTION_REQUIRED')
 
 
 def case(path, host_boot, fault=None):
