@@ -71,6 +71,14 @@ def emit(b, event, **values):
           monotonic=time.monotonic(), activation_allowed=False, **values)), flush=True)
 
 
+def load_state(durable, boot, now):
+    # lexists also rejects dangling symlinks; never repair ambiguous state here.
+    if any(os.path.lexists(ROOT / (name + '.next')) for name in ('policy.json', 'receipt.json')):
+        raise ValueError('INTERRUPTED_STATE_REFUSED')
+    receipt = read_bytes('receipt.json') if os.path.lexists(ROOT / 'receipt.json') else None
+    return durable.pair(read_bytes('policy.json'), receipt, boot, now)
+
+
 def save():
     b, g, durable = context()
     if not mounted(): raise RuntimeError('MOUNTED_STATE_REQUIRED')
@@ -127,16 +135,11 @@ def main(action):
         if mounted(): raise RuntimeError('STATE_UNMOUNT_REQUIRED')
     elif action == 'gate':
         if not mounted() or b.link_up(g): raise RuntimeError('CLOSED_MOUNTED_GATE_REQUIRED')
-        try: config = durable.decode(read_bytes('policy.json'))
-        except (FileNotFoundError, ValueError, OSError) as exc:
+        try:
+            config, receipt, reason = load_state(durable, b.boot(), time.clock_gettime_ns(time.CLOCK_BOOTTIME))
+        except (ValueError, OSError, RuntimeError) as exc:
             emit(b, 'refused', reason=type(exc).__name__, link_up=False)
             raise RuntimeError('INVALID_DURABLE_CLOSED_POLICY') from exc
-        receipt, reason = None, 'NO_SAVED_RECEIPT'
-        if (ROOT / 'receipt.json').exists():
-            receipt = json.loads(read_bytes('receipt.json'))
-            reason = durable.replay_reason(receipt, b.boot(), time.clock_gettime_ns(time.CLOCK_BOOTTIME))
-        if config['generation'] and (not receipt or config['writer_boot'] != receipt['boot'] or reason != 'PRIOR_BOOT_LEASE_REFUSED'):
-            raise RuntimeError('MATCHED_PREVIOUS_BOOT_RECEIPT_REQUIRED')
         policy = module('policy', '/startup_policy.py')
         g.run(g.NFT, '-f', '-', input=policy.install().encode())
         seal = policy.seal(json.loads(g.run(g.NFT, '-j', 'list', 'table', 'inet', policy.TABLE)))

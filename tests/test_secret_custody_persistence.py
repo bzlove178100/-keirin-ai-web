@@ -1,5 +1,6 @@
 """One bounded guest-owned ext4 image; never mount/format a host device."""
 import hashlib
+import errno
 import importlib.util
 import json
 import os
@@ -11,6 +12,7 @@ import tempfile
 import time
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('restart', HERE / 'test_secret_custody_systemd_restart.py')
@@ -18,17 +20,25 @@ r = importlib.util.module_from_spec(spec); spec.loader.exec_module(r)
 c, b, p, vm = r.c, r.b, r.p, r.vm
 d = b.module('durable', HERE.parent / 'review/secret_custody_durable_policy.py')
 SIZE = 64 * 1024 * 1024
+CASES = ('valid', 'missing', 'corrupt', 'stale', 'orphan', 'mismatch', 'interrupted', 'receipt-corrupt')
+OLD_BOOT = '00000000-0000-4000-8000-000000000001'
+NEW_BOOT = '00000000-0000-4000-8000-000000000002'
 
 
 def disk(path, case):
     p.guard()
     if os.environ.get('KC_PERSISTENCE_CI') != '1': raise RuntimeError('PERSISTENCE_OPT_IN_REQUIRED')
-    if case not in ('valid', 'missing', 'corrupt', 'stale'): raise ValueError('FIXED_DURABLE_CASE_REQUIRED')
+    if case not in CASES: raise ValueError('FIXED_DURABLE_CASE_REQUIRED')
     seed = path / 'seed'; seed.mkdir(mode=0o700)
     if case != 'missing':
         value = d.policy()
         if case == 'stale': value['lease'] = dict(boot='00000000-0000-4000-8000-000000000001', deadline_ns=10**15)
         (seed / 'policy.json').write_text('{broken' if case == 'corrupt' else json.dumps(value))
+    if case in ('orphan', 'mismatch', 'receipt-corrupt'):
+        receipt = dict(boot=NEW_BOOT, deadline_ns=10**15)
+        (seed / 'receipt.json').write_text('{broken' if case == 'receipt-corrupt' else json.dumps(receipt))
+        if case != 'orphan': (seed / 'policy.json').write_text(json.dumps(d.policy(1, OLD_BOOT)))
+    if case == 'interrupted': (seed / 'policy.json.next').write_bytes(b'{partial')
     target = path / 'state.raw'
     with target.open('xb') as f: f.truncate(SIZE)
     target.chmod(0o600)
@@ -96,7 +106,8 @@ def loaded_evidence(row, first, previous):
 
 
 def case(path, kind, host_boot):
-    boot_case = {'valid':'closed', 'missing':'missing', 'corrupt':'invalid', 'stale':'invalid'}[kind]
+    if kind not in CASES: raise ValueError('FIXED_DURABLE_CASE_REQUIRED')
+    boot_case = 'closed' if kind == 'valid' else 'missing' if kind == 'missing' else 'invalid'
     mode = 'suspend' if kind == 'valid' else 'awake'
     process = None
     try:
@@ -152,7 +163,7 @@ def run_vm():
         kernel = subprocess.run(['sudo','-n','/usr/bin/cat','/boot/vmlinuz-'+os.uname().release], check=True, capture_output=True, timeout=10).stdout
         if not 1024*1024 <= len(kernel) <= 64*1024*1024: raise RuntimeError('KERNEL_SIZE_BOUND')
         (path/'vmlinuz').write_bytes(kernel); b.payload(path, composed=True, restart=True, persistence=True)
-        for kind in ('valid','missing','corrupt','stale'):
+        for kind in CASES:
             child = path/kind; child.mkdir(mode=0o700)
             for name in ('vmlinuz','initramfs'): (child/name).symlink_to(path/name)
             disk(child, kind); case(child, kind, host_boot)
@@ -162,6 +173,95 @@ def run_vm():
 
 
 class Tests(unittest.TestCase):
+    def test_checkpoint_pair_rejects_partial_duplicate_and_same_boot_receipts(self):
+        raw = lambda value: json.dumps(value).encode()
+        config = raw(d.policy(1, OLD_BOOT))
+        receipt = raw(dict(boot=OLD_BOOT, deadline_ns=100))
+        self.assertEqual(d.pair(config, receipt, NEW_BOOT, 10)[2], 'PRIOR_BOOT_LEASE_REFUSED')
+        for policy, saved, boot in (
+                (raw(d.policy()), receipt, NEW_BOOT), (config, None, NEW_BOOT),
+                (config, receipt, OLD_BOOT), (config, raw(dict(boot=NEW_BOOT, deadline_ns=100)), NEW_BOOT),
+                (config, b'{broken', NEW_BOOT), (config, b'[]', NEW_BOOT),
+                (config, receipt[:-1] + b',"deadline_ns":200}', NEW_BOOT)):
+            with self.assertRaises(ValueError): d.pair(policy, saved, boot, 10)
+
+    def test_abrupt_writer_exit_leaves_rejected_temporary_file(self):
+        guest = b.module('persist_crash', HERE/'fixtures/secret_custody_persistence_guest.py')
+        with tempfile.TemporaryDirectory() as name, patch.object(guest, 'ROOT', Path(name)):
+            guest.atomic('policy.json', d.policy())
+            pid = os.fork()
+            if pid == 0:
+                # Abrupt process exit after file fsync, before rename; no finally.
+                with patch.object(guest.os, 'replace', side_effect=lambda *args: os._exit(73)):
+                    guest.atomic('policy.json', d.policy(1, OLD_BOOT))
+                os._exit(74)
+            _, status = os.waitpid(pid, 0)
+            self.assertEqual(os.waitstatus_to_exitcode(status), 73)
+            self.assertEqual(d.decode(guest.read_bytes('policy.json')), d.policy())
+            self.assertTrue((Path(name)/'policy.json.next').exists())
+            with self.assertRaisesRegex(ValueError, 'INTERRUPTED_STATE'): guest.load_state(d, NEW_BOOT, 10)
+
+    def test_write_faults_never_return_a_success_receipt(self):
+        guest = b.module('persist_io', HERE/'fixtures/secret_custody_persistence_guest.py')
+        for stage in ('open', 'file_fsync', 'rename', 'dir_fsync', 'readback'):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as name, patch.object(guest, 'ROOT', Path(name)):
+                guest.atomic('policy.json', d.policy())
+                candidate = d.policy(1, OLD_BOOT)
+                fsync = os.fsync
+                def fail_sync(fd):
+                    directory = stat.S_ISDIR(os.fstat(fd).st_mode)
+                    if directory == (stage == 'dir_fsync'): raise OSError(errno.EIO, 'injected fsync failure')
+                    return fsync(fd)
+                target, error = {
+                    'open': ('open', OSError(errno.ENOSPC, 'injected no space')),
+                    'rename': ('replace', OSError(errno.EROFS, 'injected read-only')),
+                    'readback': ('read_bytes', OSError(errno.EIO, 'injected readback failure')),
+                }.get(stage, ('fsync', fail_sync))
+                owner = guest if target == 'read_bytes' else guest.os
+                with patch.object(owner, target, side_effect=error):
+                    with self.assertRaises(OSError): guest.atomic('policy.json', candidate)
+                expected = candidate if stage in ('dir_fsync', 'readback') else d.policy()
+                self.assertEqual(d.decode(guest.read_bytes('policy.json')), expected)
+                self.assertFalse((Path(name)/'policy.json.next').exists())
+                # A replaced policy without its receipt cannot pass the gate.
+                if expected == candidate:
+                    with self.assertRaises(ValueError): guest.load_state(d, NEW_BOOT, 10)
+
+    def test_failed_second_write_does_not_publish_saved_and_orphan_is_rejected(self):
+        guest = b.module('persist_pair', HERE/'fixtures/secret_custody_persistence_guest.py')
+        with tempfile.TemporaryDirectory() as name, patch.object(guest, 'ROOT', Path(name)):
+            guest.atomic('policy.json', d.policy())
+            fake = SimpleNamespace(boot=lambda: OLD_BOOT, read=lambda name: dict(boot=OLD_BOOT, deadline_ns=1))
+            atomic = guest.atomic
+            def fail_policy(name, value):
+                if name == 'policy.json': raise OSError(errno.EIO, 'injected second write failure')
+                return atomic(name, value)
+            with patch.object(guest, 'context', return_value=(fake, None, d)), patch.object(guest, 'mounted', return_value=True), \
+                    patch.object(guest, 'atomic', side_effect=fail_policy), patch.object(fake, 'write', create=True) as publish:
+                with self.assertRaises(OSError): guest.save()
+                publish.assert_not_called()
+            with self.assertRaisesRegex(ValueError, 'ORPHAN'): guest.load_state(d, NEW_BOOT, 10)
+
+    def test_gate_refuses_read_error_before_install_or_marker(self):
+        guest = b.module('persist_gate', HERE/'fixtures/secret_custody_persistence_guest.py')
+        fake = SimpleNamespace(boot=lambda: NEW_BOOT, link_up=lambda g: False)
+        for failure in (OSError(errno.EIO, 'injected read failure'), ValueError('incomplete pair')):
+            with patch.object(guest, 'context', return_value=(fake, None, d)), patch.object(guest, 'mounted', return_value=True), \
+                    patch.object(guest, 'load_state', side_effect=failure), patch.object(guest, 'emit') as emit, \
+                    patch.object(guest, 'module') as install:
+                with self.assertRaisesRegex(RuntimeError, 'INVALID_DURABLE'): guest.main('gate')
+                emit.assert_called_once_with(fake, 'refused', reason=type(failure).__name__, link_up=False)
+                install.assert_not_called()
+
+    def test_dangling_temporary_and_receipt_symlinks_are_not_missing(self):
+        guest = b.module('persist_symlink', HERE/'fixtures/secret_custody_persistence_guest.py')
+        with tempfile.TemporaryDirectory() as name, patch.object(guest, 'ROOT', Path(name)):
+            guest.atomic('policy.json', d.policy())
+            for leaf in ('receipt.json.next', 'policy.json.next', 'receipt.json'):
+                path = Path(name)/leaf; path.symlink_to('missing')
+                with self.assertRaises((ValueError, OSError)): guest.load_state(d, NEW_BOOT, 10)
+                path.unlink()
+
     def test_closed_config_rejects_unknown_lease_open_duplicate_and_bad_bytes(self):
         self.assertEqual(d.decode(json.dumps(d.policy()).encode()), d.policy())
         for raw in (b'{broken', b'{}', b'[]', b'x'*4097,
