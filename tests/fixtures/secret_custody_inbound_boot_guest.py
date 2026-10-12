@@ -165,7 +165,7 @@ def main(action):
     if action == 'setup':
         if g.interfaces() != ['lo'] or b.STATE.exists(): raise RuntimeError('FRESH_INBOUND_BOOT_REQUIRED')
         b.STATE.mkdir(mode=0o700)
-        g.run('/sbin/modprobe', '-C', '/module-config', '-a', 'ipv6', 'veth', 'nf_tables')
+        g.run('/sbin/modprobe', '-C', '/module-config', '-a', 'ipv6', 'veth', 'nf_tables', 'nft_ct')
         if [r for r in json.loads(g.run(g.NFT, '-j', 'list', 'ruleset'))['nftables'] if 'metainfo' not in r]:
             raise RuntimeError('EMPTY_INBOUND_BOOT_RULESET_REQUIRED')
         module('ssh', '/ssh_probe.py').prepare(systemd=True)
@@ -250,5 +250,5 @@ def main(action):
 if __name__ == '__main__':
     try: main(sys.argv[1] if len(sys.argv) == 2 else '')
     except Exception as exc:
-        print('INBOUND_BOOT_STAGE_ERROR ' + repr(exc), flush=True)
+        print('INBOUND_BOOT_STAGE_ERROR ' + (sys.argv[1] if len(sys.argv) == 2 else 'unknown') + ' ' + repr(exc), flush=True)
         raise

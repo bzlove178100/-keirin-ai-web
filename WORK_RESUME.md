@@ -1,5 +1,28 @@
 # Work resume handoff
 
+## PR #241 missing conntrack module correction — 2026-10-13
+
+Initial head ea09e7a13b84d01b29d18e112ac8eda688b5a31b failed regression
+38285673690 / inbound boot job 114933338833 before the unfiltered control
+could start. nft rejected the ct direction expressions with ENOENT. The guest
+module manifest contained veth/nf_tables but no nft_ct; the old packet image
+had not needed conntrack expressions. Linux net/netfilter/nft_ct.c registers
+the ct expression, including NFT_CT_DIRECTION. This is a fixture dependency
+omission, not a measured policy denial. Source inspected:
+https://raw.githubusercontent.com/torvalds/linux/master/net/netfilter/nft_ct.c
+
+The inbound image now explicitly includes nft_ct and modprobe-discovered
+matched-kernel dependencies, and loads it before compiling the reference.
+Original images retain the previous module set. Unexpected guest-stage failures
+now stop the supervisor promptly; only deliberate negative-case gate errors
+continue to final service-state evidence. No rule, packet requirement, deadline
+or acceptance window was relaxed. Local total: 42 targeted tests pass (inbound
+boot 8, boot 5, inbound 5, lease 5, restart 4, packet 15). Corrected VM execution
+and exact PR/main CI remain pending; the original failed run is retained.
+
+PR #241 is open. Publication approval has been received; the older blocked
+handoff below is historical. No live activation or data-use permission changes.
+
 ## GitHub publication authorization — 2026-10-13
 
 The user replied “続けて” at 2026-10-13 02:37 JST to the explicit request

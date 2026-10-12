@@ -35,6 +35,9 @@ def record(lines, event, case):
         diagnostic.append(line[-2000:]); diagnostic = diagnostic[-40:]
         if 'Kernel panic' in line or 'Freezing execution' in line:
             raise RuntimeError('INBOUND_BOOT_FATAL ' + '\n'.join(diagnostic)[-8000:])
+        if line.startswith('INBOUND_BOOT_STAGE_ERROR '):
+            expected_gate = case in ('missing', 'invalid', 'widened') and line.startswith('INBOUND_BOOT_STAGE_ERROR gate ')
+            if not expected_gate: raise RuntimeError('INBOUND_BOOT_STAGE_FAILED ' + line)
         # Gate failures are deliberate in the negative cases; final systemd
         # states must prove that link/check never ran. Other failures cannot pass.
         if not line.startswith('INBOUND_BOOT_RECORD '): continue
@@ -135,6 +138,17 @@ def run_vm():
 
 
 class Tests(unittest.TestCase):
+    def test_conntrack_module_is_explicit_and_original_payloads_unchanged(self):
+        self.assertEqual(p.module_names(), ('ipv6', 'veth', 'nf_tables'))
+        self.assertEqual(p.module_names(conntrack=True), ('ipv6', 'veth', 'nf_tables', 'nft_ct'))
+        self.assertNotIn('nft_ct', p.module_names(boottime_guard=True, storage=True))
+
+    def test_unexpected_guest_stage_error_fails_without_waiting_for_report(self):
+        class Lines:
+            def line(self, deadline): return "INBOUND_BOOT_STAGE_ERROR peer RuntimeError('synthetic')"
+        for mode in guest.CASES:
+            with self.assertRaisesRegex(RuntimeError, 'STAGE_FAILED'): record(Lines(), 'observed', mode)
+
     def test_fixed_opt_in_and_host_refusal(self):
         real_boot = b.module('real_boot', HERE / 'fixtures/secret_custody_boot_guest.py')
         with patch.object(guest, 'module', return_value=real_boot), patch.object(subprocess, 'run') as run:

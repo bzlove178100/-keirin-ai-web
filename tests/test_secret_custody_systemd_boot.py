@@ -31,7 +31,7 @@ def payload(path, composed=False, restart=False, persistence=False, inbound=Fals
     if inbound and (composed or restart or persistence): raise ValueError("SEPARATE_INBOUND_BOOT_REQUIRED")
     if persistence and not restart: raise ValueError("PERSISTENCE_REQUIRES_RESTART")
     if restart and not composed: raise ValueError("RESTART_REQUIRES_COMPOSITION")
-    files = p.payload(path, boottime_guard=composed, authenticated=composed or inbound, systemd=composed or inbound, storage=persistence)
+    files = p.payload(path, boottime_guard=composed, authenticated=composed or inbound, systemd=composed or inbound, storage=persistence, conntrack=inbound)
     def add(source, target=None):
         source = Path(source)
         files[(target or str(source)).lstrip('/')] = (source.read_bytes(), source.stat().st_mode & 0o777)
