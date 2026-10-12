@@ -613,6 +613,22 @@ jobs:
           KC_SYSTEMD_BOOT_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_systemd_boot.py --vm
 
+  custody-inbound-boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test sealed inbound startup and evidence refusal
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_inbound_boot.py
+      - name: Install isolated guest experiment tools
+        run: sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends qemu-system-x86 nftables iproute2 kmod
+      - name: Verify closed first link and authenticated management in fresh guests
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+          KC_INBOUND_BOOT_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_inbound_boot.py --vm
+
   custody-systemd-lease:
     runs-on: ubuntu-24.04
     timeout-minutes: 8

@@ -1,5 +1,127 @@
 # Work status
 
+## PR #241 phase observation budget correction — 2026-10-13
+
+Head 5d99b09fb5a82cb86f6e2089fec82f3885b0a41a / regression 38287038436 /
+job 114937778223 passed the full control again. On the closed boot its unbound
+route readback measured IPv4 source 192.0.2.2 and IPv6 source 2001:db8:1::9.
+That establishes the multi-address selection hazard; it does not retroactively
+provide the missing original SSH exception. The source-bound attempt reached
+SSH setup, then the supervisor's single 100-second whole-boot observation
+budget expired without an SSH outcome. Successful authentication is still
+unverified on that head.
+
+The exhaustive matrix now publishes a distinct required same-boot completion
+record before SSH. The supervisor bounds startup/matrix and auth/report as
+separate 100-second phases, instead of incorrectly budgeting both as one.
+This explicitly increases the supervisor's possible total observation window;
+packet timeouts, SSH/RPC limits, 90-second per-service bounds and all preexisting
+lease/S3 timing requirements are unchanged. Final evidence must contain the
+exact same complete matrix, same boot and ordered timestamps, plus real SSH
+results; a phase marker alone cannot pass. Local targeted total: 44 tests pass.
+Corrected complete five-case guest run and exact PR/main CI remain pending.
+
+## PR #241 SSH control failure and source binding — 2026-10-13
+
+Head 87a4379615692fd9d67708f5a334daa67a6a1669 / regression 38286291962 /
+job 114935359179 included nft_ct and its dependencies and passed the full
+28-path unfiltered control, all 16 loopback checks and cleanup. The closed
+case then failed during check with ConnectionRefusedError from its control
+channel. Cleanup could mask the initial SSH error, and the supervisor did not
+preserve preceding diagnostics on this failure path. Therefore the original
+SSH failure cause is not yet proven.
+
+The peer deliberately has approved .2/.3 and unapproved .9 addresses for both
+IP families. SSH had no explicit source binding, unlike every matrix flow.
+The corrected inbound fixture pins fresh/existing and negative-auth SSH clients
+to .2/::2 using OpenSSH -b; other SSH fixtures retain their unchanged default.
+Unbound route-source readback is now included in evidence to test the source
+selection hypothesis. Peer failures return an explicit error while preserving
+the control channel for cleanup; primary exceptions and bounded preceding
+diagnostics survive shutdown errors. No firewall allowance or authentication
+criterion is widened. Local targeted total: 43 tests pass. Corrected five-guest
+VM and exact PR/main CI remain required; both original failures are retained.
+
+## PR #241 missing conntrack module correction — 2026-10-13
+
+Initial head ea09e7a13b84d01b29d18e112ac8eda688b5a31b failed regression
+38285673690 / inbound boot job 114933338833 before the unfiltered control
+could start. nft rejected the ct direction expressions with ENOENT. The guest
+module manifest contained veth/nf_tables but no nft_ct; the old packet image
+had not needed conntrack expressions. Linux net/netfilter/nft_ct.c registers
+the ct expression, including NFT_CT_DIRECTION. This is a fixture dependency
+omission, not a measured policy denial. Source inspected:
+https://raw.githubusercontent.com/torvalds/linux/master/net/netfilter/nft_ct.c
+
+The inbound image now explicitly includes nft_ct and modprobe-discovered
+matched-kernel dependencies, and loads it before compiling the reference.
+Original images retain the previous module set. Unexpected guest-stage failures
+now stop the supervisor promptly; only deliberate negative-case gate errors
+continue to final service-state evidence. No rule, packet requirement, deadline
+or acceptance window was relaxed. Local total: 42 targeted tests pass (inbound
+boot 8, boot 5, inbound 5, lease 5, restart 4, packet 15). Corrected VM execution
+and exact PR/main CI remain pending; the original failed run is retained.
+
+PR #241 is open. Publication approval has been received; the older blocked
+handoff below is historical. No live activation or data-use permission changes.
+
+## GitHub publication authorization — 2026-10-13
+
+The user replied “続けて” at 2026-10-13 02:37 JST to the explicit request
+to publish this change, create the PR, inspect CI and merge only after success.
+This authorizes resuming that bounded publication flow. The earlier rejection
+below is historical; actual VM/CI verification remains required.
+
+Local branch `codex/boot-inbound-composition` contains the six-file inbound
+startup/authentication increment below. All 25 targeted tests and diff checks
+passed. The automatic approval reviewer rejected the GitHub push because the
+continuation instruction did not explicitly authorize disclosure of this new
+payload and work-history changes to the destination. No alternate write route
+or push retry was attempted. The GitHub connector subsequently confirmed the
+repository is public, owned by bzlove178100, and has push permission; the new
+remote branch returned 404. No PR, new CI result or main update exists for this
+increment. GitHub publication still needs the user's explicit approval under
+that review decision. After approval, push this existing branch, create its PR,
+inspect all CI results, fix any actual failures, and merge only after success.
+Do not count the five-guest experiment as executed from local unit-test results.
+
+## Sealed inbound startup with authenticated management — 2026-10-13
+
+PR #240 is merged at c2bc2df0f336fb8a70fcef223e39e7fffe0adc8c. Its exact
+PR and independent main passed all five project workflows and 35 regression
+jobs; main Pages also passed. Main regression 38264361449 and inbound job
+114862648919 are final predecessor receipts. This supersedes the candidate
+pending checkpoints below without erasing either earlier fixture failure.
+
+This increment composes the fixed PR #240 maintenance profile with actual
+systemd startup and ephemeral authenticated OpenSSH in diskless QEMU guests.
+Both internal links stay down until the compiled complete policy matches the
+independent peer-namespace reference and its exact identity is sealed. The
+link service checks the same boot, policy and still-down links before first
+activation. Missing, invalid and widened policies must prevent both link and
+check service entry. The original boot/lease/storage jobs remain unchanged.
+
+A separate explicitly unfiltered control boot requires all 28 IPv4/IPv6 TCP
+and UDP paths to reach active wildcard listeners. The closed boot repeats all
+28 fresh paths, including wrong source, destination, interface and source port
+53, with before/after input counters distinguishing drops from lost replies.
+All 16 loopback listener controls must work. The echo listeners are stopped
+before real SSH starts; approved fresh and existing SSH, wrong client key and
+wrong server identity checks run under the unchanged sealed maintenance policy.
+Owned services, SSH children, links, tables and VM images must be cleaned.
+No external NIC, disk, live key or host service/network change is introduced.
+
+Local: 25 tests passed (inbound boot 6, boot 5, inbound 5, lease 5, restart 4),
+and whitespace validation passed. Actual five-guest execution and exact PR/main
+CI are pending. Final PR receipts will supersede this candidate checkpoint.
+This verifies sealed startup plus authentication only if the VM test passes;
+it does not qualify the wider policy with lease/S3/recovery or durable reboot,
+all protocols/fragments, live application binding or production deployment.
+Next: compose the verified wider startup profile with immutable qualification
+expiry and recovery, retaining the existing timing and packet acceptance gates.
+Phase 3 incomplete; KEIRIN.JP hold, real training zero, DB write OFF and live
+activation OFF remain unchanged.
+
 ## PR #240 fresh phase fixtures after blocked TCP reuse — 2026-10-12
 
 Head 7593c7bc288d90a67f1c03a75a7f27ff9ffdec91 / regression 38262328563 /

@@ -64,7 +64,13 @@ def archive(files, systemd=False):
     return gzip.compress(bytes(result), mtime=0)
 
 
-def payload(path, boottime_guard=False, startup=False, authenticated=False, systemd=False, storage=False):
+def module_names(boottime_guard=False, storage=False, conntrack=False):
+    return (MODULES + (('sch_ingress', 'cls_bpf') if boottime_guard else ())
+            + (('virtio_pci', 'virtio_blk', 'ext4') if storage else ())
+            + (('nft_ct',) if conntrack else ()))
+
+
+def payload(path, boottime_guard=False, startup=False, authenticated=False, systemd=False, storage=False, conntrack=False):
     if storage and not systemd: raise ValueError("STORAGE_REQUIRES_SYSTEMD")
     files = {}
     def add(source, target=None):
@@ -146,7 +152,7 @@ def payload(path, boottime_guard=False, startup=False, authenticated=False, syst
     root = Path('/lib/modules') / version
     empty = path / 'module-config'; empty.mkdir()
     manifest = []
-    for module in MODULES + (('sch_ingress', 'cls_bpf') if boottime_guard else ()) + (('virtio_pci', 'virtio_blk', 'ext4') if storage else ()):
+    for module in module_names(boottime_guard, storage, conntrack):
         dependency = subprocess.run(['/usr/sbin/modprobe', '-C', str(empty), '--show-depends', module],
                                     capture_output=True, text=True, timeout=5)
         if dependency.returncode:
