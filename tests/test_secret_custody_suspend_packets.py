@@ -32,7 +32,7 @@ def guard():
         raise RuntimeError('GUEST_PACKET_CI_OPT_IN_REQUIRED')
 
 
-def archive(files):
+def archive(files, systemd=False):
     """Fixed-builder files and guest devices, never host filesystem mounts."""
     entries = {'dev': (b'', stat.S_IFDIR | 0o755, 0, 0),
                'dev/console': (b'', stat.S_IFCHR | 0o600, 5, 1),
@@ -40,6 +40,10 @@ def archive(files):
                'dev/urandom': (b'', stat.S_IFCHR | 0o444, 1, 9),
                'dev/stdin': (b'/proc/self/fd/0', stat.S_IFLNK | 0o777, 0, 0),
                'module-config': (b'', stat.S_IFDIR | 0o755, 0, 0)}
+    if systemd:
+        entries.update({'dev/ttyS0': (b'', stat.S_IFCHR | 0o600, 4, 64),
+                        'dev/zero': (b'', stat.S_IFCHR | 0o666, 1, 5),
+                        'dev/random': (b'', stat.S_IFCHR | 0o444, 1, 8)})
     for name, (content, mode) in files.items():
         path = Path(name)
         if path.is_absolute() or '..' in path.parts or name in entries or not name:
@@ -159,6 +163,7 @@ def payload(path, boottime_guard=False, startup=False, authenticated=False):
     (path / 'initramfs').write_bytes(image)
     print('PACKET_PAYLOAD', json.dumps({'initramfs_sha256': hashlib.sha256(image).hexdigest(),
           'file_count': len(files), 'modules': manifest}), flush=True)
+    return files
 
 
 def command(path, boottime_guard=False, integrated=False, authenticated=False):

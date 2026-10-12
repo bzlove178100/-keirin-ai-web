@@ -1,5 +1,28 @@
 # Disposable guest suspend/boot foundation — no live activation
 
+## Actual systemd closed boot and guest reboot — 2026-10-12
+
+PR #231 is merged at d90198582f3e167c4b1e332436ac9f6dbd4a62f2.
+Its PR and independent main CI passed five workflows/28 regression jobs, with
+70 packet records each, including authenticated SSH across awake/S3 expiry.
+The previous pending checkpoint text is historical; PR #231 has final receipts.
+
+This candidate boots actual systemd as PID1 inside diskless isolated QEMU.
+Fixed units require setup -> sealed closed policy -> internal link activation.
+A separate observer requires real manager dependencies/start/exit timestamps,
+policy identity and IPv4/IPv6 packet results. Missing/invalid policy must fail
+the gate and prevent the link service from executing. The closed case asks
+guest systemd for a forced reboot, requires a guest-origin QMP reset and a new
+boot ID, then repeats policy-before-link measurement from the same immutable
+image. This tests image-backed configuration, not writable production disk
+persistence or the full normal shutdown unit transaction. No host service is
+installed; no host reboot, external NIC, host mount or live activation exists.
+
+Actual guest/CI results are pending; final receipts belong in the PR body.
+SSH/lease/S3 remains independently qualified by PR #231, not yet composed into
+this systemd boot harness. Broader protocol coverage and production host/service
+binding remain. Phase 3 is incomplete. KEIRIN.JP hold and training zero remain.
+
 ## Authenticated management in the integrated guest — 2026-10-12
 
 PR #230 is merged at 5eb1fafad5bd7ed973e88562498424c800e65f20.
