@@ -60,7 +60,7 @@ def archive(files):
     return gzip.compress(bytes(result), mtime=0)
 
 
-def payload(path, boottime_guard=False, startup=False):
+def payload(path, boottime_guard=False, startup=False, authenticated=False):
     files = {}
     def add(source, target=None):
         source = Path(source)
@@ -80,6 +80,34 @@ def payload(path, boottime_guard=False, startup=False):
     add(HERE.parent / 'review/secret_custody_closed_startup.py', 'startup_policy.py')
     add(HERE.parent / 'review/secret_custody_qualification_lease.py', 'lease.py')
     binaries = ['/usr/bin/python3', '/usr/sbin/ip', '/usr/sbin/nft', '/usr/sbin/modprobe']
+    if authenticated:
+        add(HERE / 'fixtures/secret_custody_ssh_guest.py', 'ssh_probe.py')
+        add(HERE / 'fixtures/secret_custody_ssh_echo.py', 'ssh_echo.py')
+        # Download/extract only: never install/start an SSH service on CI's host.
+        packages = path / 'ssh-packages'; packages.mkdir()
+        extracted = path / 'ssh-extracted'; extracted.mkdir()
+        subprocess.run(['apt-get', 'download', 'openssh-client', 'openssh-server'], cwd=packages,
+                       check=True, capture_output=True, timeout=60)
+        receipts = []
+        for deb in sorted(packages.glob('*.deb')):
+            receipts.append({'package': subprocess.run(['dpkg-deb', '-f', str(deb), 'Package', 'Version'],
+                            check=True, capture_output=True, text=True).stdout.strip(),
+                             'sha256': hashlib.sha256(deb.read_bytes()).hexdigest()})
+            subprocess.run(['dpkg-deb', '-x', str(deb), str(extracted)], check=True, timeout=20)
+        for target in ('usr/sbin/sshd', 'usr/bin/ssh', 'usr/bin/ssh-keygen'):
+            source = extracted / target
+            add(source, target); binaries.append(str(source))
+        for name in ('sshd-session', 'sshd-auth'):
+            source = extracted / 'usr/lib/openssh' / name
+            if source.is_file():
+                add(source, str(source.relative_to(extracted))); binaries.append(str(source))
+        add('/bin/sh'); binaries.append('/bin/sh')
+        for source in Path('/lib/x86_64-linux-gnu').glob('libnss_files.so*'): add(source)
+        files['etc/passwd'] = (b'root:x:0:0:Synthetic root:/run/ssh-probe:/bin/sh\nsshd:x:74:74:Privilege separation:/run/sshd:/usr/sbin/nologin\n', 0o644)
+        files['etc/group'] = (b'root:x:0:\nsshd:x:74:\n', 0o644)
+        files['etc/shadow'] = (b'root:x:19000:0:99999:7:::\nsshd:!:19000:0:99999:7:::\n', 0o600)
+        files['etc/nsswitch.conf'] = (b'passwd: files\ngroup: files\nshadow: files\nhosts: files\n', 0o644)
+        print('SSH_PACKAGE_PROVENANCE', json.dumps(receipts), flush=True)
     if boottime_guard:
         subprocess.run(['/usr/bin/gcc', '-static', '-O2', '-Wall', '-Wextra', '-Werror',
                         '-o', str(path / 'boot-guard'), str(HERE / 'fixtures/secret_custody_boottime_guard.c')],
@@ -89,7 +117,8 @@ def payload(path, boottime_guard=False, startup=False):
             raise RuntimeError('BOOTTIME_LOADER_HOST_REFUSAL_REQUIRED')
         add(path / 'boot-guard', 'boot-guard')
         binaries.append('/usr/sbin/tc')
-    for binary in binaries: add(binary)
+    for binary in binaries:
+        if not authenticated or str(path / 'ssh-extracted') not in binary: add(binary)
     add('/usr/sbin/modprobe', '/sbin/modprobe')
     stdlib = Path(sysconfig.get_path('stdlib'))
     if not re.fullmatch(r'/usr/lib/python3\.\d+', str(stdlib)):
@@ -103,6 +132,7 @@ def payload(path, boottime_guard=False, startup=False):
     # Inspect trusted packaged binaries/extensions, then copy only their named
     # runtime libraries. No environment, credentials or host /etc is included.
     output = subprocess.run(['/usr/bin/ldd', *binaries, *extensions], check=True, capture_output=True, text=True, timeout=30).stdout
+    if 'not found' in output: raise RuntimeError('GUEST_SHARED_LIBRARY_MISSING')
     for library in set(re.findall(r'(/[^\s()]+)', output)):
         if Path(library).is_file(): add(library)
     version = os.uname().release
@@ -131,7 +161,7 @@ def payload(path, boottime_guard=False, startup=False):
           'file_count': len(files), 'modules': manifest}), flush=True)
 
 
-def command(path, boottime_guard=False, integrated=False):
+def command(path, boottime_guard=False, integrated=False, authenticated=False):
     if integrated and not boottime_guard:
         raise ValueError('INTEGRATED_BOOTTIME_REQUIRED')
     args = vm.command(path)
@@ -141,6 +171,9 @@ def command(path, boottime_guard=False, integrated=False):
         args[args.index('-append') + 1] += ' kc_boottime_guard=1 end=3'
     if integrated:
         args[args.index('-append') + 1] += ' kc_integrated_probe=1 end=5'
+    if authenticated:
+        if not integrated: raise ValueError('SSH_INTEGRATED_REQUIRED')
+        args[args.index('-append') + 1] += ' kc_ssh_probe=1 end=6'
     return args
 
 
@@ -210,6 +243,14 @@ def outcome(mode, before, after, host_elapsed, boottime_guard=False):
     return result
 
 
+def ssh_evidence(row, initial=False):
+    fields = ('established', 'wrong_keys_rejected', 'wrong_hosts_rejected') if initial else ('established', 'fresh')
+    for key in fields:
+        values = row.get(key)
+        if values != [True, True] or any(type(value) is not bool for value in values):
+            raise RuntimeError('AUTHENTICATED_SSH_EVIDENCE_REQUIRED')
+
+
 def integrated_evidence(sealed, closed, refused, released, before):
     rows = (sealed, closed, refused, released, before)
     if (sealed.get('link_up') is not False or sealed.get('closed_policy') is not True
@@ -226,12 +267,12 @@ def integrated_evidence(sealed, closed, refused, released, before):
             raise RuntimeError('INTEGRATED_EVIDENCE_ORDER_REQUIRED')
 
 
-def case(path, mode, host_boot, boottime_guard=False, integrated=False):
+def case(path, mode, host_boot, boottime_guard=False, integrated=False, authenticated=False):
     if mode not in ('awake', 'suspend'): raise ValueError('FIXED_PACKET_CASE_REQUIRED')
     process = None
     try:
         with (path / 'stderr').open('wb') as errors:
-            process = subprocess.Popen(command(path, boottime_guard, integrated), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
+            process = subprocess.Popen(command(path, boottime_guard, integrated, authenticated), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
                                        cwd=path, env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
             with vm.connect(path / 'qmp', process) as monitor, vm.connect(path / 'serial', process) as serial:
                 qmp, lines = vm.QMP(monitor), vm.Lines(serial)
@@ -244,6 +285,9 @@ def case(path, mode, host_boot, boottime_guard=False, integrated=False):
                     sealed = record(lines, 'startup_sealed', mode, boot)
                     closed = record(lines, 'startup_closed', mode, boot)
                     refused = record(lines, 'startup_release_refused', mode, boot)
+                    if authenticated:
+                        ssh_ready = record(lines, 'ssh_ready', mode, boot)
+                        ssh_evidence(ssh_ready, initial=True)
                     released = record(lines, 'startup_released', mode, boot)
                     before = record(lines, 'before', mode, boot)
                     integrated_evidence(sealed, closed, refused, released, before)
@@ -262,6 +306,10 @@ def case(path, mode, host_boot, boottime_guard=False, integrated=False):
                 after = record(lines, 'after', mode, boot)
                 result = outcome(mode, before, after, time.monotonic() - started, boottime_guard)
                 print('PASS PACKET_FIRST_OBSERVATION_CLASSIFIED', mode, result, flush=True)
+                if authenticated:
+                    ssh_after = record(lines, 'ssh_after', mode, boot)
+                    ssh_evidence(ssh_after)
+                    print('PASS AUTHENTICATED_SSH_EXISTING_AND_FRESH_AFTER_EXPIRY', mode, flush=True)
                 late = record(lines, 'awake_expired', mode, boot)
                 if late.get('qualification') != [False] * 4 or late.get('management') != [True] * 4:
                     raise RuntimeError('ORIGINAL_AWAKE_EXPIRY_REQUIRED')
@@ -285,7 +333,7 @@ def case(path, mode, host_boot, boottime_guard=False, integrated=False):
             (path / name).unlink(missing_ok=True)
 
 
-def run_vm(boottime_guard=False, integrated=False):
+def run_vm(boottime_guard=False, integrated=False, authenticated=False):
     guard()
     host_boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
     host_netns = os.readlink('/proc/self/ns/net')
@@ -296,11 +344,11 @@ def run_vm(boottime_guard=False, integrated=False):
         kernel = subprocess.run(['sudo', '-n', '/usr/bin/cat', str(source)], check=True, capture_output=True, timeout=10).stdout
         if not 1024 * 1024 <= len(kernel) <= 64 * 1024 * 1024: raise RuntimeError('KERNEL_SIZE_BOUND')
         (path / 'vmlinuz').write_bytes(kernel)
-        payload(path, boottime_guard)
+        payload(path, boottime_guard, authenticated=authenticated)
         print('PACKET_VM_PROVENANCE', json.dumps({'kernel_release': os.uname().release,
               'kernel_sha256': hashlib.sha256(kernel).hexdigest(), 'qemu_sha256': hashlib.sha256(Path(vm.QEMU).read_bytes()).hexdigest()}), flush=True)
-        awake_boot, _ = case(path, 'awake', host_boot, boottime_guard, integrated)
-        suspend_boot, measured = case(path, 'suspend', host_boot, boottime_guard, integrated)
+        awake_boot, _ = case(path, 'awake', host_boot, boottime_guard, integrated, authenticated)
+        suspend_boot, measured = case(path, 'suspend', host_boot, boottime_guard, integrated, authenticated)
         if awake_boot == suspend_boot: raise RuntimeError('FRESH_VM_PER_PACKET_CASE_REQUIRED')
     if path.exists() or Path('/proc/sys/kernel/random/boot_id').read_text().strip() != host_boot or os.readlink('/proc/self/ns/net') != host_netns:
         raise RuntimeError('PACKET_VM_CLEANUP_HOST_CONTEXT_REQUIRED')
@@ -309,6 +357,30 @@ def run_vm(boottime_guard=False, integrated=False):
 
 
 class Tests(unittest.TestCase):
+    def test_ssh_evidence_requires_real_boolean_authentication_and_negative_controls(self):
+        good = {'established': [True]*2, 'fresh': [True]*2,
+                'wrong_keys_rejected': [True]*2, 'wrong_hosts_rejected': [True]*2}
+        ssh_evidence(good, initial=True); ssh_evidence(good)
+        for key in good:
+            for value in (None, [True, False], [1, 1]):
+                with self.subTest(key=key, value=value), self.assertRaises(RuntimeError):
+                    ssh_evidence(dict(good, **{key: value}), initial=key != 'fresh')
+
+    def test_ssh_is_guest_only_and_clients_require_pinned_host_key(self):
+        spec = importlib.util.spec_from_file_location('ssh_guest', HERE / 'fixtures/secret_custody_ssh_guest.py')
+        ssh = importlib.util.module_from_spec(spec); spec.loader.exec_module(ssh)
+        with patch.object(ssh.subprocess, 'run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'FIXED_SSH_GUEST_REQUIRED'): ssh.prepare()
+            run.assert_not_called()
+        args = ssh.client_args('192.0.2.1')
+        for option in ('StrictHostKeyChecking=yes', 'IdentitiesOnly=yes', 'IdentityAgent=none',
+                       'GlobalKnownHostsFile=/dev/null', 'PasswordAuthentication=no'):
+            self.assertIn(option, args)
+        self.assertIn('PermitRootLogin forced-commands-only', ssh.configuration())
+        self.assertIn('DisableForwarding yes', ssh.configuration())
+        with self.assertRaises(ValueError): ssh.client_args('example.com')
+        with self.assertRaises(ValueError): command(Path('/tmp/owned'), authenticated=True)
+
     def test_startup_release_never_deletes_gate_with_missing_changed_or_expired_guards(self):
         spec = importlib.util.spec_from_file_location('packet_guest', HERE / 'fixtures/secret_custody_packet_guest.py')
         guest = importlib.util.module_from_spec(spec); spec.loader.exec_module(guest)
@@ -456,4 +528,5 @@ if __name__ == '__main__':
     if sys.argv[1:] == ['--vm']: run_vm()
     elif sys.argv[1:] == ['--boottime-vm']: run_vm(boottime_guard=True)
     elif sys.argv[1:] == ['--integrated-vm']: run_vm(boottime_guard=True, integrated=True)
+    elif sys.argv[1:] == ['--ssh-vm']: run_vm(boottime_guard=True, integrated=True, authenticated=True)
     else: unittest.main(verbosity=2)
