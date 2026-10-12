@@ -1,5 +1,33 @@
 # Work resume handoff
 
+## Interrupted checkpoint refusal — 2026-10-12
+
+PR #236 is merged at cb49614cc051109430dc03a0b456e9b30d875fe3.
+Its exact PR and independent main CI passed five workflows/32 regression jobs
+(main regression 38227805065, persistence job 114739520695). This supersedes
+the historical pending checkpoint below; PR #235's original main failure
+remains part of the evidence.
+
+This candidate rejects orphan receipts, mismatched policy/receipt boots,
+malformed or duplicate receipt keys, and leftover policy/receipt temporary
+files before installing a startup gate. Dangling symlinks are not treated as
+missing state. It never repairs ambiguous checkpoints or grants permission
+from saved receipts. Every storage validation/read failure emits a refusal.
+
+Local tests: 46 passed. A real child process exits after file fsync and before
+rename, leaving a refused temporary file. Injected ENOSPC/EROFS/EIO failures
+cover opening, file sync, replacement, directory sync and readback; no success
+receipt is returned. A failed second write cannot publish the saved marker.
+These are controlled process interruption and simulated I/O errors, not
+physical power-loss, real block-device fault or production crash qualification.
+
+The existing isolated persistence VM job adds four seeded recovery states:
+orphan receipt, mismatched pair, interrupted temporary file and corrupt receipt.
+Exact PR/main CI is pending; final receipts belong in the PR body and private
+progress record. Phase 3 remains incomplete. Abrupt VM/disk failure, actual
+filesystem I/O failure, broader protocols and production binding remain open.
+KEIRIN.JP hold, real training zero and no live activation remain unchanged.
+
 ## Atomic guest readiness publication after main failure — 2026-10-12
 
 PR #235 merged at 1e53a38e0d7354038bceaf52764f08bed9ad306d after
