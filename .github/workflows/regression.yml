@@ -629,6 +629,22 @@ jobs:
           KC_INBOUND_BOOT_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_inbound_boot.py --vm
 
+  custody-inbound-lease:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test inbound lease admission and expiry evidence refusal
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_inbound_lease.py
+      - name: Install isolated guest experiment tools
+        run: sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends qemu-system-x86 nftables iproute2 kmod
+      - name: Verify sealed inbound expiry real S3 and unmasked recovery
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+          KC_INBOUND_LEASE_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_inbound_lease.py --vm
+
   custody-systemd-lease:
     runs-on: ubuntu-24.04
     timeout-minutes: 8

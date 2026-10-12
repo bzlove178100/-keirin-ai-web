@@ -50,13 +50,26 @@ static void guard(void) {
     if (!strstr(buf, " kc_boottime_guard=1 ")) die("BOOTTIME_GUEST_OPT_IN");
     text("/sys/class/dmi/id/sys_vendor", buf, sizeof(buf));
     if (strcmp(buf, "QEMU\n")) die("BOOTTIME_QEMU_REQUIRED");
+#ifdef KC_INBOUND_LEASE_PROBE
+    text("/proc/cmdline", buf, sizeof(buf));
+    if (!strstr(buf, " kc_inbound_boot=closed ") || !strstr(buf, " kc_inbound_lease=1 "))
+        die("INBOUND_LEASE_OPT_IN_REQUIRED");
+#endif
     struct if_nameindex *all = if_nameindex();
     int count = 0;
     if (!all) die("GUEST_INTERFACES_REQUIRED");
     for (struct if_nameindex *p = all; p->if_index; p++, count++)
-        if (strcmp(p->if_name, "lo") && strcmp(p->if_name, "host0")) die("EXTERNAL_INTERFACE_FORBIDDEN");
+        if (strcmp(p->if_name, "lo") && strcmp(p->if_name, "host0")
+#ifdef KC_INBOUND_LEASE_PROBE
+                && strcmp(p->if_name, "host1")
+#endif
+        ) die("EXTERNAL_INTERFACE_FORBIDDEN");
     if_freenameindex(all);
+#ifdef KC_INBOUND_LEASE_PROBE
+    if (count != 3) die("FIXED_GUEST_LINK_REQUIRED");
+#else
     if (count != 2) die("FIXED_GUEST_LINK_REQUIRED");
+#endif
 }
 
 enum { ACCEPT, DROP, IPV4, IPV6, PORTS, LABEL_COUNT };

@@ -22,7 +22,7 @@ def module(name, path):
     return value
 
 
-def units():
+def units(inbound_lease=False):
     def service(action, dependencies=''):
         return ('[Unit]\nDefaultDependencies=no\n' + dependencies +
                 '[Service]\nType=oneshot\nRemainAfterExit=yes\nTimeoutStartSec=90\n'
@@ -34,7 +34,16 @@ def units():
         result['kc-' + action + '.service'] = service(action,
             'Requires=kc-' + dependency + '.service\nAfter=kc-' + dependency + '.service\n')
     result['kc-report.service'] = service('report', 'Wants=kc-check.service\nAfter=kc-check.service\n') + 'StandardInput=tty\n'
+    if inbound_lease:
+        for action, dep in (('lease', 'check'), ('recover', 'lease')):
+            result['kc-' + action + '.service'] = service(action,
+                'Requires=kc-' + dep + '.service\nAfter=kc-' + dep + '.service\n')
+        result['kc-report.service'] = service('report', 'Wants=kc-recover.service\nAfter=kc-recover.service\n') + 'StandardInput=tty\n'
     return result
+
+
+def lease_enabled():
+    return 'kc_inbound_lease=1' in Path('/proc/cmdline').read_text().split()
 
 
 def context():
@@ -92,6 +101,12 @@ def peer(b, i):
     i.t.run(i.t.NFT, 'delete', 'table', 'inet', i.t.r.TABLE)
     # This namespace deliberately also has an unapproved .9 / ::9 address.
     # Do not let IPv6 source selection choose that negative-control identity.
+    qualification = None
+    if lease_enabled():
+        i.t.nft(i.t.r.profile('qualification')); qualification = shape(i)
+        i.t.run(i.t.NFT, 'delete', 'table', 'inet', i.t.r.TABLE)
+        servers = ExitStack()
+        for address in ('192.0.2.2', '2001:db8:1::2'): i.t.listen(servers, address, 443)
     ssh = module('ssh', '/ssh_probe.py').PeerClients(bind_source=True)
     with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as control:
         control.bind(str(b.STATE / 'inbound-control')); control.listen(4)
@@ -100,6 +115,7 @@ def peer(b, i):
             with control.accept()[0] as request:
                 op = json.loads(request.recv(512))
                 if op == ['expected']: result = expected
+                elif op == ['qualification'] and qualification: result = qualification
                 elif len(op) == 2 and op[0] == 'fresh' and op[1] in i.FLOWS:
                     result = i.fresh(i.FLOWS[op[1]])
                 elif len(op) == 2 and op[0] == 'route':
@@ -142,6 +158,7 @@ def packet_evidence(row, result, before, after, allowed):
 
 
 def matrix(b, i, case):
+    (b.STATE / 'listeners').unlink(missing_ok=True)
     process = subprocess.Popen(['/usr/bin/python3', '-I', '-B', '/inbound_boot.py', 'listen'],
                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=sys.stderr)
     rows = []
@@ -174,6 +191,9 @@ def emit(b, event, case, **values):
 def main(action):
     b, i, case = context()
     g = module('packets', '/probe.py')
+    if action in ('lease', 'recover'):
+        if not lease_enabled() or case != 'closed': raise RuntimeError('INBOUND_LEASE_OPT_IN_REQUIRED')
+        module('inbound_lease', '/inbound_lease.py').main(action, b, i, g); return
     if action == 'peer': peer(b, i); return
     if action == 'listen': listeners(b, i); return
     if action == 'setup':
@@ -245,6 +265,7 @@ def main(action):
             if not result['identity_unchanged']: raise RuntimeError('AUTHENTICATED_POLICY_IDENTITY_REQUIRED')
         b.write('check', result)
     elif action == 'report':
+        if lease_enabled(): module('inbound_lease', '/inbound_lease.py').completion(b, i, g)
         states = {n: b.properties(g, 'kc-' + n) for n in ('setup', 'gate', 'link', 'check')}
         emit(b, 'observed', case, states=states, links=[up(i, n) for n in ('host0', 'host1')],
              link_entered=(b.STATE / 'link-entered').exists(),
@@ -253,6 +274,7 @@ def main(action):
              checked=b.read('check') if (b.STATE / 'check').exists() else None,
              activation_allowed=False)
         if sys.stdin.readline(8).strip() != 'clean': raise RuntimeError('FIXED_INBOUND_CLEANUP_REQUIRED')
+        if lease_enabled(): g.run('/usr/bin/systemctl', 'stop', 'kc-recover.service', 'kc-lease.service')
         pid = b.read('setup')['peer_pid']
         g.run('/usr/bin/systemctl', 'stop', 'kc-check.service', 'kc-link.service', 'kc-gate.service', 'kc-setup.service')
         for table in (i.t.r.TABLE, i.OBS): i.t.run(i.t.NFT, 'delete', 'table', 'inet', table, success=False)
