@@ -38,7 +38,8 @@ def payload(path):
     if refused.returncode != 2 or refused.stderr != b'VM_GUEST_PID1_REQUIRED\n': raise RuntimeError('HOST_REFUSAL_REQUIRED')
     add(path / 'systemd-init', 'init')
     add(HERE / 'fixtures/secret_custody_boot_guest.py', 'boot_probe.py')
-    binaries = ['/usr/lib/systemd/systemd', '/usr/lib/systemd/systemd-shutdown', '/usr/bin/systemctl']
+    binaries = ['/usr/lib/systemd/systemd', '/usr/lib/systemd/systemd-executor',
+                '/usr/lib/systemd/systemd-shutdown', '/usr/bin/systemctl']
     for binary in binaries: add(binary)
     dependencies = subprocess.run(['/usr/bin/ldd', *binaries], check=True, capture_output=True, text=True, timeout=10).stdout
     if 'not found' in dependencies: raise RuntimeError('SYSTEMD_LIBRARY_MISSING')
@@ -52,7 +53,9 @@ def payload(path):
     image = p.archive(files, systemd=True)
     (path / 'initramfs').write_bytes(image)
     print('SYSTEMD_BOOT_PROVENANCE', json.dumps({'initramfs_sha256': hashlib.sha256(image).hexdigest(),
-          'systemd_sha256': hashlib.sha256(Path(binaries[0]).read_bytes()).hexdigest(),
+          'binaries': {name: hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in binaries},
+          'kernel_release': os.uname().release, 'kernel_sha256': hashlib.sha256((path / 'vmlinuz').read_bytes()).hexdigest(),
+          'qemu_sha256': hashlib.sha256(Path(vm.QEMU).read_bytes()).hexdigest(),
           'version': subprocess.run([binaries[0], '--version'], check=True, capture_output=True, text=True).stdout.splitlines()[0]}), flush=True)
 
 
@@ -72,7 +75,8 @@ def record(lines, event, mode):
         except Exception:
             print('SYSTEMD_BOOT_DIAGNOSTIC ' + '\n'.join(diagnostic)[-6000:], flush=True); raise
         diagnostic.append(line[-1000:]); diagnostic = diagnostic[-40:]
-        if line.startswith('VM_FAIL') or 'Kernel panic' in line: raise RuntimeError(line)
+        if line.startswith('VM_FAIL') or 'Kernel panic' in line or 'Freezing execution' in line:
+            raise RuntimeError('SYSTEMD_BOOT_FATAL ' + '\n'.join(diagnostic)[-6000:])
         if not line.startswith('SYSTEMD_BOOT_RECORD '): continue
         row = json.loads(line[len('SYSTEMD_BOOT_RECORD '):])
         if row.get('event') != event or row.get('mode') != mode or row.get('pid1') != 'systemd': raise RuntimeError('BOOT_RECORD_SEQUENCE_REQUIRED')
