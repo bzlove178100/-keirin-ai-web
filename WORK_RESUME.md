@@ -1,5 +1,67 @@
 # Work resume handoff
 
+### PR #247 initial diagnostic head / sibling CI budget failure
+
+Initial diagnostic head 1fdb7a8e566548571d323afaea78b5c4997f3547 passed the
+previously failing legacy persistence job 115183656727 through all eight cases.
+QMP greeting refusal did not recur there; its historical cause remains unknown.
+PR runtime 38363694438 / job 115183656780 stopped at 07:46:20Z after 600 seconds
+while regression 38363694272 was still running (43/44 successful at observation).
+The same coordination limit also blocked PR #246 main runtime 38362990933 /
+115181377008; main regression ultimately ended 43 success / 1 QMP failure.
+
+Changed condition: increase only the sibling workflow observation budget from
+10 to 20 minutes and its outer Actions job cap from 15 to 25 minutes, accommodating
+runner queues and the expanded 44-job suite. Still require exact SHA/event/branch,
+completed success for every required sibling; completed failure blocks immediately,
+and missing/pending never become success at the new finite deadline. No automatic
+workflow retry, VM stage deadline, 8-second lease or guest behavior change. A test
+now proves real sibling success after 660 seconds is accepted, failure at that
+same point is refused, and pending/missing expires at 1200 seconds. Latest changed
+head must pass all PR workflows before merge and independent main checks afterward.
+
+## PR #246 main QMP observation failure / diagnostic candidate — 2026-10-13
+
+PR #246 merged as 6b252fdccf520ff28938163608a422b9687a3734, tree
+68235d414772d2713eb3317714449fb1b617332b, after exact head
+304c374e302a8391251fbbda691e576acd96301e passed all five PR workflows:
+regression 38361863327 (44/44), runtime 38361863334, PostgreSQL 38361863356,
+UI 38361863517 and AWS 38361863438. PR jobs 115177702975 (all seven invalid
+states), 115177702922 (actual ENOSPC), 115177703076 (actual EROFS),
+115177702720 (normal) and 115177703092 (crash) all passed with inspected logs.
+The fault jobs verified unchanged same-disk partial pairs refused on fresh boots.
+
+Independent main regression 38362990916 failed at job 115181378548,
+custody-persistence, on 2026-10-13T07:32:54Z: QMP_GREETING_REQUIRED in QMP.__init__,
+before query-block, startup, storage reads or qualification. The failing case was
+the legacy valid seed, kernel 6.17.0-1022-azure, QEMU 8.2.2, systemd 255.4.
+Other main jobs are still running at this candidate's creation. Main invalid-state
+job 115181378425 already passed. Do not report main as all green or silently rerun
+the unchanged failed workflow. The original failure remains historical evidence.
+
+The old observer parsed and discarded the first JSON frame before checking for
+QMP, so the failure receipt does not reveal that frame. It establishes that the
+membership check failed, not why. Event ordering is only a hypothesis; malformed
+peer output is not ruled out. No root cause or permanent fix is claimed.
+
+This diagnostic candidate preserves a bounded, JSON-escaped first frame when
+handshake admission fails. Invalid JSON and non-object frames are also explicitly
+rejected. It still rejects a leading event/return before any capability command;
+it does not skip input, reconnect, retry, extend deadlines, or change guest policy.
+New tests prove rejection without negotiation, bounded evidence, and correct
+handling of fragmented greeting plus a buffered capability reply. 68 targeted
+local tests passed, including 9 QMP/VM supervisor tests (3 new).
+
+Changed-condition validation: execute the new diagnostic head through normal PR
+CI and independent main CI only after all PR checks pass. If greeting failure
+recurs, stop and inspect its first_line evidence; do not retry unchanged. If it
+does not recur, report revalidation success separately from the still-unresolved
+original first-frame cause. New PR/main results are PENDING.
+
+The prior next-feature work is deferred while this observation issue is checked.
+All real acquisition/training, production prediction, DB writes, live activation,
+real credentials and cloud mutations remain OFF; KEIRIN.JP HOLD remains active.
+
 ## PR #245 verified baseline / inbound storage-failure candidate — 2026-10-13
 
 Resumption rechecked main 4bf4941ecb707db430fb2d8414df0a4771f055f7 and no open

@@ -23,6 +23,9 @@ from agent_core import BoundRuntime
 from tools.agent_github_readonly_host import GitHubReadOnlyBridge, runtime_manifest
 from tools.agent_github_sha_bridge import ShaPinnedGitHubReadOnlyBridge
 
+# Overall sibling workflow observation budget, including runner queue time.
+# This does not alter any guest/qualification deadline or accept pending CI.
+CI_WAIT_SECONDS = 20 * 60
 REPOSITORY = "bzlove178100/-keirin-ai-web"
 REQUIRED = {
     ".github/workflows/regression.yml": 365001481,
@@ -98,7 +101,7 @@ class CandidateBridge(ShaPinnedGitHubReadOnlyBridge):
                 or set(evidence.get("files") or {}) != set(required)
                 or any(f.get("verified_nonempty_text") is not True for f in evidence["files"].values())):
             raise RuntimeError("candidate_observation_required")
-        deadline = self.monotonic() + 600
+        deadline = self.monotonic() + CI_WAIT_SECONDS
         while True:
             states = self._snapshot()
             verified = all(r and r["status"] == "completed" and r["conclusion"] == "success" for r in states.values())
