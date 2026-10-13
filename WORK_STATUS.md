@@ -1,5 +1,43 @@
 # Work status
 
+## PR #243 main observation failure / stage-observation correction — 2026-10-13
+
+PR #243 merged as b1c9a6fffca12e0f00153e5b8df63dd782226782 (tree
+90d42d290d5daa0bcfaa1ab2fe7049ae08f9b807). Its corrected PR head
+3e9ec7132aa2def784d6a9e619ffe0a1f62a6014 passed all five workflows, including
+regression 38326427654 (39/39), both normal-restart cases and corrected peer-link
+cleanup. The earlier cleanup failure below remains part of the evidence history.
+
+Independent main regression 38327203303 failed awake restart job 115068529971.
+Boot 6b1c6985-3c3b-4eea-ad0d-02ff2adaa2b1 completed the full startup/authentication/
+expiry/unmasked recovery cycle and actual ordered systemd shutdown. Both links
+went down while the peer was alive; the restored profile stayed unchanged with
+expired guards absent; the peer and SSH stopped. QMP confirmed guest-origin RESET.
+The next matrix record did not arrive within the aggregate 100-second deadline;
+the only retained serial diagnostic was the kernel restart message. This does
+NOT prove either a policy failure or a hung reboot. On the successful corrected
+PR suspend case, RESET-to-matrix already took about 99.5 seconds (second guest
+monotonic matrix time 97.166s). The old observer combined firmware/kernel, setup,
+gate, link and the exhaustive matrix into one budget, hiding startup progress.
+
+The correction adds opt-in setup-entered/setup-completed/gate-completed/link-
+completed records to the restart guest. The host requires this exact sequence,
+a fresh same boot ID and finite ordered monotonic clocks, with a separate fixed
+100-second observation budget at each stage and at the existing matrix record.
+This increases the aggregate startup observation allowance; it does not change
+any guest service's 90-second limit, RPC's 30-second limit, immutable 8-second
+lease, <3-second live proof, <7-second resumed probe or authentication criteria.
+Missing/stalled stages still fail; there is no reset, retry, fallback or deadline
+extension based on noisy progress. The fixed workflow job bound also remains.
+
+Local inbound suite: 25 tests passed, including deterministic >100s aggregate
+progress, wrong stage, stale/mixed boot, reversed/nonfinite clock, activation and
+stalled-channel rejection. This is a changed-condition diagnostic/correction,
+not an unchanged rerun; actual new PR/main VM evidence remains pending. If it
+fails, use the last completed stage to investigate, without marking main green.
+Durable wider-profile configuration and crash recovery remain unverified. All
+production/training/acquisition controls and the KEIRIN.JP HOLD remain in force.
+
 ## PR #243 cleanup race correction — 2026-10-13
 
 Initial head 45d8fec85b58d8b2404c6254ebe82bd8c0c7e48e / regression 38325699996 /
