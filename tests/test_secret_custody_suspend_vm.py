@@ -82,8 +82,15 @@ class Lines:
 class QMP:
     def __init__(self, conn):
         self.conn, self.lines, self.events, self.number = conn, Lines(conn), [], 0
-        if "QMP" not in json.loads(self.lines.line(time.monotonic() + 5)):
-            raise RuntimeError("QMP_GREETING_REQUIRED")
+        raw = self.lines.line(time.monotonic() + 5)
+        try:
+            greeting = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("QMP_GREETING_REQUIRED first_line=" + json.dumps(raw[:2048])) from exc
+        if not isinstance(greeting, dict) or "QMP" not in greeting:
+            # Preserve the first frame instead of hiding the evidence. Do not
+            # skip events, reconnect, extend the deadline or negotiate anyway.
+            raise RuntimeError("QMP_GREETING_REQUIRED first_line=" + json.dumps(raw[:2048]))
         self.call("qmp_capabilities")
 
     def read(self, deadline):
@@ -300,6 +307,35 @@ class Tests(unittest.TestCase):
             with patch.object(select, "select", return_value=([conn], [], [])):
                 with self.assertRaisesRegex(RuntimeError, message):
                     Lines(conn).line(time.monotonic() + 1)
+
+    def test_qmp_greeting_failure_retains_first_frame_without_negotiation(self):
+        for raw in ('{"event":"RESET"}', '{"return":{}}', '[]', 'null', '"QMP"', '{broken'):
+            conn = Mock()
+            with patch.object(Lines, 'line', side_effect=[raw, '{"QMP":{}}']) as read:
+                with self.assertRaisesRegex(RuntimeError, 'QMP_GREETING_REQUIRED') as caught:
+                    QMP(conn)
+                self.assertIn('first_line=' + json.dumps(raw), str(caught.exception))
+                self.assertEqual(read.call_count, 1)
+                conn.sendall.assert_not_called()
+
+    def test_qmp_failure_diagnostic_is_bounded_and_escaped(self):
+        raw = json.dumps({'event': 'x'*6000 + '\ncontrol'})
+        conn = Mock()
+        with patch.object(Lines, 'line', return_value=raw):
+            with self.assertRaises(RuntimeError) as caught: QMP(conn)
+        detail = str(caught.exception).split('first_line=', 1)[1]
+        self.assertEqual(json.loads(detail), raw[:2048])
+        self.assertNotIn('\n', detail)
+        conn.sendall.assert_not_called()
+
+    def test_qmp_fragmented_greeting_and_buffered_reply_negotiate_once(self):
+        conn = Mock()
+        conn.recv.side_effect = [b'{"QM', b'P":{}}\r\n{"return":{},"id":1}\r\n']
+        with patch.object(select, 'select', return_value=([conn], [], [])):
+            qmp = QMP(conn)
+        self.assertEqual(qmp.number, 1)
+        conn.sendall.assert_called_once_with(b'{"execute": "qmp_capabilities", "id": 1}\n')
+        self.assertEqual(qmp.events, [])
 
     def test_guest_record_rejects_nonfinite_clock_wrong_event_and_interface(self):
         good = {"event": "boot", "boot": "12345678-1234-1234-1234-123456789abc",
