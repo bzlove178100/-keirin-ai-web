@@ -1,17 +1,17 @@
 name: Claude task bridge (opt-in, disabled by default)
 
-# Only an owner-applied issue label can request a run after a separate
+# Only an exact owner-posted issue comment can request a run after a separate
 # repository variable is deliberately enabled. This does not schedule jobs.
 on:
-  issues:
-    types: [labeled]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
 
 jobs:
   claude-task:
-    if: ${{ github.event.action == 'labeled' && github.event.label.name == 'claude-ready' && github.event.sender.login == 'bzlove178100' && github.event.issue.state == 'open' && vars.CLAUDE_TASK_BRIDGE_ENABLED == 'true' }}
+    if: ${{ github.event.action == 'created' && github.event.comment.body == '/claude-run' && github.event.sender.login == 'bzlove178100' && github.event.issue.state == 'open' && github.event.issue.pull_request == null && vars.CLAUDE_TASK_BRIDGE_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     concurrency:
@@ -39,7 +39,6 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          label_trigger: claude-ready
           track_progress: true
           base_branch: main
           claude_args: "--max-turns 8"
