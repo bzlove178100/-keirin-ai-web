@@ -665,6 +665,27 @@ jobs:
           KC_INBOUND_RESTART_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_inbound_restart.py --vm ${{ matrix.mode }}
 
+  custody-inbound-persistence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [normal, crash]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test inbound durable admission crash refusal and host guards
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_inbound_persistence.py
+      - name: Install isolated guest experiment tools
+        run: sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends qemu-system-x86 nftables iproute2 kmod e2fsprogs
+      - name: Verify durable inbound reboot or actual same-disk crash refusal
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+          KC_PERSISTENCE_CI: '1'
+          KC_INBOUND_PERSISTENCE_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_inbound_persistence.py --vm ${{ matrix.mode }}
+
   custody-systemd-lease:
     runs-on: ubuntu-24.04
     timeout-minutes: 8

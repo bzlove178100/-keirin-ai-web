@@ -25,13 +25,13 @@ OLD_BOOT = '00000000-0000-4000-8000-000000000001'
 NEW_BOOT = '00000000-0000-4000-8000-000000000002'
 
 
-def disk(path, case):
+def disk(path, case, *, profile='tcp443-closed'):
     p.guard()
     if os.environ.get('KC_PERSISTENCE_CI') != '1': raise RuntimeError('PERSISTENCE_OPT_IN_REQUIRED')
     if case not in CASES: raise ValueError('FIXED_DURABLE_CASE_REQUIRED')
     seed = path / 'seed'; seed.mkdir(mode=0o700)
     if case != 'missing':
-        value = d.policy()
+        value = d.policy(profile=profile)
         if case == 'stale': value['lease'] = dict(boot='00000000-0000-4000-8000-000000000001', deadline_ns=10**15)
         (seed / 'policy.json').write_text('{broken' if case == 'corrupt' else json.dumps(value))
     if case in ('orphan', 'mismatch', 'receipt-corrupt'):
