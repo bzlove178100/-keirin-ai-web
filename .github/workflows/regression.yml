@@ -645,6 +645,26 @@ jobs:
           KC_INBOUND_LEASE_CI: '1'
         run: /usr/bin/python3 -I -B tests/test_secret_custody_inbound_lease.py --vm
 
+  custody-inbound-restart:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [awake, suspend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test restored-profile shutdown ordering and host refusal
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_inbound_restart.py
+      - name: Install isolated guest experiment tools
+        run: sudo -n apt-get update && sudo -n apt-get install -y --no-install-recommends qemu-system-x86 nftables iproute2 kmod
+      - name: Verify normal reboot and fresh sealed inbound expiry recovery
+        env:
+          KC_SUSPEND_VM_CI: '1'
+          KC_SUSPEND_PACKET_CI: '1'
+          KC_INBOUND_RESTART_CI: '1'
+        run: /usr/bin/python3 -I -B tests/test_secret_custody_inbound_restart.py --vm ${{ matrix.mode }}
+
   custody-systemd-lease:
     runs-on: ubuntu-24.04
     timeout-minutes: 8

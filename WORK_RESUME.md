@@ -1,5 +1,85 @@
 # Work resume handoff
 
+## PR #243 cleanup race correction — 2026-10-13
+
+Initial head 45d8fec85b58d8b2404c6254ebe82bd8c0c7e48e / regression 38325699996 /
+existing inbound-lease job 115063731642 failed while cleaning its completed awake
+cycle. Startup matrix, authentication, expiry, restoration and recovery records
+had passed. The report's interface-name check saw host0, but the following
+`ip link del host0` failed with Cannot find device. The peer namespace is stopped
+immediately before this cleanup and its destruction asynchronously removes veth
+pairs: the existing check/delete sequence cannot assume the link still exists.
+This does not establish why the race appeared on this runner rather than earlier
+runs; no policy or expiry failure was observed in this trace.
+
+Cleanup now accepts a failed deletion ONLY when a fresh namespace query proves
+the owned link absent. A still-present link or a successful command that leaves
+it present remains a failure, and the final empty-rule/lo-only/no-peer checks
+remain. No blind deletion retry is added. The new normal-shutdown observer also
+uses a single full link-state snapshot instead of querying a name and then a
+potentially disappearing link separately. A local regression simulates the
+between-check-and-delete disappearance, persistent failure, false removal success,
+already-absent links and refusal of unowned names. Local total: 53 targeted tests
+(inbound 24, systemd 14, packet 15). Actual corrected CI is pending. Original
+failure retained; timing limits and packet/authentication criteria are unchanged.
+
+The original new restart jobs did complete successfully before correction:
+awake 115063731879 (boots 175a1eea-8d0b-49d7-8446-25c00862352f ->
+891271e1-5ee8-4b6c-ac3d-7f0aad7d0e9e) and suspend 115063731951 (boots
+3f1fe44c-e578-457e-8259-ae382c7210b4 -> c00cc4b4-b953-477b-a359-da67e4ac7aa2).
+Both showed both-links-down while the peer was alive, unchanged unmasked profile,
+actual reverse service stops, normal reboot then poweroff, fresh key digests and
+full cycle revalidation. These successes do not override the failed existing
+cleanup job or qualify the changed correction head without fresh CI.
+
+## PR #242 verified baseline and inbound normal-restart candidate — 2026-10-13
+
+Current main rechecked: ba5fd544d66964422d1cdc29fd02dd31437537e3; PR #242 merged,
+no open PRs at continuation. PR head 76e65c1d76a239aa9a7e5bcd94ccb5a8460b3055
+and main share tree 7def3964a5bfe8983e5f2e22fb6eeb5ae580dc31. PR #242's final
+receipt supersedes the older candidate UNVERIFIED text below. All five PR and
+independent main workflows passed, regression 37/37 each, plus main Pages.
+PR regression 38322256249 / inbound lease job 115052818578; main regression
+38323129977 / inbound lease job 115055563782. Main awake and real-S3 boots both
+proved expired existing/fresh qualification denial, authenticated SSH continuity,
+exact maintenance restoration, and all 28 input paths / 16 loopback controls
+after expired guards were removed. Main S3 boot 2937eb7b-f5d8-41b2-81af-936e1079a98e
+completed its first resumed packet probes 2.810746412 monotonic seconds after
+lease start, within the unchanged 7-second bound. No failed candidate runs or
+unchanged retries were needed for PR #242.
+
+Next candidate composes the verified inbound cycle with normal guest-manager
+shutdown/reboot and another complete fresh-boot cycle. Two separate CI matrix
+jobs cover awake and actual S3 expiry. Each job uses one diskless QEMU process,
+normal reboot.target followed by poweroff.target, actual guest-origin QMP events,
+and a zero exit after poweroff. No forced reboot or QMP reset is used. The
+8-second immutable deadline, <3-second live window, <7-second first-resume window,
+90-second services and existing observation bounds remain unchanged.
+
+Before shutdown, the restored wide profile must match exactly with the expired
+guards already absent. The link service closes BOTH host0/host1 while the peer
+still exists, repeats closed qualification probes, and retains the full inet
+profile. Actual inactive timestamps must show the reverse service order before
+the shutdown checker permits final.target. Peer and SSH processes must be gone.
+After normal reboot, fresh empty startup state, a distinct boot ID and newly
+generated public host/client key digests are required. The complete original
+startup matrix, SSH positive/negative authentication, expiry and unmasked
+recovery matrix run again. Key digests ignore comments; no private keys leave
+the guest. Different digests are not a claim of an old-key revocation test.
+
+Local: 52 targeted tests pass (inbound 23, systemd 14, packet 15). New refusal
+cases cover stale/unexpired recovery, partial link shutdown, changed or masked
+profiles, incomplete/reordered service stops and reused boot/key evidence.
+Actual normal reboot/poweroff composition, exact PR CI and independent main CI
+remain pending for this candidate. Next: inspect actual guest evidence, fix any
+observed failure without blind retries, merge only a verified head, then inspect
+main CI. Durable on-disk recovery and crash recovery of this wider profile remain
+separate unverified compositions; this diskless reboot test does not establish them.
+
+Real training 0; DB writes, production prediction, external acquisition, live
+activation and real credentials remain OFF. KEIRIN.JP HOLD remains active. This
+is synthetic common-agent recovery work, not a product completion percentage.
+
 ## Inbound expiry/recovery composition candidate — 2026-10-13
 
 Continuation baseline rechecked: main 9511be129821ef96ebc91c8dff4cc9320a2a1a90,
