@@ -1,5 +1,50 @@
 # Work resume handoff
 
+## PR #247 verified baseline / suspend then storage-failure candidate — 2026-10-13
+
+Resumption rechecked current main 57e1bdd50214a72973cf6da07a06c8e29d2e72b1,
+no open PRs and a clean local tree. PR #247 head b16ddb0d7bcf238a75a3d40b05368ade376e239c
+and main share tree 88dc7d00ef9e7f5dd026d80b0ac58a4af2fbfe72. Its final PR receipt
+supersedes the historical pending text below. All five PR workflows passed;
+regression 38365085660 passed 44/44. All five independent main workflows passed:
+regression 38366434687 (44/44), runtime 38366434313, PostgreSQL 38366434464,
+UI 38366434461 and AWS 38366434459; Pages 38366435052 also passed. Runtime
+job 115192557247 explicitly verified the exact main SHA and successful siblings.
+The original PR #246 QMP refusal and the initial PR #247 coordinator timeout
+remain historical failures, not reclassified successes. QMP's original first
+frame was not captured; its cause is unresolved. Inspect new bounded first_line
+evidence if it recurs, and do not retry unchanged or skip a greeting.
+
+The next candidate adds two fixed isolated cases: enospc-suspend and erofs-suspend.
+Each first completes actual QMP-observed S3 and wakeup, original 8-second BOOTTIME
+expiry, authenticated SSH controls, and full unmasked inbound restoration. The
+reboot handler then encounters actual ENOSPC or EROFS on the sole synthetic
+64 MiB ext4 policy volume after expired-receipt fsync. It must retain the exact
+closed profile and partial pair, publish neither save-success nor shutdown intent,
+and leave the guest running with no new RESET/SHUTDOWN event. The supervisor
+SIGKILLs only its QEMU and starts a fresh awake recovery guest on the unchanged
+image, requiring the same bytes to be refused before any auth/lease execution.
+This is failure during the post-S3 save preceding a requested normal reboot;
+it does not claim a successful normal reboot following a failed save.
+
+Awake and suspend evidence must match their actual mode and distinct expiry
+outcome; negative recovery remains awake. Unit tests prove restart/halt cannot
+publish a request or call systemctl after either save error. Existing immutable
+lease, per-stage bounds, profile checks, isolated volume/NIC/host guards and
+finite 20-minute overall CI observer are retained. No repair, permission replay,
+real credentials, cloud mutation, external acquisition or live host operation.
+
+Local: 82 targeted tests passed, including 21 inbound persistence tests (4 new),
+plus modified shutdown-intent rejection coverage. Diff check passed. New PR VM
+and independent main results are PENDING. Regression expands from 44 to 46 jobs;
+inspect both new S3/fault jobs and all existing results before merging exact head.
+If a failure occurs, retain head/run/job and investigate before changing/retrying.
+
+Remaining unqualified scopes include storage faults earlier in a live lease,
+arbitrary torn writes/host power loss, and real hosted deployment. No production
+readiness or overall completion percentage is inferred. KEIRIN.JP HOLD, real
+training 0, production predictions/DB writes/acquisition/live activation OFF remain.
+
 ### PR #247 initial diagnostic head / sibling CI budget failure
 
 Initial diagnostic head 1fdb7a8e566548571d323afaea78b5c4997f3547 passed the

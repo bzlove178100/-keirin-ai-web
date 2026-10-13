@@ -52,7 +52,8 @@ def context(*, readonly=False):
     if (flags.count('kc_inbound_boot=' + expected) != 1
             or flags.count('kc_inbound_restart=1') != 1 or flags.count('kc_inbound_lease=1') != 1
             or persist.crash_mode() is not None or persist.fault_mode() is not None
-            or (current != 'normal' and b.composition() != 'awake') or not mounted):
+            or (b.composition() not in ('awake', 'suspend')
+                or current not in ('normal', *FAULTS) and b.composition() != 'awake') or not mounted):
         raise RuntimeError('FIXED_MOUNTED_INBOUND_COMPOSITION_REQUIRED')
     return persist, b, g, ClosedProfile(durable), current
 
@@ -200,6 +201,7 @@ def observe_fault(mode, exc):
     _, blocked = module('restart', '/inbound_restart.py').intact(b, h, g, i)
     if (exc.errno != FAULTS[mode] or prepared['mode'] != mode or prepared['boot'] != b.boot()
             or snapshot != prepared['crash_state'] or (b.STATE / 'saved').exists()
+            or (b.STATE / 'inbound-shutdown-request').exists()
             or not persist.mounted(mount_mode) or blocked != [False, False]
             or any(os.path.lexists(persist.ROOT / (name + '.next')) for name in ('policy.json', 'receipt.json'))):
         raise RuntimeError('EXACT_INBOUND_WRITE_ERROR_WITHOUT_SUCCESS_REQUIRED')
@@ -207,4 +209,5 @@ def observe_fault(mode, exc):
                 allocated_bytes=prepared['allocated_bytes'], allocator_errno=prepared['allocator_errno'],
                 after=helper.filesystem(persist.ROOT, mount_mode))
     emit(b, 'crash-ready', crash_state=snapshot, qualification=blocked, profile_unchanged=True,
-         guards_absent=True, saved_marker_present=False, filesystem_fault=info)
+         guards_absent=True, saved_marker_present=False, filesystem_fault=info,
+         composition=b.composition(), shutdown_request_present=False)
