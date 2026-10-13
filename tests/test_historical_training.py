@@ -96,6 +96,69 @@ class HistoricalTrainingTests(unittest.TestCase):
         b["trifecta_outcomes"] = [[3, 2, 1]]
         self.assertEqual(plan([a, b], [review(a)])["partition_counts"]["train"], 0)
 
+    def test_first_record_review_cannot_cover_a_different_source_in_any_partition(self):
+        for count in (7, 9):
+            for day in (1, 3, 4):
+                a = fixture(day, count)
+                b = copy.deepcopy(a)
+                b["sources"] = ["another-synthetic-source"]
+                for records in ([a, b], [b, a]):
+                    with self.subTest(count=count, day=day, first=records[0]["sources"]):
+                        before = copy.deepcopy(records)
+                        result = plan(records, [review(records[0])])
+                        self.assertEqual(result["partition_counts"], {"train": 0, "validation": 0, "test": 0})
+                        self.assertEqual(result["excluded"], [{"race_id": a["race_id"],
+                            "reasons": ["source_variants_require_review"]}])
+                        self.assertEqual(result["training_runs"], 0)
+                        self.assertEqual(records, before)
+
+    def test_changed_source_receipt_missing_source_and_scalar_types_cannot_share_review(self):
+        a = fixture(1)
+        a["sources"] = [{"kind": "synthetic", "receipt": {"sha256": "a" * 64, "version": 1}}]
+        for source in ([{"kind": "synthetic", "receipt": {"sha256": "b" * 64, "version": 1}}],
+                       [{"kind": "synthetic", "receipt": {"sha256": "a" * 64, "version": True}}],
+                       [], None, "synthetic"):
+            b = copy.deepcopy(a)
+            b["sources"] = source
+            result = plan([a, b], [review(a)])
+            self.assertEqual(result["partition_counts"]["train"], 0)
+            self.assertIn("source_variants_require_review", result["excluded"][0]["reasons"])
+        b.pop("sources")
+        self.assertIn("source_variants_require_review", plan([a, b], [review(a)])["excluded"][0]["reasons"])
+
+    def test_exact_duplicates_and_reordered_source_object_keys_still_deduplicate(self):
+        a = fixture(1)
+        a["sources"] = [{"kind": "synthetic", "receipt": {"sha256": "a" * 64, "version": 1}}]
+        b = copy.deepcopy(a)
+        b["sources"] = [{"receipt": {"version": 1, "sha256": "a" * 64}, "kind": "synthetic"}]
+        result = plan([a, b, copy.deepcopy(a)], [review(a)])
+        self.assertEqual(result["partition_counts"]["train"], 1)
+        self.assertEqual(result["excluded"], [])
+        self.assertEqual(result["partitions"]["train"][0]["record_sha256"], digest(a))
+
+    def test_source_variants_block_before_model_import_or_output_creation(self):
+        records = []
+        reviews = []
+        for day in range(1, 5):
+            a = fixture(day, 9 if day % 2 else 7)
+            b = copy.deepcopy(a)
+            b["sources"] = ["another-synthetic-source"]
+            records.extend([a, b])
+            reviews.append(review(a))
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root) / "models"
+            with self.assertRaisesRegex(ValueError, "insufficient_chronological_partitions"):
+                train(plan(records, reviews), output)
+            self.assertFalse(output.exists())
+
+    def test_source_variant_quarantine_does_not_discard_other_reviewed_races(self):
+        records = [fixture(day) for day in range(1, 5)]
+        alternate = copy.deepcopy(records[0])
+        alternate['sources'] = ['another-synthetic-source']
+        result = plan(records + [alternate], [review(r) for r in records])
+        self.assertEqual(result['partition_counts'], {'train': 1, 'validation': 1, 'test': 1})
+        self.assertEqual([x['race_id'] for x in result['excluded']], [records[0]['race_id']])
+
     def test_dead_heat_preserved_for_later_contract(self):
         r = fixture(1)
         r.update(dead_heat=True, trifecta_outcomes=[[1, 2, 3], [2, 1, 3]])

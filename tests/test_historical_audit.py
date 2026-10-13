@@ -28,6 +28,20 @@ class HistoricalAuditTests(unittest.TestCase):
         result = audit([a, b])
         self.assertEqual(result["unique_races"], 1)
         self.assertEqual(result["identical_duplicates"], 1)
+        self.assertEqual(result["source_variant_races"], 1)
+        self.assertIn("source_variants_require_review", result["records"][0]["reasons"])
+
+    def test_source_variants_are_counted_once_even_alongside_label_conflicts(self):
+        a = example()
+        b, c = copy.deepcopy(a), copy.deepcopy(a)
+        b["sources"] = ["second-synthetic-source"]
+        c.update(sources=["third-synthetic-source"], trifecta_outcomes=[[3, 2, 1]])
+        result = audit([a, b, c, a])
+        self.assertEqual(result["unique_races"], 1)
+        self.assertEqual(result["source_variant_races"], 1)
+        self.assertEqual(result["conflicting_races"], 1)
+        self.assertIn("source_variants_require_review", result["records"][0]["reasons"])
+        self.assertIn("conflicting_duplicate_requires_review", result["records"][0]["reasons"])
 
     def test_conflicting_labels_quarantine_whole_race(self):
         a = example()
