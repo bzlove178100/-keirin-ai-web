@@ -6,7 +6,7 @@ Status: **OFF / preparation only** (2026-10-13). This is a GitHub Issue → Clau
 
 - `.github/workflows/claude-task-bridge.yml` listens **only** for an Issue receiving the `claude-ready` label, **only** when the actor is `bzlove178100` and repository variable `CLAUDE_TASK_BRIDGE_ENABLED` is exactly `true`.
 - The variable is absent by default; this workflow must remain disabled until separately approved. No schedules, no automatic deployment, and no existing workflows are modified.
-- The workflow accepts **only** `CLAUDE_CODE_OAUTH_TOKEN` (not `ANTHROPIC_API_KEY`), checks that the secret exists before calling Claude, limits turns to 8 and the job to 25 minutes, and creates a reviewable PR rather than merging.
+- The workflow accepts **only** `CLAUDE_CODE_OAUTH_TOKEN` (not `ANTHROPIC_API_KEY`), checks for the secret before calling Claude, and limits turns to 8 / 25 minutes. When Claude reports a pushed task branch, a subsequent guarded step attempts to create a **draft PR** and posts its link to the Issue. Failure to obtain a branch or create a PR is **not** considered completion; no merge is automated.
 - The Issue template collects a bounded file scope, synthetic test plan, and stop conditions; applying the trigger label is a separate owner action.
 
 ## Preconditions before activation — do not complete without explicit owner approval
@@ -28,7 +28,7 @@ Status: **OFF / preparation only** (2026-10-13). This is a GitHub Issue → Clau
 
 ## Existing blocked work — preserve, do not invent success
 
-Claude reported local-only commit `9fbb95d` on `claude/settle-eval-7-9-riders` from `62f197d`, with 9/9 settlement and 10/10 evaluation tests. Git push and branch creation returned 403; **no remote branch/PR was verified**. Do not assume this commit is on GitHub, discard the original Claude session, or duplicate the change without a recovery check. Keep this recovery separate from the bridge PR.
+Claude reported local-only commit `9fbb95d` on `claude/settle-eval-7-9-riders` from `62f197d`, with 9/9 settlement and 10/10 evaluation tests. Git push / new-branch creation returned 403. **ChatGPT subsequently created the designated remote branch `claude/keirin-ai-web-survey-i4e236` from `62f197d`** to give the original session a place to attempt its approved push. **The changes from `9fbb95d` have not been pushed or verified on GitHub; no implementation PR exists.** Preserve the Claude session, push the original commit to the designated branch only if permissions permit, and avoid duplicate implementation. Keep recovery separate from this bridge PR.
 
 ## References
 
