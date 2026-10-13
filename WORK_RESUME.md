@@ -1,5 +1,67 @@
 # Work resume handoff
 
+## PR #251 verified baseline / historical source-variant quarantine candidate — 2026-10-13
+
+Resumption rechecked GitHub main 806496bea8617414d37bb39bda308619782533d7,
+tree b67916b45b453870b6f5b09e34563f76d4f9c432, PR #251's Final independent
+main receipt and current workflow statuses. All five independent push workflows
+succeeded: regression 38379293047 (47/47), runtime 38379293609, PostgreSQL
+38379293542, UI 38379293172 and AWS 38379293050; Pages 38379293329 also succeeded.
+PR #251's revised head 92f0a71bce2db6b052948fb1dc803861599ddd56 passed all five
+PR workflows; regression 38377640220 passed 47/47. The final receipt supersedes
+its candidate PENDING text below. Main live-save job 115235405534 verified two
+fresh boots, unchanged original deadlines and complete live observations of
+1.991607595 s / 1.867473865 s, followed by expiry, restoration, normal save/reboot
+and generation-2 poweroff. Main runtime job 115235407178 verified exact push SHA.
+The initial three-entrypoint VM failure remains a failure; live restart/halt have
+local negative-entrypoint tests, not successful dedicated live VM qualification.
+The historical PR #246 QMP greeting cause remains unknown; diagnose recurrence.
+
+Issue #249 prioritizes data permission/coverage while agent work continues.
+Concurrent docs-only PR #250 remains open at head
+0659657f3778c98e63735cf526b88e8df02de2f0; AGENTS.md is not changed here.
+No source-use permission is newly established. Provider terms, costs, coverage,
+point-in-time evidence and a private operational path remain unresolved.
+
+Code inspection and synthetic reproduction found a concrete review boundary gap:
+historical_audit intentionally ignores sources when counting content duplicates,
+and historical_training.prepare uses the first record's exact-hash review. At the
+verified baseline, equal race data with a different sources value entered the
+training partition on that first review alone (reproduced for both 7 and 9 riders).
+No real record or training execution was used for this reproduction.
+
+The candidate retains one-race counting, but adds source_variant_races and a
+source_variants_require_review reason whenever duplicate provenance differs.
+Canonical JSON comparison includes nested receipt/hash metadata and scalar types;
+source-object key ordering alone does not create a difference. The training planner
+propagates this reason and excludes the whole affected race from every partition,
+regardless of duplicate order. Exact-source duplicates still deduplicate normally,
+and unrelated reviewed races remain available. Inputs/reviews are not rewritten,
+no provenance is silently merged or removed, and no review is generated.
+The existing agent preparation path already refuses duplicate IDs before task
+creation; new regression coverage preserves that stricter path and no artifacts.
+
+Local synthetic verification: 156 historical tests and 26 agent preparation tests
+passed (182 total, 7 new); diff check passed. Includes both input orders, 7/9 riders,
+all three partitions, changed/missing/nested sources, exact duplicates, unaffected
+races, no model/output creation when all candidates are excluded, and agent refusal
+before task/state creation. PR and independent main CI are PENDING. Expect six
+workflows because the ML change also triggers the synthetic LightGBM smoke; the
+regression matrix stays at 47 jobs. Verify every workflow and all regression jobs,
+inspect ML/agent/runtime receipts, merge only the tested head, then verify main.
+If main advances, validate the combined head. Do not rerun an unchanged failure.
+
+Next data work: obtain/record separate source-specific evidence for automated
+retrieval, storage, training and commercial use plus 7/9-rider/time/field coverage;
+a reviewed multi-source merge must retain all provenance and bind its evidence
+to the combined record. This PR implements conservative quarantine only, not
+that merge, authenticity checking, new licensing, data acquisition or training.
+Continue agent recovery work separately; first expired-receipt-write failure is
+still unqualified. Arbitrary torn writes, host power loss and live hosting remain
+unqualified. KEIRIN.JP HOLD; production predictions, DB writes, external acquisition,
+real training (0), credentials/cloud changes and live activation remain OFF.
+No outgoing inquiries/messages or provider/race-data retrieval was performed.
+
 ## PR #248 verified baseline / live-save refusal candidate — 2026-10-13
 
 ### PR #251 initial VM failure / narrowed live-save observation

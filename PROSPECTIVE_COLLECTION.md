@@ -4,6 +4,28 @@
 
 Purpose: collect leakage-resistant real-race histories for paired Phase32 baseline vs LightGBM offline evaluation.
 
+## Source provenance review boundary — 2026-10-13
+
+Issue #249 records data-source permission and coverage as P0, with general-agent
+development continuing in parallel. No provider has been newly approved here.
+Automated acquisition, storage, model training and commercial use need separate
+source-specific evidence; a matching result from another source transfers no rights.
+
+Historical intake still counts matching race content from multiple sources as one
+race. It now reports `source_variant_races` and `source_variants_require_review`
+when duplicate records differ in `sources`, including nested receipt/hash metadata.
+The historical training planner excludes that race from every partition even if
+the first record has an exact-hash review. Identical provenance still deduplicates;
+conflicting results remain separately identified. Original inputs are not rewritten.
+Do not delete alternate provenance just to pass this gate. A future reviewed merge
+needs to retain every source and bind evidence to the combined record. This change
+does not implement that merge or verify supplied permissions/timestamps as true.
+The shared agent preparation path already rejects duplicate race IDs before task
+creation; that stricter boundary is preserved. All verification uses synthetic data.
+KEIRIN.JP HOLD, real training 0, and acquisition/production/DB/live activation OFF
+remain in force. The older collection and training instructions below are history
+subject to those stops, not authorization to run them.
+
 ## Current historical intake checkpoint — 2026-10-07
 
 The older dated sections below are retained as history. PR #207 is merged at

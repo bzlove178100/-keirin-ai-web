@@ -14,6 +14,7 @@ from pathlib import Path
 def audit(records: list[dict]) -> dict:
     seen: dict[str, dict] = {}
     conflicts: set[str] = set()
+    source_variants: set[str] = set()
     duplicates = 0
     problems: list[dict] = []
     for record in records:
@@ -26,6 +27,15 @@ def audit(records: list[dict]) -> dict:
             continue
         if key in seen:
             # Do not count the same race from two websites as two examples.
+            # A review of the first record must not cover different provenance.
+            # Compare canonical JSON, as record reviews do, including nested
+            # receipt/hash metadata and scalar types (True is not the number 1).
+            try:
+                if json.dumps(seen[key].get("sources"), sort_keys=True, allow_nan=False) != json.dumps(
+                        record.get("sources"), sort_keys=True, allow_nan=False):
+                    source_variants.add(key)
+            except (TypeError, ValueError):
+                source_variants.add(key)
             a = {k: v for k, v in seen[key].items() if k != "sources"}
             b = {k: v for k, v in record.items() if k != "sources"}
             if a == b:
@@ -40,6 +50,8 @@ def audit(records: list[dict]) -> dict:
         reasons = ["dedicated_historical_review_required"]
         if key in conflicts:
             reasons.append("conflicting_duplicate_requires_review")
+        if key in source_variants:
+            reasons.append("source_variants_require_review")
         count = record.get("rider_count")
         if type(count) is not int or not 3 <= count <= 9:
             reasons.append("invalid_rider_count")
@@ -77,6 +89,7 @@ def audit(records: list[dict]) -> dict:
     return {"schema_version": "historical-intake-audit-v1",
             "input_records": len(records), "unique_races": len(seen),
             "identical_duplicates": duplicates, "conflicting_races": len(conflicts),
+            "source_variant_races": len(source_variants),
             "invalid_records": problems, "quarantined_races": len(rows),
             "training_eligible_races": 0, "training_runs": 0,
             "automatic_collection_enabled": False, "production_enabled": False,

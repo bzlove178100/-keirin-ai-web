@@ -1,3 +1,4 @@
+import copy
 import json
 import sys
 import tempfile
@@ -175,6 +176,19 @@ class HistoricalPreparationAgentTests(unittest.TestCase):
         self.records.write_text(json.dumps(data))
         with self.assertRaisesRegex(BlockedAction, 'hashes_mismatch'): self.run_job()
         self.assertFalse(self.run_dir.exists())
+
+    def test_source_variant_duplicates_are_blocked_before_agent_task_creation(self):
+        for count in (7, 9):
+            for reverse in (False, True):
+                a = fixture(1, count)
+                b = copy.deepcopy(a)
+                b['sources'] = ['another-synthetic-source']
+                self.rows = [b, a] if reverse else [a, b]
+                self.write_records()
+                self.reviews.write_text(json.dumps([review(self.rows[0])]))
+                with self.assertRaisesRegex(BlockedAction, 'historical_record_hashes_mismatch'):
+                    self.run_job()
+                self.assertFalse(self.run_dir.exists())
 
     def test_interruption_requires_reconciliation_and_does_not_replay(self):
         self.run_job()
