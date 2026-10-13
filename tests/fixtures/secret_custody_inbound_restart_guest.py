@@ -103,14 +103,19 @@ def main(action):
             state.update(dict(line.split('=', 1) for line in extra.decode().splitlines() if '=' in line))
             if state['ActiveState'] != 'inactive' or state['Result'] != 'success':
                 raise RuntimeError('ALL_INBOUND_SERVICES_STOPPED_REQUIRED ' + n + ' ' + json.dumps(state))
-        if any(n not in ('lo', 'host0', 'host1') or (n != 'lo' and h.up(i, n)) for n in g.interfaces()):
+        # One link-state snapshot avoids racing peer-namespace destruction
+        # between an interface-name query and a separate per-link read.
+        links = json.loads(g.run(g.IP, '-j', 'link', 'show'))
+        if any(r['ifname'] not in ('lo', 'host0', 'host1') or
+               (r['ifname'] != 'lo' and 'UP' in r['flags']) for r in links):
             raise RuntimeError('NO_LIVE_INTERNAL_LINK_AFTER_STOP_REQUIRED')
+        interfaces = sorted(r['ifname'] for r in links)
         if Path('/proc/' + str(b.read('setup')['peer_pid'])).exists(): raise RuntimeError('INBOUND_PEER_STOP_REQUIRED')
         module('ssh', '/ssh_probe.py').stop_server(None)
         # The peer namespace may have destroyed veths, but the complete inet
         # maintenance profile must remain until the kernel itself reboots.
         profile(b, h, g, i)
-        emit(b, 'stopped', target=request['target'], states=states, interfaces=g.interfaces(),
+        emit(b, 'stopped', target=request['target'], states=states, interfaces=interfaces,
              profile_unchanged=True, guards_absent=True, peer_stopped=True, ssh_stopped=True,
              link_stopped_at=link['monotonic'])
     else: raise RuntimeError('FIXED_INBOUND_RESTART_ACTION_REQUIRED')

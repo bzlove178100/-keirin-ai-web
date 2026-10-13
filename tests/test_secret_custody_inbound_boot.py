@@ -8,7 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import importlib.util
 
 HERE = Path(__file__).resolve().parent
@@ -152,6 +152,20 @@ def run_vm():
 
 
 class Tests(unittest.TestCase):
+    def test_peer_namespace_removal_race_requires_proven_link_absence(self):
+        g = Mock(IP='/usr/sbin/ip')
+        g.interfaces.side_effect = [['lo', 'host0'], ['lo'], ['lo']]
+        g.run.side_effect = RuntimeError('Cannot find device host0')
+        guest.remove_owned_link(g, 'host0')
+        g.run.assert_called_once_with(g.IP, 'link', 'del', 'host0')
+        g.reset_mock(); g.interfaces.side_effect = None; g.interfaces.return_value = ['lo', 'host0']
+        with self.assertRaisesRegex(RuntimeError, 'Cannot find'): guest.remove_owned_link(g, 'host0')
+        g.run.side_effect = None
+        with self.assertRaisesRegex(RuntimeError, 'REMOVAL'): guest.remove_owned_link(g, 'host0')
+        g.reset_mock(); g.interfaces.return_value = ['lo']
+        guest.remove_owned_link(g, 'host1'); g.run.assert_not_called()
+        with self.assertRaises(ValueError): guest.remove_owned_link(g, 'external')
+
     def test_phase_boundary_requires_same_boot_and_full_unchanged_matrix(self):
         row = dict(boot='same', case='closed', monotonic=1, checked=dict(packets=['synthetic'], loopback=[True]))
         observed = copy.deepcopy(row); observed['monotonic'] = 2

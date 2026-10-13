@@ -193,6 +193,17 @@ def matrix(b, i, case):
         if Path('/proc/' + str(process.pid)).exists(): raise RuntimeError('LISTENER_CLEANUP_REQUIRED')
 
 
+def remove_owned_link(g, name):
+    if name not in ('host0', 'host1'): raise ValueError('OWNED_INBOUND_LINK_REQUIRED')
+    if name not in g.interfaces(): return
+    try: g.run(g.IP, 'link', 'del', name)
+    except RuntimeError:
+        # Stopping the peer namespace can asynchronously destroy its veth pair
+        # between the existence check and deletion. Accept only proven absence.
+        if name in g.interfaces(): raise
+    if name in g.interfaces(): raise RuntimeError('OWNED_LINK_REMOVAL_REQUIRED')
+
+
 def emit(b, event, case, **values):
     print('INBOUND_BOOT_RECORD ' + json.dumps(dict(event=event, case=case, boot=b.boot(),
           pid1=Path('/proc/1/comm').read_text().strip(), monotonic=time.monotonic(), **values)), flush=True)
@@ -292,8 +303,7 @@ def main(action):
         pid = b.read('setup')['peer_pid']
         g.run('/usr/bin/systemctl', 'stop', 'kc-check.service', 'kc-link.service', 'kc-gate.service', 'kc-setup.service')
         for table in (i.t.r.TABLE, i.OBS): i.t.run(i.t.NFT, 'delete', 'table', 'inet', table, success=False)
-        for name in ('host0', 'host1'):
-            if name in g.interfaces(): g.run(g.IP, 'link', 'del', name)
+        for name in ('host0', 'host1'): remove_owned_link(g, name)
         remaining = [r for r in json.loads(g.run(g.NFT, '-j', 'list', 'ruleset'))['nftables'] if 'metainfo' not in r]
         module('ssh', '/ssh_probe.py').stop_server(None)
         if remaining or g.interfaces() != ['lo'] or Path(f'/proc/{pid}').exists():

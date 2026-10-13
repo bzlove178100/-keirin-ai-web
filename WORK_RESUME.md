@@ -1,5 +1,37 @@
 # Work resume handoff
 
+## PR #243 cleanup race correction — 2026-10-13
+
+Initial head 45d8fec85b58d8b2404c6254ebe82bd8c0c7e48e / regression 38325699996 /
+existing inbound-lease job 115063731642 failed while cleaning its completed awake
+cycle. Startup matrix, authentication, expiry, restoration and recovery records
+had passed. The report's interface-name check saw host0, but the following
+`ip link del host0` failed with Cannot find device. The peer namespace is stopped
+immediately before this cleanup and its destruction asynchronously removes veth
+pairs: the existing check/delete sequence cannot assume the link still exists.
+This does not establish why the race appeared on this runner rather than earlier
+runs; no policy or expiry failure was observed in this trace.
+
+Cleanup now accepts a failed deletion ONLY when a fresh namespace query proves
+the owned link absent. A still-present link or a successful command that leaves
+it present remains a failure, and the final empty-rule/lo-only/no-peer checks
+remain. No blind deletion retry is added. The new normal-shutdown observer also
+uses a single full link-state snapshot instead of querying a name and then a
+potentially disappearing link separately. A local regression simulates the
+between-check-and-delete disappearance, persistent failure, false removal success,
+already-absent links and refusal of unowned names. Local total: 53 targeted tests
+(inbound 24, systemd 14, packet 15). Actual corrected CI is pending. Original
+failure retained; timing limits and packet/authentication criteria are unchanged.
+
+The original new restart jobs did complete successfully before correction:
+awake 115063731879 (boots 175a1eea-8d0b-49d7-8446-25c00862352f ->
+891271e1-5ee8-4b6c-ac3d-7f0aad7d0e9e) and suspend 115063731951 (boots
+3f1fe44c-e578-457e-8259-ae382c7210b4 -> c00cc4b4-b953-477b-a359-da67e4ac7aa2).
+Both showed both-links-down while the peer was alive, unchanged unmasked profile,
+actual reverse service stops, normal reboot then poweroff, fresh key digests and
+full cycle revalidation. These successes do not override the failed existing
+cleanup job or qualify the changed correction head without fresh CI.
+
 ## PR #242 verified baseline and inbound normal-restart candidate — 2026-10-13
 
 Current main rechecked: ba5fd544d66964422d1cdc29fd02dd31437537e3; PR #242 merged,
