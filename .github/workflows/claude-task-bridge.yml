@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   claude-task:
-    if: ${{ github.event.action == 'created' && github.event.comment.body == '/claude-run' && github.event.sender.login == 'bzlove178100' && github.event.issue.state == 'open' && github.event.issue.pull_request == null && vars.CLAUDE_TASK_BRIDGE_ENABLED == 'true' }}
+    if: ${{ github.event.action == 'created' && github.event.comment.body == '/claude-run' && github.event.sender.login == 'bzlove178100' && github.event.issue.user.login == 'bzlove178100' && github.event.issue.state == 'open' && github.event.issue.pull_request == null && vars.CLAUDE_TASK_BRIDGE_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     concurrency:
@@ -39,9 +39,8 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          track_progress: true
           base_branch: main
-          claude_args: "--max-turns 8"
+          claude_args: "--max-turns 8 --disallowedTools Bash,WebFetch,WebSearch"
           prompt: |
             Work ONLY on GitHub Issue #${{ github.event.issue.number }} in this repository.
             Read the issue requirements, AGENTS.md, SOURCE_ACQUISITION_STATUS.md,
@@ -53,7 +52,9 @@ jobs:
             No production predictions, DB writes, real ML training, secret access,
             AWS/Supabase operations, deployment, external inquiries, or paid resources.
             Change only the task-approved implementation/tests on a new branch.
-            Run the relevant synthetic tests and regression checks.
+            Do not execute shell commands or external tools; let pull-request CI run
+            the relevant synthetic and regression tests. Report all tests as NOT RUN
+            until the actual CI confirms them. Never assume tests passed.
             Do not change AGENTS.md, WORK_STATUS.md, WORK_RESUME.md or other
             parallel task documents. If a blocker or conflicting PR appears, stop.
             Commit and push the changes to a new Claude task branch only.
@@ -64,7 +65,7 @@ jobs:
         if: ${{ steps.claude.outputs.conclusion == 'success' && steps.claude.outputs.branch_name != '' }}
         shell: bash
         env:
-          GH_TOKEN: ${{ steps.claude.outputs.github_token }}
+          GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           SOURCE_BRANCH: ${{ steps.claude.outputs.branch_name }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -75,9 +76,25 @@ jobs:
             exit 2
           fi
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error title=Missing Claude GitHub App token::No pull request created."
+            echo "::error title=Missing job token::No pull request created."
             exit 2
           fi
+          # Enforce a pilot-only repository scope, independent of the model's prompt.
+          # Future workflows need separately reviewed permission/scoping changes.
+          changed="$(gh api "repos/$GH_REPO/compare/main...$SOURCE_BRANCH" --jq '.files[].filename')"
+          if [ -z "$changed" ]; then
+            echo "::error title=No verified code diff::No pull request created."
+            exit 2
+          fi
+          while IFS= read -r filename; do
+            case "$filename" in
+              ml/*.py|tests/*.py) ;;
+              *)
+                echo "::error title=Unexpected file scope::No PR for $filename."
+                exit 2
+                ;;
+            esac
+          done <<< "$changed"
           existing="$(gh pr list --repo "$GH_REPO" --state open --head "$SOURCE_BRANCH" --json number --jq 'length')"
           if [ "$existing" != "0" ]; then
             echo "An open PR already exists for the Claude branch; do not duplicate it."
