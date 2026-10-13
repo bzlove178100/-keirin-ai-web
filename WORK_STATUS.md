@@ -1,5 +1,25 @@
 # Work status
 
+### PR #247 initial diagnostic head / sibling CI budget failure
+
+Initial diagnostic head 1fdb7a8e566548571d323afaea78b5c4997f3547 passed the
+previously failing legacy persistence job 115183656727 through all eight cases.
+QMP greeting refusal did not recur there; its historical cause remains unknown.
+PR runtime 38363694438 / job 115183656780 stopped at 07:46:20Z after 600 seconds
+while regression 38363694272 was still running (43/44 successful at observation).
+The same coordination limit also blocked PR #246 main runtime 38362990933 /
+115181377008; main regression ultimately ended 43 success / 1 QMP failure.
+
+Changed condition: increase only the sibling workflow observation budget from
+10 to 20 minutes and its outer Actions job cap from 15 to 25 minutes, accommodating
+runner queues and the expanded 44-job suite. Still require exact SHA/event/branch,
+completed success for every required sibling; completed failure blocks immediately,
+and missing/pending never become success at the new finite deadline. No automatic
+workflow retry, VM stage deadline, 8-second lease or guest behavior change. A test
+now proves real sibling success after 660 seconds is accepted, failure at that
+same point is refused, and pending/missing expires at 1200 seconds. Latest changed
+head must pass all PR workflows before merge and independent main checks afterward.
+
 ## PR #246 main QMP observation failure / diagnostic candidate — 2026-10-13
 
 PR #246 merged as 6b252fdccf520ff28938163608a422b9687a3734, tree

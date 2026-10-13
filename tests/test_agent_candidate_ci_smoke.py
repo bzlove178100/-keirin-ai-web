@@ -83,12 +83,20 @@ class Tests(unittest.TestCase):
                 runs = sibling_runs()
                 runs[0][field] = value
                 self.assertFalse(self.verify(self.bridge([runs])))
-                self.assertEqual(self.elapsed, 600)
+                self.assertEqual(self.elapsed, 1200)
 
     def test_missing_and_pending_expire_without_success(self):
         for runs in ([], [dict(r, status="queued", conclusion=None) for r in sibling_runs()]):
             self.assertFalse(self.verify(self.bridge([runs])))
-            self.assertEqual(self.elapsed, 600)
+            self.assertEqual(self.elapsed, 1200)
+
+    def test_sibling_finishing_after_ten_minutes_requires_actual_success(self):
+        pending = [dict(r, status="in_progress", conclusion=None) for r in sibling_runs()]
+        for conclusion in ("success", "failure"):
+            final = sibling_runs(); final[0]["conclusion"] = conclusion
+            self.assertEqual(self.verify(self.bridge([pending]*44 + [final])), conclusion == "success")
+            self.assertEqual(self.elapsed, 660)
+            self.assertEqual(self.sleeps, [15]*44)
 
     def test_wrong_own_workflow_or_fork_is_rejected(self):
         for change in ({"workflow_id": 1}, {"head_repository": {"full_name": "fork/repo"}},
