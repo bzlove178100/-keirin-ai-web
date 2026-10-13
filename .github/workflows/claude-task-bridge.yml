@@ -1,0 +1,59 @@
+name: Claude task bridge (opt-in, disabled by default)
+
+# Only an owner-applied issue label can request a run after a separate
+# repository variable is deliberately enabled. This does not schedule jobs.
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  claude-task:
+    if: ${{ github.event.action == 'labeled' && github.event.label.name == 'claude-ready' && github.event.sender.login == 'bzlove178100' && github.event.issue.state == 'open' && vars.CLAUDE_TASK_BRIDGE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: claude-task-bridge-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Require separately configured Pro OAuth credential
+        env:
+          CLAUDE_BRIDGE_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CLAUDE_BRIDGE_TOKEN:-}" ]; then
+            echo "::error title=Claude OAuth token missing::Set CLAUDE_CODE_OAUTH_TOKEN after authorization; no API key fallback."
+            exit 2
+          fi
+
+      - name: Implement owner-approved Issue with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          label_trigger: claude-ready
+          base_branch: main
+          claude_args: "--max-turns 8"
+          prompt: |
+            Work ONLY on GitHub Issue #${{ github.event.issue.number }} in this repository.
+            Read the issue requirements, AGENTS.md, SOURCE_ACQUISITION_STATUS.md,
+            and the smallest relevant source files. Check latest main/open PRs for overlap.
+            Do not repeat the full repository survey or generate lengthy reports.
+            Keep existing requirements and stop conditions; KEIRIN.JP HOLD is mandatory.
+            NEVER fetch race/provider data or switch endpoints; do not reuse saved
+            source records as new training evidence.
+            No production predictions, DB writes, real ML training, secret access,
+            AWS/Supabase operations, deployment, external inquiries, or paid resources.
+            Change only the task-approved implementation/tests on a new branch.
+            Run the relevant synthetic tests and regression checks.
+            Do not change AGENTS.md, WORK_STATUS.md, WORK_RESUME.md or other
+            parallel task documents. If a blocker or conflicting PR appears, stop.
+            Submit a reviewable PR (draft if supported), NEVER merge or deploy.
+            Report the PR link, tests, and blockers in 300 Japanese characters or less.
