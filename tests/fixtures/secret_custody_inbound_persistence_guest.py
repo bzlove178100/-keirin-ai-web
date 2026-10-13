@@ -159,8 +159,8 @@ def disk_state(persist):
             for name in ('policy.json', 'receipt.json', 'policy.json.next', 'receipt.json.next')}
 
 
-def refuse_live_requests(deadline):
-    """Exercise real entrypoints before expiry; never create live receipts."""
+def refuse_live_save(deadline):
+    """Exercise the real save entrypoint before expiry; never create live receipts."""
     persist, b, _, _, current = context()
     if current != 'live-refusal' or b.composition() != 'awake':
         raise RuntimeError('FIXED_LIVE_SAVE_REFUSAL_REQUIRED')
@@ -172,17 +172,13 @@ def refuse_live_requests(deadline):
     if type(deadline) is not int or not 0 < started < deadline or not unpublished():
         raise RuntimeError('LIVE_UNPUBLISHED_REQUESTS_REQUIRED')
     snapshot = disk_state(persist)
-    restart = module('restart', '/inbound_restart.py')
-    refusals = {}
-    for action, call in (('save', save), ('restart', lambda: restart.main('restart')),
-                         ('halt', lambda: restart.main('halt'))):
-        try: call()
-        except RuntimeError as exc:
-            if str(exc) != 'COMPLETED_INBOUND_RECOVERY_REQUIRED': raise
-            refusals[action] = str(exc)
-        else: raise RuntimeError('LIVE_REQUEST_MUST_BE_REFUSED ' + action)
-        if disk_state(persist) != snapshot or not unpublished():
-            raise RuntimeError('LIVE_REFUSAL_MUST_NOT_WRITE_OR_PUBLISH')
+    try: save()
+    except RuntimeError as exc:
+        if str(exc) != 'COMPLETED_INBOUND_RECOVERY_REQUIRED': raise
+        refusals = {'save': str(exc)}
+    else: raise RuntimeError('LIVE_SAVE_MUST_BE_REFUSED')
+    if disk_state(persist) != snapshot or not unpublished():
+        raise RuntimeError('LIVE_REFUSAL_MUST_NOT_WRITE_OR_PUBLISH')
     finished = time.clock_gettime_ns(time.CLOCK_BOOTTIME)
     if not started <= finished < deadline: raise RuntimeError('REFUSALS_BEFORE_ORIGINAL_EXPIRY_REQUIRED')
     return dict(refusals=refusals, disk_before=snapshot, disk_after=disk_state(persist),

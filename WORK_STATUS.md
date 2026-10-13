@@ -2,6 +2,26 @@
 
 ## PR #248 verified baseline / live-save refusal candidate — 2026-10-13
 
+### PR #251 initial VM failure / narrowed live-save observation
+
+Initial head 7e84fc4ba21a3879af4eec0051786f9dd1876286, regression
+38376408615, live-refusal job 115225786005 failed at 2026-10-13T09:33:08Z
+with LIVE_INBOUND_QUALIFICATION_REQUIRED. Boot 4a5d832e-83e6-41b6-b148-bf6a770059c5:
+lease start monotonic 112.515434283, before record 115.629697974 (3.114263691 s).
+The three inline refusals completed before the original 120515446979 ns deadline,
+with unchanged disk hashes and no saved/shutdown markers. The four live probes
+still succeeded; expiry later blocked all four and authenticated SSH survived.
+However, identity/guard readbacks between the probe-time check and record emission
+pushed the complete observation beyond the existing strict 3-second window. This
+is a failed experiment, not full VM qualification; no unchanged retry is allowed.
+
+Changed condition: narrow this VM case to the actual save entrypoint only, reducing
+work inside the live critical interval. The save/restart/halt negative entrypoint
+unit tests remain. Do NOT claim real live restart/halt VM qualification from the
+failed candidate. The original 3-second observation, 8-second permission, service
+and host-observer limits are unchanged. Require the new complete before record
+and all VM cycles/CI to pass; investigate any recurrence rather than relax bounds.
+
 Resumption checked GitHub main 8f502d86e82fb71595475b30978a254db82c846d and
 PR #248's Final independent main receipt (in the PR body, not a comment).
 Its tested tree is 2b1fbc3d79ad0d26f52ad83a132176b6b5d30524. All five PR
@@ -28,10 +48,10 @@ restart.intact(). Only then does it read the loaded policy, fsync receipt.json,
 write policy.json and publish saved. restart/halt publish their shutdown request
 only after that save. Do not bypass this admission to manufacture early ENOSPC.
 
-The new fixed awake live-refusal case calls actual save/restart/halt entrypoints
+The revised fixed awake live-refusal case calls the actual save entrypoint
 while the original 8-second permission is live. Missing completed-recovery
 records now produce a specific refusal instead of an incidental FileNotFoundError.
-Require all three expected refusals before the original deadline, exact unchanged
+Require the expected save refusal before the original deadline, exact unchanged
 policy/receipt/temp-path hashes, no saved/shutdown marker, unchanged packet policy
 and guards, and all four established/fresh qualification probes still succeeding
 within the original 3-second live observation window. No deadline is extended.

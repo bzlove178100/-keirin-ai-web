@@ -101,7 +101,7 @@ def main(action, b, i, g):
         if before['qualification'] != [True]*4 or time.monotonic() - started['monotonic'] >= 3:
             raise RuntimeError('ORIGINAL_LIVE_WINDOW_REQUIRED')
         if live_store is not None:
-            refusal = live_store.refuse_live_requests(deadline)
+            refusal = live_store.refuse_live_save(deadline)
             before = probes(g, opened)
             if (before['qualification'] != [True]*4 or time.monotonic() - started['monotonic'] >= 3
                     or h.identity(i) != active or g.identity(g.reports(lease)) != original

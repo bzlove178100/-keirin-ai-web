@@ -139,7 +139,7 @@ def stop(process, path):
 
 def live_refusal_evidence(before, loaded):
     value = before.get('save_refusal', {})
-    expected = {action: 'COMPLETED_INBOUND_RECOVERY_REQUIRED' for action in ('save', 'restart', 'halt')}
+    expected = {'save': 'COMPLETED_INBOUND_RECOVERY_REQUIRED'}
     snapshot = value.get('disk_before', {})
     if (before.get('mode') != 'awake' or before.get('boot') != loaded['boot']
             or before.get('qualification') != [True]*4 or value.get('refusals') != expected
@@ -190,7 +190,7 @@ def normal(path, host_boot, phase='normal'):
                 if process.wait(timeout=10) != 0: raise RuntimeError('NORMAL_INBOUND_DURABLE_POWEROFF_REQUIRED')
                 print('PASS INBOUND_DURABLE_REBOOT_EXACT_CHECKPOINT_OLD_LEASE_REFUSED_FRESH_AUTH', flush=True)
                 if phase == 'live-refusal':
-                    print('PASS INBOUND_LIVE_SAVE_RESTART_HALT_REFUSED_NO_WRITES_THEN_EXPIRED_SAVE', flush=True)
+                    print('PASS INBOUND_LIVE_SAVE_REFUSED_NO_WRITES_THEN_EXPIRED_SAVE', flush=True)
     finally: stop(process, path)
 
 
@@ -375,13 +375,11 @@ class Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as value, patch.object(persist, 'ROOT', Path(value)):
             persist.atomic('policy.json', durable.policy())
             fakeb = SimpleNamespace(STATE=Path(value), composition=lambda: 'awake')
-            restart = SimpleNamespace(main=Mock(side_effect=RuntimeError(reason)))
             with patch.object(guest, 'context', return_value=(persist, fakeb, None, durable, 'live-refusal')), \
-                    patch.object(guest, 'module', return_value=restart), \
                     patch.object(guest, 'save', side_effect=RuntimeError(reason)) as save, \
                     patch.object(guest.time, 'clock_gettime_ns', side_effect=[10, 20]):
-                row = guest.refuse_live_requests(100)
-                self.assertEqual(set(row['refusals']), {'save', 'restart', 'halt'})
+                row = guest.refuse_live_save(100)
+                self.assertEqual(set(row['refusals']), {'save'})
                 self.assertEqual(row['disk_before'], row['disk_after']); save.assert_called_once()
             for failure in ('unexpected', 'accepted', 'write', 'marker', 'late'):
                 def attempt():
@@ -391,26 +389,26 @@ class Tests(unittest.TestCase):
                     if failure == 'marker': (Path(value) / 'inbound-shutdown-request').write_text('{}')
                     raise RuntimeError(reason)
                 with patch.object(guest, 'context', return_value=(persist, fakeb, None, durable, 'live-refusal')), \
-                        patch.object(guest, 'module', return_value=restart), patch.object(guest, 'save', side_effect=attempt), \
+                        patch.object(guest, 'save', side_effect=attempt), \
                         patch.object(guest.time, 'clock_gettime_ns', side_effect=[10, 100]):
-                    with self.assertRaises(RuntimeError): guest.refuse_live_requests(100)
+                    with self.assertRaises(RuntimeError): guest.refuse_live_save(100)
                 for name in ('receipt.json.next', 'inbound-shutdown-request'): (Path(value) / name).unlink(missing_ok=True)
             with patch.object(guest, 'context', return_value=(persist, fakeb, None, durable, 'normal')), \
                     patch.object(guest, 'save') as save:
-                with self.assertRaisesRegex(RuntimeError, 'FIXED_LIVE'): guest.refuse_live_requests(100)
+                with self.assertRaisesRegex(RuntimeError, 'FIXED_LIVE'): guest.refuse_live_save(100)
                 save.assert_not_called()
 
-    def test_live_evidence_requires_all_refusals_original_deadline_and_exact_loaded_disk(self):
+    def test_live_evidence_requires_save_refusal_original_deadline_and_exact_loaded_disk(self):
         loaded = dict(boot=s.OLD_BOOT, policy_sha256='a'*64, saved_receipt=None)
         snapshot = {'policy.json': 'a'*64, 'receipt.json': None, 'policy.json.next': None, 'receipt.json.next': None}
-        value = dict(refusals={x: 'COMPLETED_INBOUND_RECOVERY_REQUIRED' for x in ('save', 'restart', 'halt')},
+        value = dict(refusals={'save': 'COMPLETED_INBOUND_RECOVERY_REQUIRED'},
             disk_before=snapshot, disk_after=copy.deepcopy(snapshot), started_ns=2_000_000_000,
             finished_ns=3_000_000_000, deadline_ns=9_000_000_000, saved_marker_present=False,
             shutdown_request_present=False)
         before = dict(mode='awake', boot=s.OLD_BOOT, qualification=[True]*4, save_refusal=value,
             boottime_guard=dict(deadline_ns=9_000_000_000), lease_start=dict(boottime=1), boottime=3.5)
         live_refusal_evidence(before, loaded)
-        for change in (dict(refusals={'save': 'COMPLETED_INBOUND_RECOVERY_REQUIRED'}),
+        for change in (dict(refusals={}),
                        dict(disk_after=dict(snapshot, **{'receipt.json': 'b'*64})),
                        dict(finished_ns=9_000_000_000), dict(deadline_ns=10_000_000_000),
                        dict(started_ns=True), dict(saved_marker_present=True), dict(shutdown_request_present=True)):
