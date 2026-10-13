@@ -1,5 +1,49 @@
 # Work status
 
+## PR #245 verified baseline / inbound storage-failure candidate — 2026-10-13
+
+Resumption rechecked main 4bf4941ecb707db430fb2d8414df0a4771f055f7 and no open
+PRs. PR #245 head 8e08b0afbea62b03cba5e00126ac74ed1eb98ad7 and main share tree
+f22c04aacb3a57e80cd01a2a1cecdecd68162fcb. Its final PR receipt supersedes the
+historical pending text below. All five PR and independent main workflows passed;
+regression 38338968173 and 38339912216 each passed 41/41. Main runtime
+38339912227, PostgreSQL 38339912266, UI 38339912228, AWS 38339912220 and Pages
+38339911792 also passed. Main normal job 115108343535 verified normal reboot,
+exact generation-1 checkpoint bytes and PRIOR_BOOT_LEASE_REFUSED; crash job
+115108343500 verified actual owned-process SIGKILL, exact same-disk partial
+checkpoint bytes and ORPHAN_RECEIPT_REFUSED without auth/lease startup.
+
+The new candidate extends that wider inbound profile with seven independent
+invalid ext4 seeds: missing/corrupt policy, stale permission fields, orphan or
+mismatched receipt, interrupted temporary file, and corrupt receipt. Each must
+fail for its intended reason before link/auth/lease execution, preserve all four
+checkpoint path hashes, keep the ruleset empty and unmount cleanly. The shared
+seed builder now binds generation-1 negative fixtures to the requested profile,
+so a cross-profile rejection cannot masquerade as the intended receipt failure.
+
+Two further cases first complete the actual awake startup/SSH/8-second-expiry/
+unmasked-restoration cycle, then use the sole synthetic 64 MiB ext4 volume to
+produce real ENOSPC or EROFS on the policy write after the expired receipt fsync.
+They require exact kernel errno and filesystem evidence, unchanged closed profile,
+no saved marker, and no temporary files. The supervisor then SIGKILLs only its own
+QEMU. A fresh boot of the same unmodified image must reject the exact partial pair
+and never start auth or lease services. No repair, permission replay, host mounts,
+external NICs, deadline relaxation or unchanged CI rerun is introduced.
+
+Local targeted regression: 59 tests passed, including 17 inbound-persistence tests
+(7 new). New PR VM evidence and independent main CI are PENDING. The expanded
+regression matrix has 44 jobs; inspect all five inbound persistence modes and
+all existing jobs before merging the tested head. Preserve exact failed head/run/
+job if any failure occurs, investigate its cause before changing/retrying.
+
+These are bounded synthetic guest tests, not arbitrary torn-write/power-loss or
+production recovery qualification. Wider-profile filesystem error composition is
+not verified until the new VM jobs pass. Next separate scope remains combined
+suspend/reboot behavior under storage faults and broader host deployment review.
+Real training 0; production predictions, DB writes, external acquisition, live
+host application/activation and real credentials remain OFF. KEIRIN.JP HOLD
+remains active. Historical failure receipts below are retained.
+
 ## PR #244 verified baseline / inbound durable-recovery candidate — 2026-10-13
 
 Continuation rechecked current main 0ce5032c2f64990678885de54841a7a80f14aa27,

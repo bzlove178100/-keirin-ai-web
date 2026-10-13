@@ -25,20 +25,27 @@ OLD_BOOT = '00000000-0000-4000-8000-000000000001'
 NEW_BOOT = '00000000-0000-4000-8000-000000000002'
 
 
-def disk(path, case, *, profile='tcp443-closed'):
-    p.guard()
-    if os.environ.get('KC_PERSISTENCE_CI') != '1': raise RuntimeError('PERSISTENCE_OPT_IN_REQUIRED')
+def seed_files(case, *, profile='tcp443-closed'):
     if case not in CASES: raise ValueError('FIXED_DURABLE_CASE_REQUIRED')
-    seed = path / 'seed'; seed.mkdir(mode=0o700)
+    files = {}
     if case != 'missing':
         value = d.policy(profile=profile)
         if case == 'stale': value['lease'] = dict(boot='00000000-0000-4000-8000-000000000001', deadline_ns=10**15)
-        (seed / 'policy.json').write_text('{broken' if case == 'corrupt' else json.dumps(value))
+        files['policy.json'] = '{broken' if case == 'corrupt' else json.dumps(value)
     if case in ('orphan', 'mismatch', 'receipt-corrupt'):
         receipt = dict(boot=NEW_BOOT, deadline_ns=10**15)
-        (seed / 'receipt.json').write_text('{broken' if case == 'receipt-corrupt' else json.dumps(receipt))
-        if case != 'orphan': (seed / 'policy.json').write_text(json.dumps(d.policy(1, OLD_BOOT)))
-    if case == 'interrupted': (seed / 'policy.json.next').write_bytes(b'{partial')
+        files['receipt.json'] = '{broken' if case == 'receipt-corrupt' else json.dumps(receipt)
+        if case != 'orphan': files['policy.json'] = json.dumps(d.policy(1, OLD_BOOT, profile=profile))
+    if case == 'interrupted': files['policy.json.next'] = '{partial'
+    return files
+
+
+def disk(path, case, *, profile='tcp443-closed'):
+    p.guard()
+    if os.environ.get('KC_PERSISTENCE_CI') != '1': raise RuntimeError('PERSISTENCE_OPT_IN_REQUIRED')
+    files = seed_files(case, profile=profile)
+    seed = path / 'seed'; seed.mkdir(mode=0o700)
+    for name, data in files.items(): (seed / name).write_text(data)
     target = path / 'state.raw'
     with target.open('xb') as f: f.truncate(SIZE)
     target.chmod(0o600)

@@ -671,7 +671,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [normal, crash]
+        mode: [normal, crash, invalid, enospc, erofs]
     steps:
       - uses: actions/checkout@v4
       - name: Test inbound durable admission crash refusal and host guards
