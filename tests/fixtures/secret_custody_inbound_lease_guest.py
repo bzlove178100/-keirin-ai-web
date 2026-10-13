@@ -82,6 +82,10 @@ def main(action, b, i, g):
         if probes(g, [])['qualification'] != [False, False] or h.identity(i) != sealed:
             raise RuntimeError('REFUSED_PROMOTION_MUST_STAY_CLOSED')
         expected = h.rpc(b, 'qualification')
+        live_store = None
+        if Path('/inbound_persistence.py').is_file():
+            store = b.module('inbound_persistence', '/inbound_persistence.py')
+            if store.phase() == 'live-refusal': live_store = store
         started = g.clocks(); deadline = int(started['boottime'] * 1e9) + 8000000000
         g.run(g.NFT, '-f', '-', input=lease.install(socket.if_nametoindex('host0')).encode())
         initial = g.reports(lease); lease_seal = lease.snapshot(initial); original = g.identity(initial)
@@ -96,6 +100,14 @@ def main(action, b, i, g):
         before = probes(g, opened)
         if before['qualification'] != [True]*4 or time.monotonic() - started['monotonic'] >= 3:
             raise RuntimeError('ORIGINAL_LIVE_WINDOW_REQUIRED')
+        if live_store is not None:
+            refusal = live_store.refuse_live_save(deadline)
+            before = probes(g, opened)
+            if (before['qualification'] != [True]*4 or time.monotonic() - started['monotonic'] >= 3
+                    or h.identity(i) != active or g.identity(g.reports(lease)) != original
+                    or g.tc_identity(proof) != tc):
+                raise RuntimeError('LIVE_REFUSAL_CANNOT_CHANGE_POLICY_GUARDS_OR_WINDOW')
+            before['save_refusal'] = refusal
         emit(b, mode, 'before', lease_start=started, boottime_guard=proof, **before)
         if mode == 'suspend':
             if 'deep' not in Path('/sys/power/mem_sleep').read_text(): raise RuntimeError('REAL_DEEP_SLEEP_REQUIRED')

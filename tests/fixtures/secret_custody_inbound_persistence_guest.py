@@ -17,7 +17,7 @@ INVALID = {'missing': 'FileNotFoundError', 'corrupt': 'JSONDecodeError',
            'mismatch': 'MATCHED_PREVIOUS_BOOT_RECEIPT_REQUIRED',
            'interrupted': 'INTERRUPTED_STATE_REFUSED', 'receipt-corrupt': 'JSONDecodeError'}
 FAULTS = {'enospc': errno.ENOSPC, 'erofs': errno.EROFS}
-PHASES = ('normal', 'after-receipt', 'recover') + tuple(INVALID) + tuple(FAULTS)
+PHASES = ('normal', 'live-refusal', 'after-receipt', 'recover') + tuple(INVALID) + tuple(FAULTS)
 
 
 def module(name, path):
@@ -157,6 +157,33 @@ def refused():
 def disk_state(persist):
     return {name: hashlib.sha256(persist.read_bytes(name)).hexdigest() if os.path.lexists(persist.ROOT / name) else None
             for name in ('policy.json', 'receipt.json', 'policy.json.next', 'receipt.json.next')}
+
+
+def refuse_live_save(deadline):
+    """Exercise the real save entrypoint before expiry; never create live receipts."""
+    persist, b, _, _, current = context()
+    if current != 'live-refusal' or b.composition() != 'awake':
+        raise RuntimeError('FIXED_LIVE_SAVE_REFUSAL_REQUIRED')
+    forbidden = ('inbound-lease', 'inbound-recovery', 'saved', 'inbound-shutdown-request')
+    def unpublished():
+        return not any(os.path.lexists(b.STATE / (name + suffix))
+                       for name in forbidden for suffix in ('', '.next'))
+    started = time.clock_gettime_ns(time.CLOCK_BOOTTIME)
+    if type(deadline) is not int or not 0 < started < deadline or not unpublished():
+        raise RuntimeError('LIVE_UNPUBLISHED_REQUESTS_REQUIRED')
+    snapshot = disk_state(persist)
+    try: save()
+    except RuntimeError as exc:
+        if str(exc) != 'COMPLETED_INBOUND_RECOVERY_REQUIRED': raise
+        refusals = {'save': str(exc)}
+    else: raise RuntimeError('LIVE_SAVE_MUST_BE_REFUSED')
+    if disk_state(persist) != snapshot or not unpublished():
+        raise RuntimeError('LIVE_REFUSAL_MUST_NOT_WRITE_OR_PUBLISH')
+    finished = time.clock_gettime_ns(time.CLOCK_BOOTTIME)
+    if not started <= finished < deadline: raise RuntimeError('REFUSALS_BEFORE_ORIGINAL_EXPIRY_REQUIRED')
+    return dict(refusals=refusals, disk_before=snapshot, disk_after=disk_state(persist),
+                started_ns=started, finished_ns=finished, deadline_ns=deadline,
+                saved_marker_present=False, shutdown_request_present=False)
 
 
 def fault_context(mode, *, observing=False):
