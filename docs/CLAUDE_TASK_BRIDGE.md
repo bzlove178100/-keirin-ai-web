@@ -4,10 +4,10 @@ Status: **OFF / preparation only** (2026-10-13). This is a GitHub Issue → Clau
 
 ## What is prepared
 
-- `.github/workflows/claude-task-bridge.yml` listens **only** for an Issue receiving the `claude-ready` label, **only** when the actor is `bzlove178100` and repository variable `CLAUDE_TASK_BRIDGE_ENABLED` is exactly `true`.
+- `.github/workflows/claude-task-bridge.yml` listens **only** for the exact Issue comment `/claude-run` posted by `bzlove178100` on an open Issue (not a PR), **and only** when repository variable `CLAUDE_TASK_BRIDGE_ENABLED` is exactly `true`.
 - The variable is absent by default; this workflow must remain disabled until separately approved. No schedules, no automatic deployment, and no existing workflows are modified.
 - The workflow accepts **only** `CLAUDE_CODE_OAUTH_TOKEN` (not `ANTHROPIC_API_KEY`), checks for the secret before calling Claude, and limits turns to 8 / 25 minutes. When Claude reports a pushed task branch, a subsequent guarded step attempts to create a **draft PR** and posts its link to the Issue. Failure to obtain a branch or create a PR is **not** considered completion; no merge is automated.
-- The Issue template collects a bounded file scope, synthetic test plan, and stop conditions; applying the trigger label is a separate owner action.
+- The Issue template collects a bounded file scope, synthetic test plan and stop conditions. An exact owner comment `/claude-run` is the separate manual trigger; no label setup is needed.
 
 ## Preconditions before activation — do not complete without explicit owner approval
 
@@ -15,7 +15,7 @@ Status: **OFF / preparation only** (2026-10-13). This is a GitHub Issue → Clau
 2. Decide the authentication and cost boundary. Anthropic documents `CLAUDE_CODE_OAUTH_TOKEN` for Pro/Max accounts, generated with `claude setup-token` in a CLI environment. Availability from an iPhone-only workflow is **not confirmed**. Pro usage limits still apply. Do **not** create an Anthropic API key or a paid API plan by default.
 3. Store any OAuth token **only** in repository Actions secret `CLAUDE_CODE_OAUTH_TOKEN`; never paste it in an Issue, public repo, chat or workflow. Confirm the account owner has accepted the security and access implications.
 4. After explicit approval, create repository Actions variable `CLAUDE_TASK_BRIDGE_ENABLED=true`. This is the deliberate activation switch; do not flip it as part of this PR.
-5. Create one small Issue with the template. Check latest main and open PRs to avoid conflicts. Apply `claude-ready` **manually as owner** to trigger **one** run; observe the Actions log and the PR. Do not rapidly remove/reapply the label.
+5. Create one small Issue with the template. Check latest main and open PRs to avoid conflicts. Post **exactly** `/claude-run` as an Issue comment **once from the owner account**; observe the Actions log and draft PR. Do not repeat the comment until the prior run's result is known.
 6. Review exact file changes, regression tests, potential external access and PR CI. No auto-merge. Disable the variable if a run behaves unexpectedly. A successful CI is not a production or licensing approval.
 
 ## Invariants and costs
