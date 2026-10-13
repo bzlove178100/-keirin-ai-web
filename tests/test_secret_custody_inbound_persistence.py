@@ -4,6 +4,7 @@ Synthetic 64 MiB volume only, no external NIC, host mount, live credentials,
 cloud actions, write repair, power-loss or general crash-consistency claim.
 """
 import copy
+import errno
 import hashlib
 import importlib.util
 import json
@@ -27,6 +28,7 @@ s = b.module('storage', HERE / 'test_secret_custody_persistence.py')
 guest = b.module('inbound_store', HERE / 'fixtures/secret_custody_inbound_persistence_guest.py')
 durable = guest.ClosedProfile(s.d)
 persist = b.module('persist', HERE / 'fixtures/secret_custody_persistence_guest.py')
+faults = b.module('storage_faults', HERE / 'test_secret_custody_persistence_crash.py')
 
 
 def command(path, mode, phase):
@@ -36,7 +38,7 @@ def command(path, mode, phase):
     # Reuse the owned regular raw-image guard and exact block-device arguments.
     args += s.command(path, 'closed', mode)[-4:]
     index = args.index('-append') + 1
-    if phase == 'recover': args[index] = args[index].replace('kc_inbound_boot=closed', 'kc_inbound_boot=invalid')
+    if phase == 'recover' or phase in guest.INVALID: args[index] = args[index].replace('kc_inbound_boot=closed', 'kc_inbound_boot=invalid')
     args[index] += ' kc_persistence=1 kc_inbound_persistence=' + phase + ' end=12'
     return args
 
@@ -162,9 +164,10 @@ def normal(path, host_boot):
     finally: stop(process, path)
 
 
-def crash(path, host_boot):
+def crash(path, host_boot, fault=None):
+    if fault is not None and fault not in guest.FAULTS: raise ValueError('FIXED_INBOUND_IO_FAULT_REQUIRED')
     ready, disk_sha = None, None
-    for phase in ('after-receipt', 'recover'):
+    for phase in (fault or 'after-receipt', 'recover'):
         process = None
         try:
             if phase == 'recover' and hashlib.sha256((path / 'state.raw').read_bytes()).hexdigest() != disk_sha:
@@ -176,11 +179,12 @@ def crash(path, host_boot):
                     qmp, lines = vm.QMP(monitor), vm.Lines(serial)
                     s.block_evidence(qmp.call('query-block'), path)
                     loaded = startup(lines, {host_boot} | ({ready['boot']} if ready else set()), recovering=phase == 'recover')
-                    if phase == 'after-receipt':
+                    if phase != 'recover':
                         first, _ = c.cycle(lines, qmp, 'awake', host_boot)
                         loaded_evidence(loaded, first, None)
                         serial.sendall(b'restart\n')
                         ready = record(lines, 'crash-ready', first['boot']); crash_evidence(ready, first['boot'])
+                        if fault is not None: faults.fault_evidence(ready, fault)
                         process.kill()
                         if process.wait(timeout=10) != -signal.SIGKILL: raise RuntimeError('ACTUAL_OWNED_QEMU_SIGKILL_REQUIRED')
                         disk_sha = hashlib.sha256((path / 'state.raw').read_bytes()).hexdigest()
@@ -196,13 +200,63 @@ def crash(path, host_boot):
                                 or done['store_state']['ActiveState'] != 'inactive' or done['store_state']['Result'] != 'success'):
                             raise RuntimeError('REFUSED_GUEST_UNMOUNT_CLEANUP_REQUIRED')
                         print('PASS INBOUND_ACTUAL_SIGKILL_SAME_DISK_PARTIAL_SAVE_REFUSED_NO_AUTH_NO_LEASE', flush=True)
+                        if fault is not None: print('PASS INBOUND_REAL_FILESYSTEM_ERROR_SAME_DISK_RECOVERY ' + fault, flush=True)
         finally: stop(process, path)
+
+
+def invalid_evidence(denied, first, blocked, bad, expected):
+    h.evidence(first)
+    if (bad not in guest.INVALID or denied.get('reason') != guest.INVALID[bad]
+            or denied.get('invalid_case') != bad or blocked.get('invalid_case') != bad
+            or denied.get('disk_state') != expected or blocked.get('disk_state') != expected
+            or denied['boot'] != first['boot'] or blocked['boot'] != first['boot']
+            or denied.get('links') != [False, False] or blocked.get('ruleset_empty') is not True
+            or blocked.get('saved_marker_present') is not False or blocked.get('activation_allowed') is not False
+            or not denied['monotonic'] <= first['monotonic'] <= blocked['monotonic']):
+        raise RuntimeError('EXACT_INVALID_DISK_REFUSAL_WITHOUT_REPAIR_REQUIRED')
+    state = denied['store_state']
+    gate = first['states']['gate']
+    if (state['ActiveState'] != 'active' or state['Result'] != 'success'
+            or any('kc-store.service' not in gate[k].split() for k in ('Requires', 'After'))
+            or not 0 < int(first['states']['setup']['ExecMainExitTimestampMonotonic'])
+                   <= int(state['ExecMainStartTimestampMonotonic']) < int(state['ExecMainExitTimestampMonotonic'])
+                   <= int(gate['ExecMainStartTimestampMonotonic'])):
+        raise RuntimeError('ACTUAL_INVALID_STORE_GATE_ORDER_REQUIRED')
+    if set(blocked['states']) != {'link', 'check', 'lease', 'recover'}:
+        raise RuntimeError('COMPLETE_INVALID_REFUSAL_SERVICES_REQUIRED')
+    for value in blocked['states'].values():
+        if value['ActiveState'] != 'inactive' or int(value['ExecMainStartTimestampMonotonic']) != 0:
+            raise RuntimeError('INVALID_DISK_CANNOT_START_AUTH_OR_LEASE')
+
+
+def invalid(path, bad, boots, expected):
+    if bad not in guest.INVALID: raise ValueError('FIXED_INVALID_INBOUND_DISK_REQUIRED')
+    process = None
+    try:
+        with (path / 'stderr').open('wb') as err:
+            process = subprocess.Popen(command(path, 'awake', bad), stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL, stderr=err, cwd=path, env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
+            with vm.connect(path / 'qmp', process) as monitor, vm.connect(path / 'serial', process) as serial:
+                qmp, lines = vm.QMP(monitor), vm.Lines(serial)
+                s.block_evidence(qmp.call('query-block'), path)
+                denied = startup(lines, boots, recovering=True)
+                first = h.record(lines, 'observed', 'invalid')
+                blocked = record(lines, 'blocked', first['boot'])
+                invalid_evidence(denied, first, blocked, bad, expected)
+                serial.sendall(b'clean\n'); done = h.record(lines, 'done', 'invalid')
+                if (done['boot'] != first['boot'] or done.get('interfaces') != ['lo']
+                        or done.get('activation_allowed') is not False
+                        or done['store_state']['ActiveState'] != 'inactive' or done['store_state']['Result'] != 'success'):
+                    raise RuntimeError('INVALID_DISK_UNMOUNT_CLEANUP_REQUIRED')
+                print('PASS INBOUND_INVALID_DISK_REFUSED_UNCHANGED ' + bad + ' ' + first['boot'], flush=True)
+                return first['boot']
+    finally: stop(process, path)
 
 
 def run_vm(kind):
     p.guard()
     if (os.environ.get('KC_INBOUND_PERSISTENCE_CI') != '1' or os.environ.get('KC_PERSISTENCE_CI') != '1'
-            or kind not in ('normal', 'crash')):
+            or kind not in ('normal', 'crash', 'invalid', *guest.FAULTS)):
         raise RuntimeError('FIXED_INBOUND_PERSISTENCE_CI_OPT_IN_REQUIRED')
     host_boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip(); host_ns = os.readlink('/proc/self/ns/net')
     with tempfile.TemporaryDirectory(prefix='kc-inbound-persist-') as value:
@@ -212,14 +266,114 @@ def run_vm(kind):
         if not 1024*1024 <= len(kernel) <= 64*1024*1024: raise RuntimeError('KERNEL_SIZE_BOUND')
         (path / 'vmlinuz').write_bytes(kernel)
         b.payload(path, inbound=True, inbound_lease=True, inbound_restart=True, inbound_persistence=True)
-        s.disk(path, 'valid', profile=guest.PROFILE)
-        (normal if kind == 'normal' else crash)(path, host_boot)
+        if kind == 'invalid':
+            boots = {host_boot}
+            for bad in guest.INVALID:
+                child = path / bad; child.mkdir(mode=0o700)
+                for name in ('vmlinuz', 'initramfs'): (child / name).symlink_to(path / name)
+                s.disk(child, bad, profile=guest.PROFILE)
+                expected = guest.disk_state(SimpleNamespace(ROOT=child / 'seed', read_bytes=lambda name: (child / 'seed' / name).read_bytes()))
+                boot = invalid(child, bad, boots, expected); boots.add(boot)
+        else:
+            s.disk(path, 'valid', profile=guest.PROFILE)
+            if kind == 'normal': normal(path, host_boot)
+            else: crash(path, host_boot, kind if kind in guest.FAULTS else None)
     if path.exists() or Path('/proc/sys/kernel/random/boot_id').read_text().strip() != host_boot or os.readlink('/proc/self/ns/net') != host_ns:
         raise RuntimeError('INBOUND_STORAGE_HOST_UNCHANGED_REQUIRED')
     print('PASS INBOUND_STORAGE_IMAGES_DISK_PROCESSES_CLEANED_HOST_UNCHANGED NO_LIVE_APPLY', flush=True)
 
 
 class Tests(unittest.TestCase):
+    def test_all_invalid_disk_fixtures_reject_the_intended_reason_without_repair(self):
+        for bad, reason in guest.INVALID.items():
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as value, patch.object(persist, 'ROOT', Path(value)):
+                files = s.seed_files(bad, profile=guest.PROFILE)
+                for name, data in files.items(): (Path(value) / name).write_text(data)
+                before = guest.disk_state(persist)
+                try: persist.load_state(durable, '11111111-1111-4111-8111-111111111111', 10)
+                except (ValueError, OSError) as exc:
+                    actual = type(exc).__name__ if isinstance(exc, (FileNotFoundError, json.JSONDecodeError)) else str(exc)
+                    self.assertEqual(actual, reason)
+                else: self.fail('invalid fixture admitted')
+                self.assertEqual(guest.disk_state(persist), before)
+                for name, data in files.items(): self.assertEqual((Path(value) / name).read_text(), data)
+        # In particular, mismatch/receipt-corrupt must not accidentally test
+        # cross-profile rejection before reaching their intended bad receipt.
+        for bad in ('mismatch', 'receipt-corrupt'):
+            self.assertEqual(json.loads(s.seed_files(bad, profile=guest.PROFILE)['policy.json'])['profile'], guest.PROFILE)
+            self.assertEqual(json.loads(s.seed_files(bad)['policy.json'])['profile'], 'tcp443-closed')
+
+    def test_real_fault_paths_cannot_mutate_before_guard(self):
+        for mode in guest.FAULTS:
+            with patch.object(guest, 'fault_context', side_effect=RuntimeError('GUEST_REFUSED')), patch.object(guest.os, 'open') as opened:
+                with self.assertRaisesRegex(RuntimeError, 'GUEST_REFUSED'): guest.prepare_fault(mode)
+                opened.assert_not_called()
+        with patch.object(subprocess, 'run') as run:
+            with self.assertRaises((FileNotFoundError, RuntimeError)): guest.prepare_fault('enospc')
+            run.assert_not_called()
+
+    def test_fault_context_requires_exact_volume_mode_and_size(self):
+        fake = SimpleNamespace(ROOT=Path('/state'))
+        for current, root, size in (('normal', '/state', '131072'), ('enospc', '/tmp', '131072'), ('enospc', '/state', '1')):
+            fake.ROOT = Path(root)
+            with patch.object(guest, 'context', return_value=(fake, None, None, None, current)), \
+                    patch.object(guest.Path, 'read_text', return_value=size), patch.object(guest, 'module') as module:
+                with self.assertRaisesRegex(RuntimeError, 'FIXED_INBOUND_GUEST'): guest.fault_context('enospc')
+                module.assert_not_called()
+
+    def test_mount_mode_is_explicit_for_readonly_error_observation(self):
+        fakeb = SimpleNamespace(composition=lambda: 'awake')
+        fakep = SimpleNamespace(context=lambda: (fakeb, None, None), mounted=Mock(return_value=True),
+                                crash_mode=lambda: None, fault_mode=lambda: None)
+        flags = 'kc_inbound_boot=closed kc_inbound_restart=1 kc_inbound_lease=1'
+        with patch.object(guest, 'module', return_value=fakep), patch.object(guest, 'phase', return_value='erofs'), \
+                patch.object(guest.Path, 'read_text', return_value=flags):
+            guest.context(); fakep.mounted.assert_called_with('rw')
+            guest.context(readonly=True); fakep.mounted.assert_called_with('ro')
+
+    def test_error_observation_rejects_wrong_errno_or_changed_state(self):
+        for mode, expected_errno in guest.FAULTS.items():
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as value, patch.object(persist, 'ROOT', Path(value)):
+                persist.atomic('policy.json', durable.policy())
+                persist.atomic('receipt.json', dict(boot=s.OLD_BOOT, deadline_ns=1))
+                snapshot = guest.state(persist, durable)
+                prepared = dict(mode=mode, boot=s.OLD_BOOT, crash_state=snapshot, prepared={}, allocated_bytes=1, allocator_errno=None)
+                fakeb = SimpleNamespace(STATE=Path(value), boot=lambda: s.OLD_BOOT, read=lambda name: prepared)
+                helper = SimpleNamespace(filesystem=lambda *args: {})
+                hfake = SimpleNamespace(context=lambda: (None, None, None))
+                restart = SimpleNamespace(intact=lambda *args: ({}, [False, False]))
+                with patch.object(guest, 'fault_context', return_value=(persist, fakeb, None, durable, helper)), \
+                        patch.object(persist, 'mounted', return_value=True), \
+                        patch.object(guest, 'module', side_effect=lambda name, path: hfake if name == 'inbound' else restart), \
+                        patch.object(guest, 'emit') as emit:
+                    with self.assertRaisesRegex(RuntimeError, 'EXACT_INBOUND_WRITE_ERROR'): guest.observe_fault(mode, OSError(errno.EIO, 'wrong error'))
+                    emit.assert_not_called()
+                    guest.observe_fault(mode, OSError(expected_errno, 'expected error'))
+                    self.assertEqual(emit.call_args.kwargs['filesystem_fault']['errno'], expected_errno)
+                    emit.reset_mock(); prepared['crash_state'] = dict(snapshot, receipt_sha256='changed')
+                    with self.assertRaises(RuntimeError): guest.observe_fault(mode, OSError(expected_errno, 'expected error'))
+                    emit.assert_not_called()
+
+    def test_failed_fault_write_propagates_original_error_without_success_marker(self):
+        with tempfile.TemporaryDirectory() as value, patch.object(persist, 'ROOT', Path(value)):
+            persist.atomic('policy.json', durable.policy())
+            loaded = dict(boot=s.OLD_BOOT, generation=0, policy_sha256=hashlib.sha256(persist.read_bytes('policy.json')).hexdigest())
+            fake = SimpleNamespace(boot=lambda: s.OLD_BOOT, read=lambda name: loaded, write=Mock())
+            hfake = SimpleNamespace(context=lambda: (None, None, None))
+            restart = SimpleNamespace(intact=lambda *args: (dict(proof=dict(deadline_ns=1)), [False, False]))
+            original = OSError(errno.ENOSPC, 'synthetic no space'); atomic = persist.atomic
+            def write(name, data):
+                if name == 'policy.json': raise original
+                return atomic(name, data)
+            with patch.object(guest, 'context', return_value=(persist, fake, None, durable, 'enospc')), \
+                    patch.object(guest, 'module', side_effect=[hfake, restart]), patch.object(persist, 'atomic', side_effect=write), \
+                    patch.object(guest, 'prepare_fault') as prepare, patch.object(guest, 'observe_fault') as observe:
+                with self.assertRaises(OSError) as exc: guest.save()
+                self.assertIs(exc.exception, original)
+                prepare.assert_called_once_with('enospc'); observe.assert_called_once_with('enospc', original)
+            fake.write.assert_not_called()
+            with self.assertRaisesRegex(ValueError, 'ORPHAN'): persist.load_state(durable, s.NEW_BOOT, 2)
+
     def test_explicit_profile_binding_refuses_cross_profile_open_and_duplicate(self):
         raw = lambda x: json.dumps(x).encode()
         config = raw(durable.policy(1, s.OLD_BOOT)); receipt = raw(dict(boot=s.OLD_BOOT, deadline_ns=100))
@@ -319,6 +473,35 @@ class Tests(unittest.TestCase):
         altered = copy.deepcopy(blocked); altered['states']['lease']['ExecMainStartTimestampMonotonic'] = '1'
         with self.assertRaises(RuntimeError): refused_evidence(denied, ready, first, altered)
 
+    def test_invalid_evidence_rejects_repair_wrong_reason_or_started_services(self):
+        states = dict(setup=dict(ActiveState='active', ExecMainStatus='0', ExecMainExitTimestampMonotonic='1'))
+        for name, dep in (('gate', 'setup'), ('link', 'gate'), ('check', 'link')):
+            states[name] = dict(Requires='kc-' + dep + '.service', After='kc-' + dep + '.service',
+                                ActiveState='inactive', ExecMainStartTimestampMonotonic='0')
+        states['gate'].update(ActiveState='failed', Result='exit-code', ExecMainStatus='1',
+                             Requires='kc-setup.service kc-store.service', After='kc-setup.service kc-store.service',
+                             ExecMainStartTimestampMonotonic='4')
+        first = dict(case='invalid', boot=s.NEW_BOOT, monotonic=2, states=states, links=[False]*2,
+                     link_entered=False, sealed=None, linked=None, checked=None, activation_allowed=False)
+        expected = dict.fromkeys(('policy.json', 'receipt.json', 'policy.json.next', 'receipt.json.next'))
+        denied = dict(boot=s.NEW_BOOT, monotonic=1, reason='FileNotFoundError', links=[False]*2,
+                      invalid_case='missing', disk_state=expected,
+                      store_state=dict(ActiveState='active', Result='success',
+                          ExecMainStartTimestampMonotonic='2', ExecMainExitTimestampMonotonic='3'))
+        blocked = dict(boot=s.NEW_BOOT, monotonic=3, ruleset_empty=True, saved_marker_present=False,
+                       invalid_case='missing', disk_state=expected, activation_allowed=False,
+                       states={n: dict(ActiveState='inactive', ExecMainStartTimestampMonotonic='0')
+                               for n in ('link', 'check', 'lease', 'recover')})
+        invalid_evidence(denied, first, blocked, 'missing', expected)
+        for change in (dict(reason='other'), dict(disk_state={}), dict(invalid_case='corrupt'), dict(links=[True, False])):
+            with self.assertRaises(RuntimeError): invalid_evidence(dict(denied, **change), first, blocked, 'missing', expected)
+        for change in (dict(disk_state={}), dict(states={}), dict(saved_marker_present=True), dict(ruleset_empty=False)):
+            with self.assertRaises(RuntimeError): invalid_evidence(denied, first, dict(blocked, **change), 'missing', expected)
+        altered = copy.deepcopy(blocked); altered['states']['lease']['ExecMainStartTimestampMonotonic'] = '1'
+        with self.assertRaises(RuntimeError): invalid_evidence(denied, first, altered, 'missing', expected)
+        altered = copy.deepcopy(first); altered['states']['gate']['ExecMainStartTimestampMonotonic'] = '1'
+        with self.assertRaises(RuntimeError): invalid_evidence(denied, altered, blocked, 'missing', expected)
+
     def test_crash_timeout_never_returns_to_writer(self):
         with tempfile.TemporaryDirectory() as value, patch.object(persist, 'ROOT', Path(value)):
             persist.atomic('policy.json', durable.policy())
@@ -343,7 +526,7 @@ class Tests(unittest.TestCase):
                 self.assertEqual(args.count('-drive'), 1)
                 flags = args[args.index('-append') + 1]
                 self.assertIn('kc_inbound_persistence=' + phase, flags)
-                self.assertIn('kc_inbound_boot=' + ('invalid' if phase == 'recover' else 'closed'), flags)
+                self.assertIn('kc_inbound_boot=' + ('invalid' if phase == 'recover' or phase in guest.INVALID else 'closed'), flags)
                 self.assertNotIn('kc_systemd_restart=', flags)
 
     def test_durable_startup_rejects_mixed_boot_and_reversed_clock(self):
