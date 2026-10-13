@@ -35,10 +35,12 @@ jobs:
           fi
 
       - name: Implement owner-approved Issue with Claude
+        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           label_trigger: claude-ready
+          track_progress: true
           base_branch: main
           claude_args: "--max-turns 8"
           prompt: |
@@ -55,5 +57,32 @@ jobs:
             Run the relevant synthetic tests and regression checks.
             Do not change AGENTS.md, WORK_STATUS.md, WORK_RESUME.md or other
             parallel task documents. If a blocker or conflicting PR appears, stop.
-            Submit a reviewable PR (draft if supported), NEVER merge or deploy.
+            Commit and push the changes to a new Claude task branch only.
+            The next workflow step will open a draft PR. NEVER merge or deploy.
             Report the PR link, tests, and blockers in 300 Japanese characters or less.
+
+      - name: Open draft PR and link it from the Issue
+        if: ${{ steps.claude.outputs.conclusion == 'success' && steps.claude.outputs.branch_name != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.claude.outputs.github_token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_BRANCH: ${{ steps.claude.outputs.branch_name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_BRANCH" =~ ^claude/[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error title=Unexpected branch name::No pull request created."
+            exit 2
+          fi
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error title=Missing Claude GitHub App token::No pull request created."
+            exit 2
+          fi
+          existing="$(gh pr list --repo "$GH_REPO" --state open --head "$SOURCE_BRANCH" --json number --jq 'length')"
+          if [ "$existing" != "0" ]; then
+            echo "An open PR already exists for the Claude branch; do not duplicate it."
+            exit 0
+          fi
+          pr_url="$(gh pr create --repo "$GH_REPO" --draft --base main --head "$SOURCE_BRANCH" --title "Claude task #$ISSUE_NUMBER (review required)" --body "Candidate implementation for Issue #$ISSUE_NUMBER. Human review and CI validation are required. No auto-merge or production activation.")"
+          gh issue comment "$ISSUE_NUMBER" --repo "$GH_REPO" --body "Claude produced a draft PR for review: $pr_url. No merge or deployment was performed."
