@@ -1,0 +1,42 @@
+name: "Claude development task (approval queue)"
+description: "Small, synthetic-only code tasks; adding claude-ready requires separate owner approval"
+title: "[Claude task] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue does not automatically run Claude. The owner must enable the gated integration and then separately add the `claude-ready` label. Never include secrets, private race data, or credentials.
+  - type: textarea
+    id: purpose
+    attributes:
+      label: Goal and expected behavior
+      description: "One bounded development change."
+      placeholder: "Allow 9-rider synthetic settlement while preserving 7-rider regression behavior."
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Allowed files and out-of-scope files
+      description: "Be explicit to avoid overlapping other PRs."
+      placeholder: |
+        Allowed: ml/settle_snapshot.py and matching synthetic tests.
+        Do not change: AGENTS.md, WORK_STATUS.md, deployment, DB, production.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Synthetic tests and acceptance criteria
+      placeholder: "7 riders: 210, 9 riders: 504; existing regressions pass. Draft PR only."
+    validations:
+      required: true
+  - type: textarea
+    id: safeguards
+    attributes:
+      label: Safety or permission boundaries
+      value: |
+        Keep KEIRIN.JP HOLD and all existing production/data/credential stops.
+        No external race-data collection, real training, DB/cloud writes, paid resources, or merge.
+    validations:
+      required: true
