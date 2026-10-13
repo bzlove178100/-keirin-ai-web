@@ -218,6 +218,8 @@ def main(action):
     if action == 'peer': peer(b, i); return
     if action == 'listen': listeners(b, i); return
     if action == 'setup':
+        if 'kc_inbound_restart=1' in Path('/proc/cmdline').read_text().split():
+            emit(b, 'setup_entered', case, activation_allowed=False)
         if g.interfaces() != ['lo'] or b.STATE.exists(): raise RuntimeError('FRESH_INBOUND_BOOT_REQUIRED')
         b.STATE.mkdir(mode=0o700)
         g.run('/sbin/modprobe', '-C', '/module-config', '-a', 'ipv6', 'veth', 'nf_tables', 'nft_ct')
@@ -311,6 +313,8 @@ def main(action):
         emit(b, 'done', case, interfaces=g.interfaces(), activation_allowed=False)
         while True: time.sleep(1)
     else: raise RuntimeError('FIXED_INBOUND_BOOT_ACTION_REQUIRED')
+    if action in ('setup', 'gate', 'link') and 'kc_inbound_restart=1' in Path('/proc/cmdline').read_text().split():
+        emit(b, action + '_completed', case, activation_allowed=False)
 
 
 if __name__ == '__main__':

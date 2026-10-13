@@ -85,6 +85,22 @@ def fresh(first, second):
         raise RuntimeError('FRESH_BOOT_AND_EPHEMERAL_KEYS_REQUIRED')
 
 
+def startup(lines, excluded):
+    # Bound each real startup stage separately. A single 100-second budget
+    # incorrectly combined firmware/kernel, setup, gate, link and the matrix.
+    # Existing service (90s), RPC (30s), lease and SSH bounds stay unchanged.
+    rows = []
+    for event in ('setup_entered', 'setup_completed', 'gate_completed', 'link_completed'):
+        row = h.record(lines, event, 'closed')
+        if (row['boot'] in excluded or row.get('activation_allowed') is not False
+                or type(row.get('monotonic')) not in (int, float)
+                or not math.isfinite(row['monotonic']) or row['monotonic'] < 0
+                or rows and (row['boot'] != rows[0]['boot'] or row['monotonic'] < rows[-1]['monotonic'])):
+            raise RuntimeError('FRESH_ORDERED_STARTUP_STAGES_REQUIRED')
+        rows.append(row)
+    return rows[-1]['boot']
+
+
 def case(path, mode, host_boot):
     process = None
     try:
@@ -97,8 +113,9 @@ def case(path, mode, host_boot):
                     raise RuntimeError('DISKLESS_RESTART_S3_MACHINE_REQUIRED')
                 boots, requests = {host_boot}, []
                 for instruction, target, event in ((b'restart\n','reboot.target','RESET'),(b'halt\n','poweroff.target','SHUTDOWN')):
+                    started_boot = startup(lines, boots)
                     first, outcome = c.cycle(lines,qmp,mode,host_boot); boot = first['boot']
-                    if boot in boots: raise RuntimeError('DISTINCT_POST_RESTART_BOOT_REQUIRED')
+                    if boot in boots or boot != started_boot: raise RuntimeError('DISTINCT_POST_RESTART_BOOT_REQUIRED')
                     boots.add(boot)
                     qmp.events = [e for e in qmp.events if e.get('event') in ('SUSPEND','WAKEUP')]
                     serial.sendall(instruction)
@@ -136,6 +153,31 @@ def run_vm(mode):
 
 
 class Tests(unittest.TestCase):
+    def test_startup_requires_fresh_ordered_stage_progress(self):
+        boot = '11111111-1111-4111-8111-111111111111'
+        events = ('setup_entered', 'setup_completed', 'gate_completed', 'link_completed')
+        rows = [dict(event=e, case='closed', boot=boot, pid1='systemd', monotonic=j,
+                     activation_allowed=False) for j,e in enumerate(events)]
+        class Lines:
+            def __init__(self, values): self.values = iter(values); self.deadlines = []
+            def line(self, deadline):
+                self.deadlines.append(deadline)
+                return 'INBOUND_BOOT_RECORD ' + json.dumps(next(self.values))
+        lines = Lines(rows)
+        with patch.object(h.time, 'monotonic', side_effect=(0,80,160,240)):
+            self.assertEqual(startup(lines, {'host'}), boot)
+        self.assertEqual(lines.deadlines, [100,180,260,340])
+        for index, change in ((0,dict(boot='22222222-2222-4222-8222-222222222222')),
+                (1,dict(event='link_completed')), (2,dict(monotonic=-1)),
+                (2,dict(monotonic=float('nan'))), (3,dict(monotonic=0)),
+                (0,dict(activation_allowed=True))):
+            changed=copy.deepcopy(rows); changed[index].update(change)
+            with self.assertRaises(RuntimeError): startup(Lines(changed), {'host'})
+        with self.assertRaisesRegex(RuntimeError,'FRESH'): startup(Lines(rows), {boot})
+        class Stalled:
+            def line(self, deadline): raise RuntimeError('VM_OBSERVATION_DEADLINE')
+        with self.assertRaisesRegex(RuntimeError,'DEADLINE'): startup(Stalled(), {'host'})
+
     def test_normal_shutdown_units_require_lease_and_reverse_dependencies(self):
         with self.assertRaises(ValueError): h.guest.units(inbound_restart=True)
         with self.assertRaises(ValueError): b.payload(Path('/tmp/owned'),inbound_restart=True)
