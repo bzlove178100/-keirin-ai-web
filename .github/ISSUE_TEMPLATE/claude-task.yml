@@ -1,11 +1,11 @@
 name: "Claude development task (approval queue)"
-description: "Small, synthetic-only code tasks; adding claude-ready requires separate owner approval"
+description: "Small, synthetic-only code tasks; the owner must separately authorize automated execution"
 title: "[Claude task] "
 body:
   - type: markdown
     attributes:
       value: |
-        This issue does not automatically run Claude. The owner must enable the gated integration and then separately add the `claude-ready` label. Never include secrets, private race data, or credentials.
+        This issue does not automatically run Claude. After the separately approved feature flag and token are configured, the owner can comment exactly `/claude-run` once to start it. Never include secrets, private race data, or credentials.
   - type: textarea
     id: purpose
     attributes:
