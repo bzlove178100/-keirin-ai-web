@@ -22,7 +22,8 @@ def module(name, path):
     return value
 
 
-def units(inbound_lease=False, inbound_restart=False):
+def units(inbound_lease=False, inbound_restart=False, inbound_persistence=False):
+    if inbound_persistence and not inbound_restart: raise ValueError("INBOUND_PERSISTENCE_REQUIRES_RESTART")
     if inbound_restart and not inbound_lease: raise ValueError("INBOUND_RESTART_REQUIRES_LEASE")
     def service(action, dependencies=''):
         return ('[Unit]\nDefaultDependencies=no\n' + dependencies +
@@ -49,6 +50,11 @@ def units(inbound_lease=False, inbound_restart=False):
         result['kc-shutdown-check.service'] = service('check',
             'Requires=shutdown.target\nAfter=shutdown.target\nBefore=final.target\n').replace('/inbound_boot.py ', '/inbound_restart.py ')
         result['final.target.d/kc-check.conf'] = '[Unit]\nRequires=kc-shutdown-check.service\nAfter=kc-shutdown-check.service\n'
+    if inbound_persistence:
+        result['kc-store.service'] = service('mount', 'Requires=kc-setup.service\nAfter=kc-setup.service\nConflicts=shutdown.target\nBefore=shutdown.target umount.target\n').replace('/inbound_boot.py ', '/persist_probe.py ')
+        result['kc-store.service'] += 'ExecStop=/usr/bin/python3 -I -B /persist_probe.py unmount\n'
+        result['kc-gate.service'] = result['kc-gate.service'].replace('[Service]', 'Requires=kc-store.service\nAfter=kc-store.service\n[Service]')
+        result['kc-shutdown-check.service'] = result['kc-shutdown-check.service'].replace('After=shutdown.target', 'After=shutdown.target umount.target')
     return result
 
 
@@ -248,6 +254,8 @@ def main(action):
         b.write('setup', dict(boot=b.boot(), peer_pid=pid))
     elif action == 'gate':
         if any(up(i, n) for n in ('host0', 'host1')): raise RuntimeError('GATE_BEFORE_LINK_REQUIRED')
+        if Path('/inbound_persistence.py').is_file():
+            module('inbound_persistence', '/inbound_persistence.py').gate()
         i.t.nft(i.observer())
         if case != 'control':
             text = i.t.r.profile('maintenance')
@@ -288,7 +296,7 @@ def main(action):
             if not result['identity_unchanged']: raise RuntimeError('AUTHENTICATED_POLICY_IDENTITY_REQUIRED')
         b.write('check', result)
     elif action == 'report':
-        if lease_enabled(): module('inbound_lease', '/inbound_lease.py').completion(b, i, g)
+        if lease_enabled() and case == 'closed': module('inbound_lease', '/inbound_lease.py').completion(b, i, g)
         states = {n: b.properties(g, 'kc-' + n) for n in ('setup', 'gate', 'link', 'check')}
         emit(b, 'observed', case, states=states, links=[up(i, n) for n in ('host0', 'host1')],
              link_entered=(b.STATE / 'link-entered').exists(),
@@ -296,6 +304,8 @@ def main(action):
              linked=b.read('link') if (b.STATE / 'link').exists() else None,
              checked=b.read('check') if (b.STATE / 'check').exists() else None,
              activation_allowed=False)
+        if Path('/inbound_persistence.py').is_file() and case != 'closed':
+            module('inbound_persistence', '/inbound_persistence.py').refused()
         command = sys.stdin.readline(8).strip()
         if command in ('restart', 'halt') and Path('/inbound_restart.py').is_file():
             module('inbound_restart', '/inbound_restart.py').main(command)
@@ -310,7 +320,10 @@ def main(action):
         module('ssh', '/ssh_probe.py').stop_server(None)
         if remaining or g.interfaces() != ['lo'] or Path(f'/proc/{pid}').exists():
             raise RuntimeError('INBOUND_BOOT_CLEANUP_REQUIRED')
-        emit(b, 'done', case, interfaces=g.interfaces(), activation_allowed=False)
+        persistence = {}
+        if Path('/inbound_persistence.py').is_file():
+            persistence['store_state'] = module('persist', '/persist_probe.py').unmounted_store()
+        emit(b, 'done', case, interfaces=g.interfaces(), activation_allowed=False, **persistence)
         while True: time.sleep(1)
     else: raise RuntimeError('FIXED_INBOUND_BOOT_ACTION_REQUIRED')
     if action in ('setup', 'gate', 'link') and 'kc_inbound_restart=1' in Path('/proc/cmdline').read_text().split():

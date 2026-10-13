@@ -7,8 +7,10 @@ import json
 import uuid
 
 
-def policy(generation=0, writer_boot=None):
-    return dict(schema='kc-closed-policy-v1', profile='tcp443-closed',
+def policy(generation=0, writer_boot=None, *, profile='tcp443-closed'):
+    if profile not in ('tcp443-closed', 'inbound-maintenance-closed'):
+        raise ValueError('FIXED_CLOSED_PROFILE_REQUIRED')
+    return dict(schema='kc-closed-policy-v1', profile=profile,
                 activation_allowed=False, generation=generation, writer_boot=writer_boot)
 
 
@@ -24,7 +26,7 @@ def object_bytes(data):
     return json.loads(data, object_pairs_hook=pairs)
 
 
-def decode(data):
+def decode(data, *, profile='tcp443-closed'):
     value = object_bytes(data)
     if not isinstance(value, dict) or set(value) != set(policy()): raise ValueError('CLOSED_POLICY_KEYS_REQUIRED')
     generation, boot = value['generation'], value['writer_boot']
@@ -32,14 +34,14 @@ def decode(data):
     if generation == 0:
         if boot is not None: raise ValueError('SEED_POLICY_REQUIRED')
     elif not isinstance(boot, str) or str(uuid.UUID(boot)) != boot: raise ValueError('WRITER_BOOT_REQUIRED')
-    if value != policy(generation, boot) or value['activation_allowed'] is not False:
+    if value != policy(generation, boot, profile=profile) or value['activation_allowed'] is not False:
         raise ValueError('CLOSED_ONLY_CONFIGURATION_REQUIRED')
     return value
 
 
-def pair(policy_bytes, receipt_bytes, boot, now):
+def pair(policy_bytes, receipt_bytes, boot, now, *, profile='tcp443-closed'):
     """Validate a complete checkpoint, never recover permission from a receipt."""
-    config = decode(policy_bytes)
+    config = decode(policy_bytes, profile=profile)
     if config['generation'] == 0:
         if receipt_bytes is not None: raise ValueError('ORPHAN_RECEIPT_REFUSED')
         return config, None, 'NO_SAVED_RECEIPT'

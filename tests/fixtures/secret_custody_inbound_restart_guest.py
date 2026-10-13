@@ -72,10 +72,13 @@ def main(action):
         state, blocked = intact(b, h, g, i)
         if [h.up(i, n) for n in ('host0', 'host1')] != [True, True]: raise RuntimeError('TWO_LIVE_INTERNAL_LINKS_REQUIRED')
         target = {'restart': 'reboot.target', 'halt': 'poweroff.target'}[action]
+        persistence = {}
+        if Path('/inbound_persistence.py').is_file():
+            persistence['persistence'] = module('inbound_persistence', '/inbound_persistence.py').save()
         b.write('inbound-shutdown-request', dict(boot=b.boot(), target=target))
         public = {n: fingerprint((Path('/run/ssh-probe') / (n + '.pub')).read_text()) for n in ('host', 'client')}
         emit(b, 'requested', target=target, qualification=blocked, profile_unchanged=True,
-             guards_absent=True, links=[True, True], public_key_sha256=public, deadline_ns=state['proof']['deadline_ns'])
+             guards_absent=True, links=[True, True], public_key_sha256=public, deadline_ns=state['proof']['deadline_ns'], **persistence)
         # Actual PID1's normal stop transaction, never forced reboot/QMP reset.
         g.run('/usr/bin/systemctl', '--no-block', 'start', target)
         return
@@ -115,9 +118,12 @@ def main(action):
         # The peer namespace may have destroyed veths, but the complete inet
         # maintenance profile must remain until the kernel itself reboots.
         profile(b, h, g, i)
+        persistence = {}
+        if Path('/inbound_persistence.py').is_file():
+            persistence['persistence'] = module('persist', '/persist_probe.py').shutdown_check()
         emit(b, 'stopped', target=request['target'], states=states, interfaces=interfaces,
              profile_unchanged=True, guards_absent=True, peer_stopped=True, ssh_stopped=True,
-             link_stopped_at=link['monotonic'])
+             link_stopped_at=link['monotonic'], **persistence)
     else: raise RuntimeError('FIXED_INBOUND_RESTART_ACTION_REQUIRED')
 
 

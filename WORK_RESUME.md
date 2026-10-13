@@ -1,5 +1,47 @@
 # Work resume handoff
 
+## PR #244 verified baseline / inbound durable-recovery candidate — 2026-10-13
+
+Continuation rechecked current main 0ce5032c2f64990678885de54841a7a80f14aa27,
+merged PR #244 and no open PRs. PR head 2db898a5dea6c1b794aa15b6ad86773d494525c3
+and main share tree 0cb8130c2b6f24d660ee52250b864b32436644d0. The final PR #244
+receipt supersedes its historical pending text below. All five PR and independent
+main workflows passed; regression 38328188658 and 38329055133 each passed 39/39.
+Main runtime 38329054976, PostgreSQL 38329055107, UI 38329055112, AWS 38329055026,
+and Pages 38329054692 also passed. Original PR #243 failures remain preserved.
+
+Next candidate binds the wider inbound maintenance profile to a strict closed-only
+configuration on one synthetic 64 MiB ext4 disk. The prior tcp443-only profile
+remains the default and cross-profile loads are refused. The actual systemd
+store dependency precedes the gate and both first link-ups. No receipt restores
+permission, and no credential is persisted. Normal mode runs both complete
+startup/SSH/real-S3-expiry/unmasked-restoration cycles, a normal reboot and final
+poweroff, with exact checkpoint hashes, prior-boot lease refusal, fresh public
+key material and actual store unmount evidence.
+
+The crash case completes the awake cycle, fsyncs only the expired receipt, then
+pauses without publishing a saved marker or requesting shutdown. The supervisor
+SIGKILLs only its owned QEMU process. A second fresh process opens the same
+unmodified image, requires exact policy/receipt hashes and ORPHAN_RECEIPT_REFUSED,
+then verifies both links remain down, an empty ruleset, no auth/check/lease/recover
+service execution, and volume/process cleanup. This is a process crash after an
+acknowledged fsync; it is not host power-loss, arbitrary torn-write, broader
+filesystem-fault coverage or production recovery qualification. No repair,
+reseed, forced reboot fallback, deadline relaxation or unchanged CI retry.
+
+Local: 10 new inbound-persistence tests passed; 66 targeted tests passed overall.
+Actual new PR VM evidence and independent main CI are PENDING. Inspect both new
+normal/crash jobs plus all existing regression jobs before merging a tested head.
+If anything fails, preserve the exact head/run/job and investigate that evidence.
+
+Real training 0; production predictions, DB writes, external acquisition, live
+host application/activation and real credential use remain OFF. KEIRIN.JP HOLD
+remains active. This is common-agent recovery qualification, not a completion
+percentage or production-readiness claim. After this candidate, wider-profile
+invalid/missing durable configuration and real filesystem error composition
+remain separate unverified scopes; the legacy narrower-profile evidence cannot
+be silently promoted to those claims.
+
 ## PR #243 main observation failure / stage-observation correction — 2026-10-13
 
 PR #243 merged as b1c9a6fffca12e0f00153e5b8df63dd782226782 (tree

@@ -27,13 +27,14 @@ vm = p.vm
 u = module('units', HERE.parent / 'review/secret_custody_boot_units.py')
 
 
-def payload(path, composed=False, restart=False, persistence=False, inbound=False, inbound_lease=False, inbound_restart=False):
+def payload(path, composed=False, restart=False, persistence=False, inbound=False, inbound_lease=False, inbound_restart=False, inbound_persistence=False):
+    if inbound_persistence and not inbound_restart: raise ValueError("INBOUND_PERSISTENCE_REQUIRES_RESTART")
     if inbound_restart and not inbound_lease: raise ValueError("INBOUND_RESTART_REQUIRES_LEASE")
     if inbound_lease and not inbound: raise ValueError("INBOUND_LEASE_REQUIRES_INBOUND")
     if inbound and (composed or restart or persistence): raise ValueError("SEPARATE_INBOUND_BOOT_REQUIRED")
     if persistence and not restart: raise ValueError("PERSISTENCE_REQUIRES_RESTART")
     if restart and not composed: raise ValueError("RESTART_REQUIRES_COMPOSITION")
-    files = p.payload(path, boottime_guard=composed or inbound_lease, authenticated=composed or inbound, systemd=composed or inbound, storage=persistence, conntrack=inbound, inbound_lease=inbound_lease)
+    files = p.payload(path, boottime_guard=composed or inbound_lease, authenticated=composed or inbound, systemd=composed or inbound, storage=persistence or inbound_persistence, conntrack=inbound, inbound_lease=inbound_lease)
     def add(source, target=None):
         source = Path(source)
         files[(target or str(source)).lstrip('/')] = (source.read_bytes(), source.stat().st_mode & 0o777)
@@ -55,7 +56,8 @@ def payload(path, composed=False, restart=False, persistence=False, inbound=Fals
                       'shutdown.target', 'umount.target', 'final.target') if restart or inbound_restart else ()
     for name in shutdown_units: add('/usr/lib/systemd/system/' + name)
     if restart: add(HERE / 'fixtures/secret_custody_restart_guest.py', 'restart_probe.py')
-    if persistence:
+    if inbound_persistence: add(HERE / 'fixtures/secret_custody_inbound_persistence_guest.py', 'inbound_persistence.py')
+    if persistence or inbound_persistence:
         add(HERE / 'fixtures/secret_custody_persistence_guest.py', 'persist_probe.py')
         add(HERE / 'fixtures/secret_custody_persistence_fault_guest.py', 'persist_fault.py')
         add(HERE.parent / 'review/secret_custody_durable_policy.py', 'durable_policy.py')
@@ -71,7 +73,7 @@ def payload(path, composed=False, restart=False, persistence=False, inbound=Fals
     if not composed and not inbound:
         files['etc/passwd'] = (b'root:x:0:0:Synthetic root:/root:/bin/false\n', 0o644)
         files['etc/group'] = (b'root:x:0:\n', 0o644)
-    selected_units = module('inbound_boot', HERE / 'fixtures/secret_custody_inbound_boot_guest.py').units(inbound_lease=inbound_lease, inbound_restart=inbound_restart) if inbound else u.units(composed, restart, persistence)
+    selected_units = module('inbound_boot', HERE / 'fixtures/secret_custody_inbound_boot_guest.py').units(inbound_lease=inbound_lease, inbound_restart=inbound_restart, inbound_persistence=inbound_persistence) if inbound else u.units(composed, restart, persistence)
     for name, content in selected_units.items(): files['etc/systemd/system/' + name] = (content.encode(), 0o644)
     image = p.archive(files, systemd=True)
     (path / 'initramfs').write_bytes(image)
