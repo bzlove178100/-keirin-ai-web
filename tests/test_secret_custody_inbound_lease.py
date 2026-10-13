@@ -74,6 +74,28 @@ def recovery(restored, recovered, completed, first):
             raise RuntimeError('ACTUAL_RECOVERY_SERVICE_ORDER_REQUIRED')
 
 
+def cycle(lines, qmp, mode, host_boot):
+    matrix = h.record(lines, 'matrix', 'closed'); boot = matrix['boot']
+    if boot == host_boot: raise RuntimeError('DISTINCT_INBOUND_LEASE_BOOT_REQUIRED')
+    ready = record(lines, 'ssh_ready', mode, boot); p.ssh_evidence(ready['ssh'], initial=True)
+    before = record(lines, 'before', mode, boot); started = time.monotonic()
+    if mode == 'suspend':
+        qmp.event('SUSPEND', time.monotonic()+20)
+        if qmp.call('query-status').get('status') != 'suspended': raise RuntimeError('REAL_S3_REQUIRED')
+        time.sleep(vm.SUSPEND_SECONDS)
+        qmp.call('system_wakeup'); qmp.event('WAKEUP', time.monotonic()+10)
+    after = record(lines, 'after', mode, boot); outcome = expiry(mode, before, after, time.monotonic()-started)
+    restored = record(lines, 'restored', mode, boot)
+    recovered = record(lines, 'recovered', mode, boot)
+    completed = record(lines, 'completed', mode, boot)
+    first = h.record(lines, 'observed', 'closed'); h.evidence(first); h.matrix_sequence(matrix, first)
+    recovery(restored, recovered, completed, first)
+    rows = (matrix, ready, before, after, restored, recovered, completed, first)
+    if any(a['boot'] != z['boot'] or a['monotonic'] > z['monotonic'] for a,z in zip(rows, rows[1:])):
+        raise RuntimeError('SAME_ORDERED_COMPOSITION_REQUIRED')
+    return first, outcome
+
+
 def case(path, mode, host_boot):
     process = None
     try:
@@ -84,24 +106,7 @@ def case(path, mode, host_boot):
                 qmp, lines = vm.QMP(monitor), vm.Lines(serial)
                 if qmp.call('query-block') != [] or qmp.call('query-current-machine').get('wakeup-suspend-support') is not True:
                     raise RuntimeError('DISKLESS_S3_MACHINE_REQUIRED')
-                matrix = h.record(lines, 'matrix', 'closed'); boot = matrix['boot']
-                if boot == host_boot: raise RuntimeError('DISTINCT_INBOUND_LEASE_BOOT_REQUIRED')
-                ready = record(lines, 'ssh_ready', mode, boot); p.ssh_evidence(ready['ssh'], initial=True)
-                before = record(lines, 'before', mode, boot); started = time.monotonic()
-                if mode == 'suspend':
-                    qmp.event('SUSPEND', time.monotonic()+20)
-                    if qmp.call('query-status').get('status') != 'suspended': raise RuntimeError('REAL_S3_REQUIRED')
-                    time.sleep(vm.SUSPEND_SECONDS)
-                    qmp.call('system_wakeup'); qmp.event('WAKEUP', time.monotonic()+10)
-                after = record(lines, 'after', mode, boot); outcome = expiry(mode, before, after, time.monotonic()-started)
-                restored = record(lines, 'restored', mode, boot)
-                recovered = record(lines, 'recovered', mode, boot)
-                completed = record(lines, 'completed', mode, boot)
-                first = h.record(lines, 'observed', 'closed'); h.evidence(first); h.matrix_sequence(matrix, first)
-                recovery(restored, recovered, completed, first)
-                rows = (matrix, ready, before, after, restored, recovered, completed, first)
-                if any(a['boot'] != z['boot'] or a['monotonic'] > z['monotonic'] for a,z in zip(rows, rows[1:])):
-                    raise RuntimeError('SAME_ORDERED_COMPOSITION_REQUIRED')
+                first, outcome = cycle(lines, qmp, mode, host_boot); boot = first['boot']
                 serial.sendall(b'clean\n'); done = h.record(lines, 'done', 'closed')
                 if done['boot'] != boot or done.get('interfaces') != ['lo'] or done.get('activation_allowed') is not False:
                     raise RuntimeError('INBOUND_LEASE_CLEANUP_REQUIRED')

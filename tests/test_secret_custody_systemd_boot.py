@@ -27,7 +27,8 @@ vm = p.vm
 u = module('units', HERE.parent / 'review/secret_custody_boot_units.py')
 
 
-def payload(path, composed=False, restart=False, persistence=False, inbound=False, inbound_lease=False):
+def payload(path, composed=False, restart=False, persistence=False, inbound=False, inbound_lease=False, inbound_restart=False):
+    if inbound_restart and not inbound_lease: raise ValueError("INBOUND_RESTART_REQUIRES_LEASE")
     if inbound_lease and not inbound: raise ValueError("INBOUND_LEASE_REQUIRES_INBOUND")
     if inbound and (composed or restart or persistence): raise ValueError("SEPARATE_INBOUND_BOOT_REQUIRED")
     if persistence and not restart: raise ValueError("PERSISTENCE_REQUIRES_RESTART")
@@ -49,8 +50,9 @@ def payload(path, composed=False, restart=False, persistence=False, inbound=Fals
         for name in ('test_secret_custody_inbound.py', 'test_secret_custody_network_transition.py'):
             add(HERE / name, 'tests/' + name)
         add(HERE.parent / 'review/secret_custody_network_rehearsal.py', 'review/secret_custody_network_rehearsal.py')
+    if inbound_restart: add(HERE / 'fixtures/secret_custody_inbound_restart_guest.py', 'inbound_restart.py')
     shutdown_units = ('reboot.target', 'systemd-reboot.service', 'poweroff.target', 'systemd-poweroff.service',
-                      'shutdown.target', 'umount.target', 'final.target') if restart else ()
+                      'shutdown.target', 'umount.target', 'final.target') if restart or inbound_restart else ()
     for name in shutdown_units: add('/usr/lib/systemd/system/' + name)
     if restart: add(HERE / 'fixtures/secret_custody_restart_guest.py', 'restart_probe.py')
     if persistence:
@@ -69,7 +71,7 @@ def payload(path, composed=False, restart=False, persistence=False, inbound=Fals
     if not composed and not inbound:
         files['etc/passwd'] = (b'root:x:0:0:Synthetic root:/root:/bin/false\n', 0o644)
         files['etc/group'] = (b'root:x:0:\n', 0o644)
-    selected_units = module('inbound_boot', HERE / 'fixtures/secret_custody_inbound_boot_guest.py').units(inbound_lease=inbound_lease) if inbound else u.units(composed, restart, persistence)
+    selected_units = module('inbound_boot', HERE / 'fixtures/secret_custody_inbound_boot_guest.py').units(inbound_lease=inbound_lease, inbound_restart=inbound_restart) if inbound else u.units(composed, restart, persistence)
     for name, content in selected_units.items(): files['etc/systemd/system/' + name] = (content.encode(), 0o644)
     image = p.archive(files, systemd=True)
     (path / 'initramfs').write_bytes(image)

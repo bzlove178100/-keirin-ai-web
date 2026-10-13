@@ -22,7 +22,8 @@ def module(name, path):
     return value
 
 
-def units(inbound_lease=False):
+def units(inbound_lease=False, inbound_restart=False):
+    if inbound_restart and not inbound_lease: raise ValueError("INBOUND_RESTART_REQUIRES_LEASE")
     def service(action, dependencies=''):
         return ('[Unit]\nDefaultDependencies=no\n' + dependencies +
                 '[Service]\nType=oneshot\nRemainAfterExit=yes\nTimeoutStartSec=90\n'
@@ -39,6 +40,15 @@ def units(inbound_lease=False):
             result['kc-' + action + '.service'] = service(action,
                 'Requires=kc-' + dep + '.service\nAfter=kc-' + dep + '.service\n')
         result['kc-report.service'] = service('report', 'Wants=kc-recover.service\nAfter=kc-recover.service\n') + 'StandardInput=tty\n'
+    if inbound_restart:
+        result['kc-report.service'] = result['kc-report.service'].replace('Type=oneshot', 'Type=exec')
+        for name in tuple(result):
+            if name.startswith('kc-'):
+                result[name] = result[name].replace('[Service]', 'Conflicts=shutdown.target\nBefore=shutdown.target\n[Service]')
+        result['kc-link.service'] += 'ExecStop=/usr/bin/python3 -I -B /inbound_restart.py link-down\n'
+        result['kc-shutdown-check.service'] = service('check',
+            'Requires=shutdown.target\nAfter=shutdown.target\nBefore=final.target\n').replace('/inbound_boot.py ', '/inbound_restart.py ')
+        result['final.target.d/kc-check.conf'] = '[Unit]\nRequires=kc-shutdown-check.service\nAfter=kc-shutdown-check.service\n'
     return result
 
 
@@ -273,7 +283,11 @@ def main(action):
              linked=b.read('link') if (b.STATE / 'link').exists() else None,
              checked=b.read('check') if (b.STATE / 'check').exists() else None,
              activation_allowed=False)
-        if sys.stdin.readline(8).strip() != 'clean': raise RuntimeError('FIXED_INBOUND_CLEANUP_REQUIRED')
+        command = sys.stdin.readline(8).strip()
+        if command in ('restart', 'halt') and Path('/inbound_restart.py').is_file():
+            module('inbound_restart', '/inbound_restart.py').main(command)
+            while True: time.sleep(1)
+        if command != 'clean': raise RuntimeError('FIXED_INBOUND_CLEANUP_REQUIRED')
         if lease_enabled(): g.run('/usr/bin/systemctl', 'stop', 'kc-recover.service', 'kc-lease.service')
         pid = b.read('setup')['peer_pid']
         g.run('/usr/bin/systemctl', 'stop', 'kc-check.service', 'kc-link.service', 'kc-gate.service', 'kc-setup.service')

@@ -1,5 +1,53 @@
 # Work status
 
+## PR #242 verified baseline and inbound normal-restart candidate — 2026-10-13
+
+Current main rechecked: ba5fd544d66964422d1cdc29fd02dd31437537e3; PR #242 merged,
+no open PRs at continuation. PR head 76e65c1d76a239aa9a7e5bcd94ccb5a8460b3055
+and main share tree 7def3964a5bfe8983e5f2e22fb6eeb5ae580dc31. PR #242's final
+receipt supersedes the older candidate UNVERIFIED text below. All five PR and
+independent main workflows passed, regression 37/37 each, plus main Pages.
+PR regression 38322256249 / inbound lease job 115052818578; main regression
+38323129977 / inbound lease job 115055563782. Main awake and real-S3 boots both
+proved expired existing/fresh qualification denial, authenticated SSH continuity,
+exact maintenance restoration, and all 28 input paths / 16 loopback controls
+after expired guards were removed. Main S3 boot 2937eb7b-f5d8-41b2-81af-936e1079a98e
+completed its first resumed packet probes 2.810746412 monotonic seconds after
+lease start, within the unchanged 7-second bound. No failed candidate runs or
+unchanged retries were needed for PR #242.
+
+Next candidate composes the verified inbound cycle with normal guest-manager
+shutdown/reboot and another complete fresh-boot cycle. Two separate CI matrix
+jobs cover awake and actual S3 expiry. Each job uses one diskless QEMU process,
+normal reboot.target followed by poweroff.target, actual guest-origin QMP events,
+and a zero exit after poweroff. No forced reboot or QMP reset is used. The
+8-second immutable deadline, <3-second live window, <7-second first-resume window,
+90-second services and existing observation bounds remain unchanged.
+
+Before shutdown, the restored wide profile must match exactly with the expired
+guards already absent. The link service closes BOTH host0/host1 while the peer
+still exists, repeats closed qualification probes, and retains the full inet
+profile. Actual inactive timestamps must show the reverse service order before
+the shutdown checker permits final.target. Peer and SSH processes must be gone.
+After normal reboot, fresh empty startup state, a distinct boot ID and newly
+generated public host/client key digests are required. The complete original
+startup matrix, SSH positive/negative authentication, expiry and unmasked
+recovery matrix run again. Key digests ignore comments; no private keys leave
+the guest. Different digests are not a claim of an old-key revocation test.
+
+Local: 52 targeted tests pass (inbound 23, systemd 14, packet 15). New refusal
+cases cover stale/unexpired recovery, partial link shutdown, changed or masked
+profiles, incomplete/reordered service stops and reused boot/key evidence.
+Actual normal reboot/poweroff composition, exact PR CI and independent main CI
+remain pending for this candidate. Next: inspect actual guest evidence, fix any
+observed failure without blind retries, merge only a verified head, then inspect
+main CI. Durable on-disk recovery and crash recovery of this wider profile remain
+separate unverified compositions; this diskless reboot test does not establish them.
+
+Real training 0; DB writes, production prediction, external acquisition, live
+activation and real credentials remain OFF. KEIRIN.JP HOLD remains active. This
+is synthetic common-agent recovery work, not a product completion percentage.
+
 ## Inbound expiry/recovery composition candidate — 2026-10-13
 
 Continuation baseline rechecked: main 9511be129821ef96ebc91c8dff4cc9320a2a1a90,
