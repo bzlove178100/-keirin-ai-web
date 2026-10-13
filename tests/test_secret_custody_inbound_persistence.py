@@ -29,10 +29,12 @@ guest = b.module('inbound_store', HERE / 'fixtures/secret_custody_inbound_persis
 durable = guest.ClosedProfile(s.d)
 persist = b.module('persist', HERE / 'fixtures/secret_custody_persistence_guest.py')
 faults = b.module('storage_faults', HERE / 'test_secret_custody_persistence_crash.py')
+SUSPEND_FAULTS = {name + '-suspend': name for name in guest.FAULTS}
 
 
 def command(path, mode, phase):
-    if phase not in guest.PHASES or (phase != 'normal' and mode != 'awake'):
+    if (phase not in guest.PHASES or mode not in ('awake', 'suspend')
+            or phase not in ('normal', *guest.FAULTS) and mode != 'awake'):
         raise ValueError('FIXED_INBOUND_STORAGE_CASE_REQUIRED')
     args = r.command(path, mode)
     # Reuse the owned regular raw-image guard and exact block-device arguments.
@@ -164,8 +166,17 @@ def normal(path, host_boot):
     finally: stop(process, path)
 
 
-def crash(path, host_boot, fault=None):
-    if fault is not None and fault not in guest.FAULTS: raise ValueError('FIXED_INBOUND_IO_FAULT_REQUIRED')
+def fault_composition_evidence(ready, mode, outcome):
+    expected = {'awake': 'BOOTTIME_AWAKE_EXPIRY_CONFIRMED', 'suspend': 'BOOTTIME_SUSPEND_EXPIRY_OBSERVED'}
+    if (mode not in expected or outcome != expected[mode] or ready.get('composition') != mode
+            or ready.get('shutdown_request_present') is not False):
+        raise RuntimeError('EXACT_EXPIRY_STORAGE_FAULT_NO_SHUTDOWN_REQUIRED')
+
+
+def crash(path, host_boot, fault=None, *, mode='awake'):
+    if (fault is not None and fault not in guest.FAULTS or mode not in ('awake', 'suspend')
+            or mode == 'suspend' and fault not in guest.FAULTS):
+        raise ValueError('FIXED_INBOUND_IO_FAULT_REQUIRED')
     ready, disk_sha = None, None
     for phase in (fault or 'after-receipt', 'recover'):
         process = None
@@ -173,18 +184,31 @@ def crash(path, host_boot, fault=None):
             if phase == 'recover' and hashlib.sha256((path / 'state.raw').read_bytes()).hexdigest() != disk_sha:
                 raise RuntimeError('UNMODIFIED_SAME_CRASH_DISK_REQUIRED')
             with (path / ('stderr-' + phase)).open('wb') as err:
-                process = subprocess.Popen(command(path, 'awake', phase), stdin=subprocess.DEVNULL,
+                process = subprocess.Popen(command(path, 'awake' if phase == 'recover' else mode, phase), stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL, stderr=err, cwd=path, env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
                 with vm.connect(path / 'qmp', process) as monitor, vm.connect(path / 'serial', process) as serial:
                     qmp, lines = vm.QMP(monitor), vm.Lines(serial)
                     s.block_evidence(qmp.call('query-block'), path)
                     loaded = startup(lines, {host_boot} | ({ready['boot']} if ready else set()), recovering=phase == 'recover')
                     if phase != 'recover':
-                        first, _ = c.cycle(lines, qmp, 'awake', host_boot)
+                        if mode == 'suspend' and qmp.call('query-current-machine').get('wakeup-suspend-support') is not True:
+                            raise RuntimeError('ACTUAL_S3_CAPABILITY_REQUIRED')
+                        first, outcome = c.cycle(lines, qmp, mode, host_boot)
                         loaded_evidence(loaded, first, None)
+                        if fault is not None:
+                            if qmp.call('query-status').get('status') != 'running':
+                                raise RuntimeError('RUNNING_GUEST_BEFORE_FAILED_SAVE_REQUIRED')
+                            qmp.events = []  # Start the transition observation before the request.
                         serial.sendall(b'restart\n')
                         ready = record(lines, 'crash-ready', first['boot']); crash_evidence(ready, first['boot'])
-                        if fault is not None: faults.fault_evidence(ready, fault)
+                        if fault is not None:
+                            faults.fault_evidence(ready, fault)
+                            fault_composition_evidence(ready, mode, outcome)
+                            # No normal shutdown transaction may start after a
+                            # failed save, even when the preceding lease used S3.
+                            if (qmp.call('query-status').get('status') != 'running'
+                                    or any(x.get('event') in ('RESET', 'SHUTDOWN') for x in qmp.events)):
+                                raise RuntimeError('FAILED_SAVE_CANNOT_TRIGGER_NORMAL_SHUTDOWN')
                         process.kill()
                         if process.wait(timeout=10) != -signal.SIGKILL: raise RuntimeError('ACTUAL_OWNED_QEMU_SIGKILL_REQUIRED')
                         disk_sha = hashlib.sha256((path / 'state.raw').read_bytes()).hexdigest()
@@ -200,7 +224,9 @@ def crash(path, host_boot, fault=None):
                                 or done['store_state']['ActiveState'] != 'inactive' or done['store_state']['Result'] != 'success'):
                             raise RuntimeError('REFUSED_GUEST_UNMOUNT_CLEANUP_REQUIRED')
                         print('PASS INBOUND_ACTUAL_SIGKILL_SAME_DISK_PARTIAL_SAVE_REFUSED_NO_AUTH_NO_LEASE', flush=True)
-                        if fault is not None: print('PASS INBOUND_REAL_FILESYSTEM_ERROR_SAME_DISK_RECOVERY ' + fault, flush=True)
+                        if fault is not None:
+                            print('PASS INBOUND_REAL_FILESYSTEM_ERROR_SAME_DISK_RECOVERY ' + fault + ' ' + mode, flush=True)
+                            print('PASS INBOUND_EXPIRED_SAVE_FAILED_WITHOUT_NORMAL_SHUTDOWN ' + outcome, flush=True)
         finally: stop(process, path)
 
 
@@ -256,7 +282,7 @@ def invalid(path, bad, boots, expected):
 def run_vm(kind):
     p.guard()
     if (os.environ.get('KC_INBOUND_PERSISTENCE_CI') != '1' or os.environ.get('KC_PERSISTENCE_CI') != '1'
-            or kind not in ('normal', 'crash', 'invalid', *guest.FAULTS)):
+            or kind not in ('normal', 'crash', 'invalid', *guest.FAULTS, *SUSPEND_FAULTS)):
         raise RuntimeError('FIXED_INBOUND_PERSISTENCE_CI_OPT_IN_REQUIRED')
     host_boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip(); host_ns = os.readlink('/proc/self/ns/net')
     with tempfile.TemporaryDirectory(prefix='kc-inbound-persist-') as value:
@@ -277,13 +303,70 @@ def run_vm(kind):
         else:
             s.disk(path, 'valid', profile=guest.PROFILE)
             if kind == 'normal': normal(path, host_boot)
-            else: crash(path, host_boot, kind if kind in guest.FAULTS else None)
+            else: crash(path, host_boot, SUSPEND_FAULTS.get(kind, kind if kind in guest.FAULTS else None),
+                        mode='suspend' if kind in SUSPEND_FAULTS else 'awake')
     if path.exists() or Path('/proc/sys/kernel/random/boot_id').read_text().strip() != host_boot or os.readlink('/proc/self/ns/net') != host_ns:
         raise RuntimeError('INBOUND_STORAGE_HOST_UNCHANGED_REQUIRED')
     print('PASS INBOUND_STORAGE_IMAGES_DISK_PROCESSES_CLEANED_HOST_UNCHANGED NO_LIVE_APPLY', flush=True)
 
 
 class Tests(unittest.TestCase):
+    def test_suspend_storage_case_is_fixed_and_recovery_stays_awake(self):
+        with tempfile.TemporaryDirectory() as value:
+            path = Path(value)
+            with (path / 'state.raw').open('xb') as stream: stream.truncate(s.SIZE)
+            for phase in guest.FAULTS:
+                args = command(path, 'suspend', phase)
+                flags = args[args.index('-append') + 1]
+                self.assertIn('kc_systemd_lease=suspend', flags)
+                self.assertIn('kc_inbound_persistence=' + phase, flags)
+                self.assertEqual(args.count('-drive'), 1)
+                self.assertEqual(args[args.index('-nic') + 1], 'none')
+            for phase in ('recover', 'after-receipt', *guest.INVALID):
+                with self.assertRaises(ValueError): command(path, 'suspend', phase)
+            for mode, fault in (('live', 'enospc'), ('suspend', None), ('suspend', 'unknown')):
+                with patch.object(subprocess, 'Popen') as launch:
+                    with self.assertRaises(ValueError): crash(path, s.OLD_BOOT, fault, mode=mode)
+                    launch.assert_not_called()
+
+    def test_guest_suspend_requires_normal_or_exact_filesystem_fault_phase(self):
+        fakeb = SimpleNamespace(composition=lambda: 'suspend')
+        fakep = SimpleNamespace(context=lambda: (fakeb, None, None), mounted=lambda *a: True,
+                                crash_mode=lambda: None, fault_mode=lambda: None)
+        for phase in guest.PHASES:
+            case = 'invalid' if phase == 'recover' or phase in guest.INVALID else 'closed'
+            flags = 'kc_inbound_boot=' + case + ' kc_inbound_restart=1 kc_inbound_lease=1'
+            with patch.object(guest, 'module', return_value=fakep), patch.object(guest, 'phase', return_value=phase), \
+                    patch.object(guest.Path, 'read_text', return_value=flags):
+                if phase in ('normal', *guest.FAULTS): self.assertEqual(guest.context()[-1], phase)
+                else:
+                    with self.assertRaisesRegex(RuntimeError, 'COMPOSITION'): guest.context()
+
+    def test_fault_composition_cannot_substitute_awake_for_suspend_or_start_shutdown(self):
+        for mode, outcome in (('awake', 'BOOTTIME_AWAKE_EXPIRY_CONFIRMED'), ('suspend', 'BOOTTIME_SUSPEND_EXPIRY_OBSERVED')):
+            row = dict(composition=mode, shutdown_request_present=False)
+            fault_composition_evidence(row, mode, outcome)
+            for changed in (dict(composition='other'), dict(shutdown_request_present=True), dict(shutdown_request_present=None)):
+                with self.assertRaises(RuntimeError): fault_composition_evidence(dict(row, **changed), mode, outcome)
+            other = 'BOOTTIME_AWAKE_EXPIRY_CONFIRMED' if mode == 'suspend' else 'BOOTTIME_SUSPEND_EXPIRY_OBSERVED'
+            with self.assertRaises(RuntimeError): fault_composition_evidence(row, mode, other)
+
+    def test_restart_handler_cannot_publish_or_request_shutdown_after_save_error(self):
+        for action in ('restart', 'halt'):
+            for error in (errno.ENOSPC, errno.EROFS):
+                fakeb = SimpleNamespace(write=Mock())
+                fakeh = SimpleNamespace(context=lambda: (None, None, None), up=lambda *a: True)
+                fakeg = SimpleNamespace(run=Mock())
+                failure = OSError(error, 'synthetic failed save')
+                store = SimpleNamespace(save=Mock(side_effect=failure))
+                with patch.object(r.guest, 'context', return_value=(fakeb, fakeh, fakeg)), \
+                        patch.object(r.guest, 'intact', return_value=({}, [False, False])), \
+                        patch.object(r.guest.Path, 'is_file', return_value=True), \
+                        patch.object(r.guest, 'module', return_value=store), patch.object(r.guest, 'emit') as emit:
+                    with self.assertRaises(OSError) as caught: r.guest.main(action)
+                    self.assertIs(caught.exception, failure)
+                fakeb.write.assert_not_called(); fakeg.run.assert_not_called(); emit.assert_not_called()
+
     def test_all_invalid_disk_fixtures_reject_the_intended_reason_without_repair(self):
         for bad, reason in guest.INVALID.items():
             with self.subTest(bad=bad), tempfile.TemporaryDirectory() as value, patch.object(persist, 'ROOT', Path(value)):
@@ -338,7 +421,7 @@ class Tests(unittest.TestCase):
                 persist.atomic('receipt.json', dict(boot=s.OLD_BOOT, deadline_ns=1))
                 snapshot = guest.state(persist, durable)
                 prepared = dict(mode=mode, boot=s.OLD_BOOT, crash_state=snapshot, prepared={}, allocated_bytes=1, allocator_errno=None)
-                fakeb = SimpleNamespace(STATE=Path(value), boot=lambda: s.OLD_BOOT, read=lambda name: prepared)
+                fakeb = SimpleNamespace(STATE=Path(value), boot=lambda: s.OLD_BOOT, read=lambda name: prepared, composition=lambda: 'awake')
                 helper = SimpleNamespace(filesystem=lambda *args: {})
                 hfake = SimpleNamespace(context=lambda: (None, None, None))
                 restart = SimpleNamespace(intact=lambda *args: ({}, [False, False]))
@@ -350,7 +433,11 @@ class Tests(unittest.TestCase):
                     emit.assert_not_called()
                     guest.observe_fault(mode, OSError(expected_errno, 'expected error'))
                     self.assertEqual(emit.call_args.kwargs['filesystem_fault']['errno'], expected_errno)
-                    emit.reset_mock(); prepared['crash_state'] = dict(snapshot, receipt_sha256='changed')
+                    emit.reset_mock()
+                    marker = Path(value) / 'inbound-shutdown-request'; marker.write_text('{}')
+                    with self.assertRaises(RuntimeError): guest.observe_fault(mode, OSError(expected_errno, 'expected error'))
+                    emit.assert_not_called(); marker.unlink()
+                    prepared['crash_state'] = dict(snapshot, receipt_sha256='changed')
                     with self.assertRaises(RuntimeError): guest.observe_fault(mode, OSError(expected_errno, 'expected error'))
                     emit.assert_not_called()
 
