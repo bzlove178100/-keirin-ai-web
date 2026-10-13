@@ -137,11 +137,36 @@ def stop(process, path):
     for name in ('qmp', 'serial'): (path / name).unlink(missing_ok=True)
 
 
-def normal(path, host_boot):
+def live_refusal_evidence(before, loaded):
+    value = before.get('save_refusal', {})
+    expected = {action: 'COMPLETED_INBOUND_RECOVERY_REQUIRED' for action in ('save', 'restart', 'halt')}
+    snapshot = value.get('disk_before', {})
+    if (before.get('mode') != 'awake' or before.get('boot') != loaded['boot']
+            or before.get('qualification') != [True]*4 or value.get('refusals') != expected
+            or set(snapshot) != {'policy.json', 'receipt.json', 'policy.json.next', 'receipt.json.next'}
+            or snapshot.get('policy.json') != loaded['policy_sha256']
+            or value.get('disk_after') != snapshot
+            or any(snapshot[name] is not None for name in ('policy.json.next', 'receipt.json.next'))
+            or value.get('saved_marker_present') is not False or value.get('shutdown_request_present') is not False
+            or any(type(value.get(k)) is not int for k in ('started_ns', 'finished_ns', 'deadline_ns'))
+            or value['deadline_ns'] != before['boottime_guard']['deadline_ns']
+            or not 0 < value['started_ns'] <= value['finished_ns'] < value['deadline_ns']
+            or not before['lease_start']['boottime'] <= value['started_ns'] / 1e9
+                   <= value['finished_ns'] / 1e9 <= before['boottime']):
+        raise RuntimeError('EXACT_LIVE_REFUSAL_BEFORE_EXPIRY_WITHOUT_WRITES_REQUIRED')
+    receipt = loaded['saved_receipt']
+    receipt_sha = hashlib.sha256((json.dumps(receipt, sort_keys=True) + '\n').encode()).hexdigest() if receipt else None
+    if snapshot['receipt.json'] != receipt_sha:
+        raise RuntimeError('UNCHANGED_LOADED_RECEIPT_REQUIRED')
+
+
+def normal(path, host_boot, phase='normal'):
+    if phase not in ('normal', 'live-refusal'): raise ValueError('FIXED_NORMAL_INBOUND_PHASE_REQUIRED')
+    mode = 'awake' if phase == 'live-refusal' else 'suspend'
     process = None
     try:
         with (path / 'stderr').open('wb') as err:
-            process = subprocess.Popen(command(path, 'suspend', 'normal'), stdin=subprocess.DEVNULL,
+            process = subprocess.Popen(command(path, mode, phase), stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL, stderr=err, cwd=path, env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
             with vm.connect(path / 'qmp', process) as monitor, vm.connect(path / 'serial', process) as serial:
                 qmp, lines = vm.QMP(monitor), vm.Lines(serial)
@@ -151,7 +176,8 @@ def normal(path, host_boot):
                 previous, boots, requests = None, {host_boot}, []
                 for instruction, target, event in ((b'restart\n', 'reboot.target', 'RESET'), (b'halt\n', 'poweroff.target', 'SHUTDOWN')):
                     loaded = startup(lines, boots)
-                    first, outcome = c.cycle(lines, qmp, 'suspend', host_boot)
+                    check = (lambda before: live_refusal_evidence(before, loaded)) if phase == 'live-refusal' else None
+                    first, outcome = c.cycle(lines, qmp, mode, host_boot, before_check=check)
                     loaded_evidence(loaded, first, previous); boots.add(first['boot'])
                     qmp.events = []
                     serial.sendall(instruction)
@@ -163,6 +189,8 @@ def normal(path, host_boot):
                 r.fresh(*requests)
                 if process.wait(timeout=10) != 0: raise RuntimeError('NORMAL_INBOUND_DURABLE_POWEROFF_REQUIRED')
                 print('PASS INBOUND_DURABLE_REBOOT_EXACT_CHECKPOINT_OLD_LEASE_REFUSED_FRESH_AUTH', flush=True)
+                if phase == 'live-refusal':
+                    print('PASS INBOUND_LIVE_SAVE_RESTART_HALT_REFUSED_NO_WRITES_THEN_EXPIRED_SAVE', flush=True)
     finally: stop(process, path)
 
 
@@ -282,7 +310,7 @@ def invalid(path, bad, boots, expected):
 def run_vm(kind):
     p.guard()
     if (os.environ.get('KC_INBOUND_PERSISTENCE_CI') != '1' or os.environ.get('KC_PERSISTENCE_CI') != '1'
-            or kind not in ('normal', 'crash', 'invalid', *guest.FAULTS, *SUSPEND_FAULTS)):
+            or kind not in ('normal', 'live-refusal', 'crash', 'invalid', *guest.FAULTS, *SUSPEND_FAULTS)):
         raise RuntimeError('FIXED_INBOUND_PERSISTENCE_CI_OPT_IN_REQUIRED')
     host_boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip(); host_ns = os.readlink('/proc/self/ns/net')
     with tempfile.TemporaryDirectory(prefix='kc-inbound-persist-') as value:
@@ -302,7 +330,7 @@ def run_vm(kind):
                 boot = invalid(child, bad, boots, expected); boots.add(boot)
         else:
             s.disk(path, 'valid', profile=guest.PROFILE)
-            if kind == 'normal': normal(path, host_boot)
+            if kind in ('normal', 'live-refusal'): normal(path, host_boot, kind)
             else: crash(path, host_boot, SUSPEND_FAULTS.get(kind, kind if kind in guest.FAULTS else None),
                         mode='suspend' if kind in SUSPEND_FAULTS else 'awake')
     if path.exists() or Path('/proc/sys/kernel/random/boot_id').read_text().strip() != host_boot or os.readlink('/proc/self/ns/net') != host_ns:
@@ -311,6 +339,91 @@ def run_vm(kind):
 
 
 class Tests(unittest.TestCase):
+    def test_live_and_incomplete_recovery_refuse_all_entrypoints_before_mutation(self):
+        state = dict(boot=s.OLD_BOOT, restored_identity=['closed'],
+                     proof=dict(deadline_ns=100, loader_exits=True))
+        cases = (
+            ({}, 50, 'COMPLETED_INBOUND_RECOVERY_REQUIRED'),
+            ({'inbound-lease': state}, 101, 'COMPLETED_INBOUND_RECOVERY_REQUIRED'),
+            ({'inbound-lease': state, 'inbound-recovery': dict(boot=s.OLD_BOOT)}, 50, 'SAME_BOOT_EXPIRED_RECOVERY_REQUIRED'),
+            ({'inbound-lease': state, 'inbound-recovery': dict(boot=s.OLD_BOOT)}, 100, 'SAME_BOOT_EXPIRED_RECOVERY_REQUIRED'),
+            ({'inbound-lease': state, 'inbound-recovery': dict(boot=s.NEW_BOOT)}, 101, 'SAME_BOOT_EXPIRED_RECOVERY_REQUIRED'),
+        )
+        for records, now, reason in cases:
+            for phase in ('normal', 'live-refusal', 'after-receipt', *guest.FAULTS):
+                with self.subTest(records=list(records), now=now, phase=phase), tempfile.TemporaryDirectory() as value:
+                    path = Path(value)
+                    for name, data in records.items(): (path / name).write_text(json.dumps(data))
+                    fakeb = SimpleNamespace(boot=lambda: s.OLD_BOOT, write=Mock(),
+                        read=lambda name: json.loads((path / name).read_text()))
+                    fakeh = SimpleNamespace(context=lambda: (None, None, None), identity=Mock(), up=Mock())
+                    fakeg = SimpleNamespace(run=Mock())
+                    fakep = SimpleNamespace(atomic=Mock(), load_state=Mock(), read_bytes=Mock())
+                    with patch.object(guest, 'context', return_value=(fakep, fakeb, fakeg, durable, phase)), \
+                            patch.object(guest, 'module', side_effect=lambda name, _: fakeh if name == 'inbound' else r.guest), \
+                            patch.object(r.guest, 'context', return_value=(fakeb, fakeh, fakeg)), \
+                            patch.object(r.guest.time, 'clock_gettime_ns', return_value=now), \
+                            patch.object(guest, 'prepare_fault') as prepare, patch.object(guest, 'await_crash') as barrier, \
+                            patch.object(r.guest, 'emit') as emit:
+                        for call in (guest.save, lambda: r.guest.main('restart'), lambda: r.guest.main('halt')):
+                            with self.assertRaisesRegex(RuntimeError, '^' + reason + '$'): call()
+                    for spy in (fakeb.write, fakeh.identity, fakeh.up, fakeg.run, fakep.atomic,
+                                fakep.load_state, fakep.read_bytes, prepare, barrier, emit): spy.assert_not_called()
+
+    def test_live_refusal_observer_rejects_wrong_reason_write_marker_and_late_completion(self):
+        reason = 'COMPLETED_INBOUND_RECOVERY_REQUIRED'
+        with tempfile.TemporaryDirectory() as value, patch.object(persist, 'ROOT', Path(value)):
+            persist.atomic('policy.json', durable.policy())
+            fakeb = SimpleNamespace(STATE=Path(value), composition=lambda: 'awake')
+            restart = SimpleNamespace(main=Mock(side_effect=RuntimeError(reason)))
+            with patch.object(guest, 'context', return_value=(persist, fakeb, None, durable, 'live-refusal')), \
+                    patch.object(guest, 'module', return_value=restart), \
+                    patch.object(guest, 'save', side_effect=RuntimeError(reason)) as save, \
+                    patch.object(guest.time, 'clock_gettime_ns', side_effect=[10, 20]):
+                row = guest.refuse_live_requests(100)
+                self.assertEqual(set(row['refusals']), {'save', 'restart', 'halt'})
+                self.assertEqual(row['disk_before'], row['disk_after']); save.assert_called_once()
+            for failure in ('unexpected', 'accepted', 'write', 'marker', 'late'):
+                def attempt():
+                    if failure == 'unexpected': raise RuntimeError('OTHER_ERROR')
+                    if failure == 'accepted': return
+                    if failure == 'write': (Path(value) / 'receipt.json.next').write_text('partial')
+                    if failure == 'marker': (Path(value) / 'inbound-shutdown-request').write_text('{}')
+                    raise RuntimeError(reason)
+                with patch.object(guest, 'context', return_value=(persist, fakeb, None, durable, 'live-refusal')), \
+                        patch.object(guest, 'module', return_value=restart), patch.object(guest, 'save', side_effect=attempt), \
+                        patch.object(guest.time, 'clock_gettime_ns', side_effect=[10, 100]):
+                    with self.assertRaises(RuntimeError): guest.refuse_live_requests(100)
+                for name in ('receipt.json.next', 'inbound-shutdown-request'): (Path(value) / name).unlink(missing_ok=True)
+            with patch.object(guest, 'context', return_value=(persist, fakeb, None, durable, 'normal')), \
+                    patch.object(guest, 'save') as save:
+                with self.assertRaisesRegex(RuntimeError, 'FIXED_LIVE'): guest.refuse_live_requests(100)
+                save.assert_not_called()
+
+    def test_live_evidence_requires_all_refusals_original_deadline_and_exact_loaded_disk(self):
+        loaded = dict(boot=s.OLD_BOOT, policy_sha256='a'*64, saved_receipt=None)
+        snapshot = {'policy.json': 'a'*64, 'receipt.json': None, 'policy.json.next': None, 'receipt.json.next': None}
+        value = dict(refusals={x: 'COMPLETED_INBOUND_RECOVERY_REQUIRED' for x in ('save', 'restart', 'halt')},
+            disk_before=snapshot, disk_after=copy.deepcopy(snapshot), started_ns=2_000_000_000,
+            finished_ns=3_000_000_000, deadline_ns=9_000_000_000, saved_marker_present=False,
+            shutdown_request_present=False)
+        before = dict(mode='awake', boot=s.OLD_BOOT, qualification=[True]*4, save_refusal=value,
+            boottime_guard=dict(deadline_ns=9_000_000_000), lease_start=dict(boottime=1), boottime=3.5)
+        live_refusal_evidence(before, loaded)
+        for change in (dict(refusals={'save': 'COMPLETED_INBOUND_RECOVERY_REQUIRED'}),
+                       dict(disk_after=dict(snapshot, **{'receipt.json': 'b'*64})),
+                       dict(finished_ns=9_000_000_000), dict(deadline_ns=10_000_000_000),
+                       dict(started_ns=True), dict(saved_marker_present=True), dict(shutdown_request_present=True)):
+            with self.assertRaises(RuntimeError): live_refusal_evidence(dict(before, save_refusal=dict(value, **change)), loaded)
+        for change in (dict(mode='suspend'), dict(boot=s.NEW_BOOT), dict(qualification=[False]*4), dict(save_refusal={})):
+            with self.assertRaises(RuntimeError): live_refusal_evidence(dict(before, **change), loaded)
+        receipt = dict(boot=s.NEW_BOOT, deadline_ns=1)
+        with self.assertRaisesRegex(RuntimeError, 'LOADED_RECEIPT'):
+            live_refusal_evidence(before, dict(loaded, saved_receipt=receipt))
+        receipt_sha = hashlib.sha256((json.dumps(receipt, sort_keys=True) + '\n').encode()).hexdigest()
+        snapshot['receipt.json'] = receipt_sha; value['disk_after'] = copy.deepcopy(snapshot)
+        live_refusal_evidence(before, dict(loaded, saved_receipt=receipt))
+
     def test_suspend_storage_case_is_fixed_and_recovery_stays_awake(self):
         with tempfile.TemporaryDirectory() as value:
             path = Path(value)
@@ -322,8 +435,10 @@ class Tests(unittest.TestCase):
                 self.assertIn('kc_inbound_persistence=' + phase, flags)
                 self.assertEqual(args.count('-drive'), 1)
                 self.assertEqual(args[args.index('-nic') + 1], 'none')
-            for phase in ('recover', 'after-receipt', *guest.INVALID):
+            for phase in ('recover', 'live-refusal', 'after-receipt', *guest.INVALID):
                 with self.assertRaises(ValueError): command(path, 'suspend', phase)
+            live = command(path, 'awake', 'live-refusal')
+            self.assertIn('kc_inbound_persistence=live-refusal', live[live.index('-append') + 1])
             for mode, fault in (('live', 'enospc'), ('suspend', None), ('suspend', 'unknown')):
                 with patch.object(subprocess, 'Popen') as launch:
                     with self.assertRaises(ValueError): crash(path, s.OLD_BOOT, fault, mode=mode)

@@ -46,7 +46,10 @@ def emit(b, event, **values):
 
 
 def profile(b, h, g, i):
-    state = b.read('inbound-lease'); recovery = b.read('inbound-recovery')
+    try:
+        state = b.read('inbound-lease'); recovery = b.read('inbound-recovery')
+    except FileNotFoundError as exc:
+        raise RuntimeError('COMPLETED_INBOUND_RECOVERY_REQUIRED') from exc
     expired(state, recovery, b.boot(), time.clock_gettime_ns(time.CLOCK_BOOTTIME))
     if h.identity(i) != state['restored_identity']: raise RuntimeError('RESTORED_PROFILE_IDENTITY_REQUIRED')
     tables = json.loads(g.run(g.NFT, '-j', 'list', 'tables'))['nftables']

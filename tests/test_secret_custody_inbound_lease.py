@@ -74,11 +74,12 @@ def recovery(restored, recovered, completed, first):
             raise RuntimeError('ACTUAL_RECOVERY_SERVICE_ORDER_REQUIRED')
 
 
-def cycle(lines, qmp, mode, host_boot):
+def cycle(lines, qmp, mode, host_boot, *, before_check=None):
     matrix = h.record(lines, 'matrix', 'closed'); boot = matrix['boot']
     if boot == host_boot: raise RuntimeError('DISTINCT_INBOUND_LEASE_BOOT_REQUIRED')
     ready = record(lines, 'ssh_ready', mode, boot); p.ssh_evidence(ready['ssh'], initial=True)
     before = record(lines, 'before', mode, boot); started = time.monotonic()
+    if before_check is not None: before_check(before)
     if mode == 'suspend':
         qmp.event('SUSPEND', time.monotonic()+20)
         if qmp.call('query-status').get('status') != 'suspended': raise RuntimeError('REAL_S3_REQUIRED')

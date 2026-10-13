@@ -1,5 +1,55 @@
 # Work resume handoff
 
+## PR #248 verified baseline / live-save refusal candidate — 2026-10-13
+
+Resumption checked GitHub main 8f502d86e82fb71595475b30978a254db82c846d and
+PR #248's Final independent main receipt (in the PR body, not a comment).
+Its tested tree is 2b1fbc3d79ad0d26f52ad83a132176b6b5d30524. All five PR
+workflows passed; regression 38368617320 passed 46/46. All five independent
+main workflows passed: regression 38370154853 (46/46), runtime 38370157007,
+PostgreSQL 38370154821, UI 38370154863 and AWS 38370154828; Pages 38370154342
+also passed. This resumption independently read all 46 regression jobs and
+runtime job 115204854690's exact push-SHA/successful-sibling evidence. The
+final receipt supersedes historical PR #248 candidate PENDING text below.
+Its actual S3 + ENOSPC/EROFS results are complete within that synthetic scope.
+The PR #246 QMP cause remains unknown; inspect bounded first_line on recurrence.
+
+Concurrent open PR #250 only changes AGENTS.md, recording issue #249's
+Keirin-data-first / parallel-general-agent priority. Do not duplicate or overwrite
+that work. Data permission/HOLD remains the P0 blocker; this candidate continues
+the explicitly handed-off isolated agent validation track without source access.
+Recheck main and this parallel PR before merging; validate the combined head if
+main moves. No outgoing inquiries, messages or race-data acquisition performed.
+
+Code inspection refined the proposed earlier-live-lease storage-fault scope:
+there is NO supported durable write during a live inbound lease. save() first
+requires the completed same-boot expired recovery and full restored profile via
+restart.intact(). Only then does it read the loaded policy, fsync receipt.json,
+write policy.json and publish saved. restart/halt publish their shutdown request
+only after that save. Do not bypass this admission to manufacture early ENOSPC.
+
+The new fixed awake live-refusal case calls actual save/restart/halt entrypoints
+while the original 8-second permission is live. Missing completed-recovery
+records now produce a specific refusal instead of an incidental FileNotFoundError.
+Require all three expected refusals before the original deadline, exact unchanged
+policy/receipt/temp-path hashes, no saved/shutdown marker, unchanged packet policy
+and guards, and all four established/fresh qualification probes still succeeding
+within the original 3-second live observation window. No deadline is extended.
+Then require the ordinary expiry, authenticated SSH controls, full unmasked
+restoration, successful durable save, normal reboot, fresh keys/boot and a second
+full cycle ending in normal poweroff. One new isolated VM job; no external NIC,
+host mounts, real keys, cloud mutation, permission replay or active-lease storage.
+
+Local: 63 related tests passed, including 24 inbound-persistence tests (3 new).
+Diff check passed. New VM evidence and independent main CI are PENDING;
+regression expands from 46 to 47 jobs. Inspect actual new-mode receipts and all
+five workflows, merge only the verified head, then verify independent main.
+This does not qualify real filesystem failure during active authorization,
+arbitrary torn writes, host power loss, or production deployment. Future live
+metadata persistence requires its own design and failure/permission boundary.
+KEIRIN.JP HOLD; production predictions, DB writes, external acquisition,
+real training (0) and live activation remain OFF. Historical failures retained.
+
 ## PR #247 verified baseline / suspend then storage-failure candidate — 2026-10-13
 
 Resumption rechecked current main 57e1bdd50214a72973cf6da07a06c8e29d2e72b1,
