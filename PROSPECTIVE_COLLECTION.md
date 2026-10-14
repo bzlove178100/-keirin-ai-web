@@ -26,6 +26,14 @@ KEIRIN.JP HOLD, real training 0, and acquisition/production/DB/live activation O
 remain in force. The older collection and training instructions below are history
 subject to those stops, not authorization to run them.
 
+2026-10-14 candidate: duplicate content now uses the same type-sensitive JSON
+comparison as source metadata. Python's `True == 1` and `7.0 == 7` previously
+hid conflicting rosters/outcomes/counts when a valid record came first. Typed
+differences and non-JSON/non-finite duplicate content now require conflict review
+in either order; reordered object keys and exact duplicates still deduplicate.
+Only the affected race is excluded from historical partitions. No input is
+rewritten, review granted, data fetched or real model trained by this correction.
+
 ## Current historical intake checkpoint — 2026-10-07
 
 The older dated sections below are retained as history. PR #207 is merged at

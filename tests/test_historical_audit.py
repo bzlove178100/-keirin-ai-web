@@ -51,6 +51,42 @@ class HistoricalAuditTests(unittest.TestCase):
         self.assertEqual(result["conflicting_races"], 1)
         self.assertIn("conflicting_duplicate_requires_review", result["records"][0]["reasons"])
 
+    def test_scalar_types_in_duplicate_content_cannot_be_collapsed(self):
+        changes = (lambda r: r.update(rider_count=7.0),
+                   lambda r: r.update(dead_heat=0),
+                   lambda r: r["riders"][0].update(car_number=True),
+                   lambda r: r.update(trifecta_outcomes=[[1.0, 2, 3]]))
+        for change in changes:
+            a = example()
+            b = copy.deepcopy(a)
+            change(b)
+            for rows in ([a, b], [b, a]):
+                before = copy.deepcopy(rows)
+                result = audit(rows)
+                self.assertEqual(result["conflicting_races"], 1)
+                self.assertEqual(result["identical_duplicates"], 0)
+                self.assertEqual(result["source_variant_races"], 0)
+                self.assertIn("conflicting_duplicate_requires_review", result["records"][0]["reasons"])
+                self.assertEqual(result["training_eligible_races"], 0)
+                self.assertEqual(rows, before)
+
+    def test_reordered_content_object_keys_remain_identical(self):
+        a = example()
+        a["metadata"] = {"version": 1, "nested": {"a": 1, "b": False}}
+        b = dict(reversed(list(copy.deepcopy(a).items())))
+        b["metadata"] = {"nested": {"b": False, "a": 1}, "version": 1}
+        result = audit([a, b])
+        self.assertEqual(result["conflicting_races"], 0)
+        self.assertEqual(result["identical_duplicates"], 1)
+
+    def test_non_json_duplicate_content_is_not_certified_identical(self):
+        for value in (float("nan"), float("inf"), float("-inf"), object()):
+            a = example()
+            a["metadata"] = {"value": value}
+            result = audit([a, a])
+            self.assertEqual(result["conflicting_races"], 1)
+            self.assertEqual(result["identical_duplicates"], 0)
+
     def test_dead_heat_not_forced_to_one_winner(self):
         a = example()
         a.update(dead_heat=True, trifecta_outcomes=[[1, 2, 3], [2, 1, 3]])

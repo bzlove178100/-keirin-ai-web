@@ -1,8 +1,10 @@
 # Claude task bridge — OFF / approval required
 
-Revised 2026-10-14 on PR #253. This prepares an Issue → bounded Claude proposal →
-validated draft PR handoff. It is not enabled or runtime-qualified. Main merge,
-OAuth registration, permission changes and first execution require separate
+PR #253 was merged with owner approval on 2026-10-14 at main `703e2ed`.
+All six post-merge CI workflows passed; regression 47/47 jobs and bridge 21/21
+synthetic tests passed. This prepares an Issue → bounded Claude proposal →
+validated draft PR handoff. It is not enabled or runtime-qualified. OAuth
+registration, permission changes and first execution still require separate
 owner approval. Existing production/data/cloud stops remain unchanged.
 
 ## Review findings and correction
@@ -53,11 +55,11 @@ A main change requires fresh preparation, not silent rebase. A concurrent main o
 Issue change immediately after the final read cannot be atomically prevented by
 GitHub's API; review the exact PR head/base and current task before CI or merge.
 
-## Activation sequence (not performed)
+## Activation sequence (merge complete; runtime not performed)
 
-1. Review exact final PR #253 diff and required CI. Approve merging only if the
-   **disabled preparation** is acceptable. No issue-comment workflow runs until
-   it exists on the default branch and its flag is enabled.
+1. Completed: owner-approved merge of the **disabled preparation** in PR #253,
+   exact tested tree and all post-merge CI verified. The runtime still requires
+   an enabled flag and an authorized owner trigger.
 2. Confirm the Claude account's subscription entitlement and token issuance with
    `claude setup-token`. Official documentation supports Pro/Max OAuth. An iPhone
    alone does not provide the required CLI; safe access to an existing trusted
@@ -83,6 +85,18 @@ GitHub's API; review the exact PR head/base and current task before CI or merge.
    gate with a PAT/App, or count pending/absent checks as successful CI.
 8. Record exact head, all applicable CI, reviewed behavior and remaining blockers.
    Merge remains a separate approval; no production activation follows it.
+
+### Prepared first pilot (not started)
+
+Issue #255 specifies one additional synthetic test in the existing
+`tests/test_historical_payouts.py` (8,556 bytes at preparation). It checks that
+quarantining a contradictory payout preserves inputs and grants no training
+approval. It changes no production code and does not duplicate the unpublished
+settlement/evaluation implementation. Expected test count after the proposal:
+16 (15 existing + 1). This is an acceptance criterion, not an observed result.
+The task exists under the owner account; no trigger comment was posted. Recheck
+main, open-PR overlap and file size immediately before a separately approved run.
+See #254 for credential, permission, cost and runtime qualification gates.
 
 ## Validation and residual limits
 
