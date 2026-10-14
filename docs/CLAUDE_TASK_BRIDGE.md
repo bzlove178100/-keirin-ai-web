@@ -1,40 +1,128 @@
-# Claude Code GitHub task bridge — opt-in only
+# Claude task bridge — OFF / approval required
 
-Status: **OFF / preparation only** (2026-10-13). This is a GitHub Issue → Claude Code → tests → draft PR handoff proposal. It does **not** connect the ChatGPT conversation directly to Claude; a human still reviews and merges PRs.
+Revised 2026-10-14 on PR #253. This prepares an Issue → bounded Claude proposal →
+validated draft PR handoff. It is not enabled or runtime-qualified. Main merge,
+OAuth registration, permission changes and first execution require separate
+owner approval. Existing production/data/cloud stops remain unchanged.
 
-## What is prepared
+## Review findings and correction
 
-- `.github/workflows/claude-task-bridge.yml` listens **only** for the exact Issue comment `/claude-run` posted by `bzlove178100` on an **open Issue created by that same owner** (not a PR), **and only** when repository variable `CLAUDE_TASK_BRIDGE_ENABLED` is exactly `true`.
-- The variable is absent by default; this workflow must remain disabled until separately approved. No schedules, no automatic deployment, and no existing workflows are modified.
-- The workflow accepts **only** `CLAUDE_CODE_OAUTH_TOKEN` (not `ANTHROPIC_API_KEY`), checks for the secret before calling Claude, checks out trusted main, and limits turns to 8 / 25 minutes. Shell commands and web-fetch/search tools are disallowed. Claude edits are restricted by a **post-run GitHub diff check** to Python files under `ml/` and `tests/` in this first pilot; the action cannot create a draft PR outside that scope. Actual test execution is entrusted to PR CI, not to Claude. No merge is automated.
-- The Issue template collects a bounded file scope, synthetic test plan and stop conditions. An exact owner comment `/claude-run` is the separate manual trigger; no label setup is needed. The Claude GitHub App's short-lived token is revoked after its action step; a later step therefore uses the job's own `GITHUB_TOKEN` to request the draft PR and posts its URL to the Issue. The job stops if the diff is empty, outside the pilot scope, or a PR already exists.
+The earlier head `61e9a7d` passed three existing CI workflows, but these did not
+exercise the bridge. Inspection of the official Action at
+`34968b5981d5d170904281aa3df6f3c0d4a28855` found:
 
-## Preconditions before activation — do not complete without explicit owner approval
+- `conclusion`, `branch_name` and `structured_output` are real outputs. However,
+  supplying `prompt` selects agent mode, which does not create a task branch by
+  itself. No `CLAUDE_BRANCH` was supplied. Asking Claude to commit/push while
+  disabling Bash and not enabling file-ops tools could not establish a branch.
+- The diff gate ran **after** the proposed push. It could refuse a PR but could
+  not prevent an earlier out-of-scope remote write. Its shell glob also accepted
+  nested paths and omitted rename-source / truncation handling.
+- Mutable action tags and one job holding both model credentials and repository
+  write permissions unnecessarily enlarged the review boundary.
 
-1. Confirm the official Claude GitHub App is installed for **this repository only** with the required write permissions. The existing Claude web-to-GitHub login is not proof that the Actions GitHub App is installed or can write branches.
-2. Decide the authentication and cost boundary. Anthropic documents `CLAUDE_CODE_OAUTH_TOKEN` for Pro/Max accounts, generated with `claude setup-token` in a CLI environment. Availability from an iPhone-only workflow is **not confirmed**. Pro usage limits still apply. Do **not** create an Anthropic API key or a paid API plan by default.
-3. Store any OAuth token **only** in repository Actions secret `CLAUDE_CODE_OAUTH_TOKEN`; never paste it in an Issue, public repo, chat or workflow. Confirm the account owner has accepted the security and access implications.
-4. After explicit approval, create repository Actions variable `CLAUDE_TASK_BRIDGE_ENABLED=true`. This is the deliberate activation switch; do not flip it as part of this PR.
-5. Create one small Issue with the template. Check latest main and open PRs to avoid conflicts. Post **exactly** `/claude-run` as an Issue comment **once from the owner account**; observe the Actions log and draft PR. Do not repeat the comment until the prior run's result is known.
-6. Before activation, check the repository's **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests**. GitHub can prohibit its `GITHUB_TOKEN` from opening any PR. Changing repository permissions needs separate informed approval and is **not** done here.
-7. A PR created using `GITHUB_TOKEN` might **not trigger the existing pull_request CI automatically** under GitHub event recursion rules. Treat test status as **unverified until actual CI for that exact commit is observed**; use an approved manual test run only if needed.
-8. Review exact file changes, regression tests, potential external access and PR CI. No auto-merge. Disable the variable if a run behaves unexpectedly. A successful CI is not a production or licensing approval.
+The revision uses two separate fresh-runner jobs. `propose` has only GitHub read
+permissions, an explicit read-only `github_token` override, and the separately
+approved Claude subscription credential. It supplies a bounded source snapshot,
+AGENTS and the source HOLD to Claude. All tools are denied with a nonempty `--disallowedTools "*"`; MCP configuration
+is empty/strict, hooks are disabled, and project/local settings and automatic
+customizations are excluded. Only ephemeral runner user settings are loaded. Claude returns only
+structured JSON replacement text. It does not test, push or post messages.
 
-## Invariants and costs
+`publish` has no Claude action or OAuth credential. The trusted Python helper from
+exact event SHA rechecks the current main, owner Issue/comment, exact allowed
+paths, original blobs, no existing task branch and no overlapping open PR. It
+accepts 1–4 existing non-executable regular `.py` files directly in `ml/` or
+`tests/` (excluding the bridge's test). No new paths, deletions, renames, symlinks,
+mode changes, duplicate entries or truncated API results are accepted. Limits:
+24 KB per file / 60 KB total. Candidate Python remains inert text and is never
+imported or executed in this job. Only after validation are Git blobs/tree/commit
+created, followed by the deterministic `claude/task-<issue>` ref and a draft PR.
+A final context check precedes ref creation. No ref update, force push or merge
+endpoint exists. Human review of the candidate's behavior is still mandatory.
 
-- KEIRIN.JP **HOLD** persists: no official source fetching, alternative endpoints, archive promotion or data training. Other sources require separate documented permission. Production prediction, DB writes, external acquisition, real training, hosted autonomous execution and deployment remain **OFF**.
-- Existing `AGENTS.md`, Issue #249, `WORK_STATUS.md` and `WORK_RESUME.md` remain the authoritative safety and handoff context. This integration must not duplicate/replace the agent-runtime or its trusted one-shot entrypoint.
-- The current repository is public: GitHub **standard** hosted runners have no runner-minute charge, but storage/limits, Anthropic subscription usage, or a separately selected API option may differ. **No API plan, extra payment, secret or paid resource is activated by this PR.** Claude Pro OAuth usage availability is not yet live-tested, nor is a no-charge guarantee established beyond existing subscription allowances. A prompt and the GitHub workflow are *not* a hardware-enforced network block.
-- Prompt injection is possible via public Issue descriptions. Owner-only triggering, strict task scope and human PR review reduce risk but do not eliminate it. Do not put credentials or private race information in Issues.
-- ChatGPT can inspect the resulting PR via the GitHub connector **when asked**. Automatically sending new GitHub events to this ChatGPT conversation needs another integration that is not installed.
+The pinned Action parses empty CLI values as flags and falls back to all settings
+sources; therefore the workflow does not rely on `--tools ""` or
+`--setting-sources ""`. It uses an explicit wildcard denial, `--bare`,
+`--setting-sources user` and disabled hooks.
 
-## Existing blocked work — preserve, do not invent success
+The whole workflow is serialized; existing task branches stop a repeat request.
+A failure after branch creation leaves that branch for inspection. Do not rerun
+or delete it automatically: inspect for an existing PR / lost API response first.
+A main change requires fresh preparation, not silent rebase. A concurrent main or
+Issue change immediately after the final read cannot be atomically prevented by
+GitHub's API; review the exact PR head/base and current task before CI or merge.
 
-Claude reported local-only commit `9fbb95d` on `claude/settle-eval-7-9-riders` from `62f197d`, with 9/9 settlement and 10/10 evaluation tests. Git push / new-branch creation returned 403. **ChatGPT subsequently created the designated remote branch `claude/keirin-ai-web-survey-i4e236` from `62f197d`** to give the original session a place to attempt its approved push. **The changes from `9fbb95d` have not been pushed or verified on GitHub; no implementation PR exists.** Preserve the Claude session, push the original commit to the designated branch only if permissions permit, and avoid duplicate implementation. Keep recovery separate from this bridge PR.
+## Activation sequence (not performed)
 
-## References
+1. Review exact final PR #253 diff and required CI. Approve merging only if the
+   **disabled preparation** is acceptable. No issue-comment workflow runs until
+   it exists on the default branch and its flag is enabled.
+2. Confirm the Claude account's subscription entitlement and token issuance with
+   `claude setup-token`. Official documentation supports Pro/Max OAuth. An iPhone
+   alone does not provide the required CLI; safe access to an existing trusted
+   CLI/session and no extra usage charges remain account-specific, unverified.
+   Do not create an API key, paid plan, tunnel or new host as a fallback.
+3. Separately approve storing `CLAUDE_CODE_OAUTH_TOKEN` as an Actions secret.
+   Never paste it in an Issue, repository, report or chat. This revised design
+   supplies GitHub's job token explicitly, so it does **not** request the Claude
+   GitHub App token or OIDC permissions. No App installation is required by this
+   code path; actual authentication remains untested.
+4. Confirm Settings → Actions → General allows Actions to create pull requests.
+   Any required setting change needs separate owner approval.
+5. Separately approve `CLAUDE_TASK_BRIDGE_ENABLED=true` and one synthetic-only
+   pilot. Use the updated Issue template: one exact allowed path per line. Check
+   unfinished Claude commit `9fbb95d` before choosing settlement/evaluation work.
+6. Owner posts exactly `/claude-run` once. Observe authentication, bounded output,
+   artifact transfer, fresh publisher, draft PR and refusal behavior. Model/API
+   failure is a failure, not completed implementation. Disable on unexpected use.
+7. Inspect the draft diff **before approving CI**. Current GitHub.com documentation
+   says `GITHUB_TOKEN`-created `pull_request` opened/synchronize/reopened events
+   create **approval-required** workflow runs. A writer selects “Approve workflows
+   to run”. Other token-generated events remain suppressed. Do not bypass this
+   gate with a PAT/App, or count pending/absent checks as successful CI.
+8. Record exact head, all applicable CI, reviewed behavior and remaining blockers.
+   Merge remains a separate approval; no production activation follows it.
 
-- https://github.com/anthropics/claude-code-action
-- https://github.com/anthropics/claude-code-action/blob/main/docs/setup.md
-- https://github.com/anthropics/claude-code-action/blob/main/docs/security.md
-- https://github.com/bzlove178100/-keirin-ai-web/issues/249
+## Validation and residual limits
+
+The offline contract workflow uses synthetic API responses, no model/credentials,
+no network and no real race data. It tests positive draft publication and refusal
+of stale, overlapping, malformed, duplicate, oversized or unsafe proposals, API
+failures and partial-write recovery. This is **not** real Action/OAuth/PR runtime
+proof. Existing CI remains independently required at the exact new head.
+
+Pinned Action source makes review reproducible, but its runtime dependencies and
+Claude CLI are installed by the Action. CLI isolation flags, structured output,
+read-token compatibility and the account's subscription limits require the first
+controlled pilot. No network firewall or comprehensive code-safety proof is
+claimed. A generated Python file can contain unsafe behavior: human review and
+isolated CI approval must precede execution; paths alone cannot prove semantics.
+One-day artifact retention is requested; no incremental-cost guarantee is made.
+All public artifacts contain only already-public code and candidate code.
+
+KEIRIN.JP HOLD; real source acquisition/training; prediction DB writes;
+production prediction; hosted Jarvis execution; cloud operations; outbound
+provider messages; deployment; and reporting remain OFF. Existing agent-runtime,
+PR #250 and other applications are unchanged. ChatGPT↔Claude direct conversation
+and autonomous 21:00 reporting are not implemented by this bridge.
+
+## Unpublished work
+
+The recovery branch `claude/keirin-ai-web-survey-i4e236` still points to main
+`62f197d` on this review. Reported local commit `9fbb95d` remains unavailable in
+this workspace and unverified on GitHub. Do not reproduce the 7/9-rider changes
+from a description or claim its reported tests passed here. Recover the original
+Claude session and use only its authorized non-force push path after diagnosing
+its 403. This is independent of the bridge revision.
+
+## Primary references (checked 2026-10-14)
+
+- Action inputs/outputs: https://github.com/anthropics/claude-code-action/blob/34968b5981d5d170904281aa3df6f3c0d4a28855/action.yml
+- Agent mode: https://github.com/anthropics/claude-code-action/blob/34968b5981d5d170904281aa3df6f3c0d4a28855/src/modes/agent/index.ts
+- Mode selection: https://github.com/anthropics/claude-code-action/blob/34968b5981d5d170904281aa3df6f3c0d4a28855/src/modes/detector.ts
+- Token override: https://github.com/anthropics/claude-code-action/blob/34968b5981d5d170904281aa3df6f3c0d4a28855/src/github/token.ts
+- OAuth/setup: https://code.claude.com/docs/en/github-actions
+- Tool isolation: https://code.claude.com/docs/en/cli-reference
+- CI approval: https://docs.github.com/en/actions/concepts/security/github_token
+- Tasks and stop boundaries: Issues #249 / #254, SOURCE_ACQUISITION_STATUS.md

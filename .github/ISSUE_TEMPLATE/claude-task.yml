@@ -11,24 +11,24 @@ body:
     attributes:
       label: Goal and expected behavior
       description: "One bounded development change."
-      placeholder: "Allow 9-rider synthetic settlement while preserving 7-rider regression behavior."
+      placeholder: "Describe a small synthetic-only change. First check for overlap with unpublished commit 9fbb95d."
     validations:
       required: true
   - type: textarea
     id: scope
     attributes:
-      label: Allowed files and out-of-scope files
-      description: "Be explicit to avoid overlapping other PRs."
+      label: Allowed Python files
+      description: "One exact path per line, 1–4 existing regular files directly under ml/ or tests/. No prose, wildcards, new files or nested paths. Each file must be at most 24 KB; total 60 KB."
       placeholder: |
-        Allowed: ml/settle_snapshot.py and matching synthetic tests.
-        Do not change: AGENTS.md, WORK_STATUS.md, deployment, DB, production.
+        ml/settle_snapshot.py
+        tests/test_settle_snapshot.py
     validations:
       required: true
   - type: textarea
     id: verification
     attributes:
       label: Synthetic tests and acceptance criteria
-      placeholder: "7 riders: 210, 9 riders: 504; existing regressions pass. Draft PR only."
+      placeholder: "Specify synthetic tests and expected outcomes. Generated code is NOT RUN; review before approving CI. Draft PR only."
     validations:
       required: true
   - type: textarea
