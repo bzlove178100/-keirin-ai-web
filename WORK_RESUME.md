@@ -1,5 +1,44 @@
 # Work resume handoff
 
+## PR #253 bridge review revision — 2026-10-14 (unmerged candidate)
+
+Resumption matched main `62f197db216a1f4b58226cbd644ae9f11c676686`, PR #253
+head `61e9a7d76d0edffeecfd280266bedfa056314ee8`, open PR #250 and Issues
+#249/#254 to the handoff. No intervening commits/comments or overlapping PRs.
+Three CI runs on the old #253 head succeeded: 38402783406, 38402783448,
+38402783673. These do not prove bridge runtime success. PR #250 touches only
+AGENTS.md; this candidate leaves it unchanged. Neither PR is merged here.
+
+Official Action review found the custom-prompt agent mode did not provision the
+requested branch, while Bash was forbidden; its post-push scope check was too
+late. The pinned Action also mishandles empty CLI values/settings-source flags.
+The revision separates tool-denied/read-token proposal generation from a fresh
+trusted publisher with no Claude credential. Exact owner-trigger issue content,
+base SHA, file scope/blobs, overlapping PRs and existing task branches are checked
+before publishing. Only existing regular Python files (1–4, 24 KB/file, 60 KB total)
+can be proposed; generated code is never run by the credentialed publisher.
+New synthetic contract tests cover refusals, drift, partial failures and draft
+creation; a dedicated no-model CI workflow is added. Local 21/21 and basic web/
+safety regression pass. Final new-head CI is PENDING until observed on GitHub.
+See docs/CLAUDE_TASK_BRIDGE.md for official source pins and activation gates.
+
+P0 data: no new acquisition/storage/training/commercial permission is established.
+The recovery branch claude/keirin-ai-web-survey-i4e236 still equals main 62f197d;
+reported local 9fbb95d is not available here. Do not duplicate its 7/9-rider work.
+Recover that original Claude session, then verify the actual diff/tests. Preserve
+all existing source evidence and inquiry threads; no provider outreach was sent.
+
+Jarvis parallel work in this candidate is the bounded development handoff only;
+existing agent-runtime, cloud/custody and other applications are unchanged.
+Next: verify the revised exact head and all applicable CI, then request approval
+for disabled-only #253 merge. Separately authorize OAuth registration, any GitHub
+permission change, enable flag and one synthetic pilot. Current GitHub docs say
+GITHUB_TOKEN-created PR CI requires manual approval; review the code first.
+Bridge execution/authentication/automatic PR creation remain NOT RUN.
+KEIRIN.JP HOLD; production prediction, DB writes, source acquisition, real training,
+hosted execution, schedules, reporting, credentials, new charges and deployment
+remain OFF/unapproved. Existing historical evidence below is retained unchanged.
+
 ## PR #251 verified baseline / historical source-variant quarantine candidate — 2026-10-13
 
 Resumption rechecked GitHub main 806496bea8617414d37bb39bda308619782533d7,

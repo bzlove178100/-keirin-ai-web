@@ -1,0 +1,28 @@
+name: Claude bridge offline contract
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/claude-task-bridge*.yml'
+      - '.github/scripts/claude_task_bridge.py'
+      - '.github/ISSUE_TEMPLATE/claude-task.yml'
+      - 'tests/test_claude_task_bridge.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/claude-task-bridge*.yml'
+      - '.github/scripts/claude_task_bridge.py'
+      - '.github/ISSUE_TEMPLATE/claude-task.yml'
+      - 'tests/test_claude_task_bridge.py'
+permissions:
+  contents: read
+jobs:
+  offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test synthetic refusal and draft-publication contract (no model or network)
+        run: python3 -I -B tests/test_claude_task_bridge.py

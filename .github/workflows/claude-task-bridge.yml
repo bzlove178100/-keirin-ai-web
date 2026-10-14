@@ -1,0 +1,99 @@
+name: Claude task bridge (opt-in, disabled by default)
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+# Serialize the whole handoff, not only a model invocation.
+concurrency:
+  group: claude-task-bridge
+  cancel-in-progress: false
+
+jobs:
+  propose:
+    if: ${{ github.repository == 'bzlove178100/-keirin-ai-web' && github.actor == 'bzlove178100' && github.triggering_actor == 'bzlove178100' && github.event.action == 'created' && github.event.comment.body == '/claude-run' && github.event.sender.login == 'bzlove178100' && github.event.issue.user.login == 'bzlove178100' && github.event.issue.state == 'open' && github.event.issue.pull_request == null && vars.CLAUDE_TASK_BRIDGE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Checkout exact trusted event SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Require separately approved subscription credential
+        env:
+          CLAUDE_BRIDGE_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          test -n "$CLAUDE_BRIDGE_TOKEN" || { echo 'OAuth credential missing; no API fallback.'; exit 2; }
+      - name: Bind task scope and source to current main
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I .github/scripts/claude_task_bridge.py prepare "$RUNNER_TEMP/bridge-envelope.json"
+      - name: Generate proposal without tools or GitHub write permission
+        id: claude
+        uses: anthropics/claude-code-action@34968b5981d5d170904281aa3df6f3c0d4a28855 # inspected v1
+        with:
+          github_token: ${{ github.token }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: ${{ steps.prepare.outputs.prompt }}
+          settings: '{"disableAllHooks":true}'
+          claude_args: >-
+            --max-turns 8
+            --disallowedTools "*"
+            --strict-mcp-config
+            --mcp-config '{"mcpServers":{}}'
+            --setting-sources user
+            --bare
+            --json-schema '{"type":"object","properties":{"files":{"type":"array","maxItems":4,"items":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"],"additionalProperties":false}}},"required":["files"],"additionalProperties":false}'
+          show_full_output: 'false'
+          display_report: 'false'
+          classify_inline_comments: 'false'
+      - name: Validate and package inert proposal
+        if: ${{ steps.claude.outputs.conclusion == 'success' }}
+        env:
+          PROPOSAL_JSON: ${{ steps.claude.outputs.structured_output }}
+        run: python3 -I .github/scripts/claude_task_bridge.py package "$RUNNER_TEMP/bridge-envelope.json"
+      - name: Transfer only bounded public-source proposal
+        if: ${{ steps.claude.outputs.conclusion == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bridge-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bridge-envelope.json
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    needs: propose
+    if: ${{ needs.propose.result == 'success' && vars.CLAUDE_TASK_BRIDGE_ENABLED == 'true' && github.triggering_actor == 'bzlove178100' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+    steps:
+      # Fresh runner; no Claude action, OAuth secret or candidate code execution.
+      - name: Checkout trusted publisher only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Download this attempt only
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: bridge-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bridge-candidate
+      - name: Revalidate before branch creation and draft PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I .github/scripts/claude_task_bridge.py publish "$RUNNER_TEMP/bridge-candidate/bridge-envelope.json"
