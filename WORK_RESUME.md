@@ -1,6 +1,36 @@
 # Work resume handoff
 
-## PR #253 bridge review revision — 2026-10-14 (unmerged candidate)
+## Data duplicate-type correction / prepared Claude pilot — 2026-10-14
+
+Baseline main `703e2ed24a8d0c0df307b90776f2272478b96013` is unchanged since the
+owner-approved PR #253 merge. Its six CI workflows passed (47/47 regression jobs,
+21/21 bridge synthetic tests); existing automatic Pages update also passed.
+Older candidate/Draft/PENDING notes below are historical and superseded.
+
+P0 data: reproduced an order-dependent intake defect using synthetic records.
+Python equality treated boolean/numeric or integer/float changes in duplicate
+content as identical; a valid first record's review could then retain that race
+in a historical partition. Candidate correction compares finite JSON content,
+preserving scalar types and nested structure. Conflicts quarantine the whole race
+in either order across train/validation/test; unrelated reviewed races remain.
+Reordered object keys and genuine duplicates retain their existing behavior.
+Local verification: 161 historical tests, 26 shared-agent preparation tests and
+existing web/safety regression pass. Five targeted tests were added; two new audit
+tests failed on the old implementation before the correction. Remote candidate
+CI results and exact commit will be recorded in its PR; no merge authorized yet.
+
+No new matching source-permission mail was found in the bounded 2026-10-14
+query. This does not prove absence in every channel. KEIRIN.JP HOLD persists.
+Recovery branch remains `62f197d`; GitHub cannot resolve reported local `9fbb95d`.
+Recover the original Claude session/patch; do not reimplement it from a summary.
+
+Jarvis parallel: owner-created Issue #255 prepares one synthetic payout-test-only
+pilot. No trigger, credential registration, permission/flag change or model run
+occurred. #254 retains the remaining separate approvals and runtime acceptance.
+PR #250 remains open. No source outreach/acquisition, real training, prediction DB
+write, production AI/Jarvis run, new billing or reporting schedule was enabled.
+
+## PR #253 bridge review revision — 2026-10-14 (historical pre-merge review)
 
 Resumption matched main `62f197db216a1f4b58226cbd644ae9f11c676686`, PR #253
 head `61e9a7d76d0edffeecfd280266bedfa056314ee8`, open PR #250 and Issues

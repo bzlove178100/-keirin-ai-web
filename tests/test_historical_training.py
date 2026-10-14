@@ -112,6 +112,32 @@ class HistoricalTrainingTests(unittest.TestCase):
                         self.assertEqual(result["training_runs"], 0)
                         self.assertEqual(records, before)
 
+    def test_typed_content_conflicts_are_excluded_regardless_of_order_or_partition(self):
+        changes = (lambda r: r.update(rider_count=float(r["rider_count"])),
+                   lambda r: r.update(dead_heat=0),
+                   lambda r: r["riders"][0].update(car_number=True),
+                   lambda r: r.update(trifecta_outcomes=[[True, 2, 3]]))
+        for count in (7, 9):
+            for day in (1, 3, 4):
+                for change in changes:
+                    a = fixture(day, count)
+                    b = copy.deepcopy(a)
+                    change(b)
+                    for records in ([a, b], [b, a]):
+                        with self.subTest(count=count, day=day, first=records[0]):
+                            result = plan(records, [review(records[0])])
+                            self.assertEqual(result["partition_counts"], {"train": 0, "validation": 0, "test": 0})
+                            self.assertIn("conflicting_duplicate_requires_review", result["excluded"][0]["reasons"])
+                            self.assertEqual(result["training_runs"], 0)
+
+    def test_typed_conflict_does_not_discard_other_reviewed_races(self):
+        records = [fixture(day) for day in range(1, 5)]
+        alternate = copy.deepcopy(records[0])
+        alternate["trifecta_outcomes"] = [[True, 2, 3]]
+        result = plan(records + [alternate], [review(r) for r in records])
+        self.assertEqual(result["partition_counts"], {"train": 1, "validation": 1, "test": 1})
+        self.assertEqual([x["race_id"] for x in result["excluded"]], [records[0]["race_id"]])
+
     def test_changed_source_receipt_missing_source_and_scalar_types_cannot_share_review(self):
         a = fixture(1)
         a["sources"] = [{"kind": "synthetic", "receipt": {"sha256": "a" * 64, "version": 1}}]

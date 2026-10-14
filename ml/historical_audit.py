@@ -38,7 +38,15 @@ def audit(records: list[dict]) -> dict:
                 source_variants.add(key)
             a = {k: v for k, v in seen[key].items() if k != "sources"}
             b = {k: v for k, v in record.items() if k != "sources"}
-            if a == b:
+            # Python equality collapses True/1 and 7/7.0, including nested
+            # rosters/outcomes. An exact review of the first record must not
+            # cover a differently typed duplicate simply because it came first.
+            try:
+                same_content = json.dumps(a, sort_keys=True, allow_nan=False) == json.dumps(
+                    b, sort_keys=True, allow_nan=False)
+            except (TypeError, ValueError):
+                same_content = False
+            if same_content:
                 duplicates += 1
             else:
                 conflicts.add(key)
