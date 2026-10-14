@@ -38,6 +38,7 @@ class API:
         require(bool(token), "TOKEN_MISSING")
         self.headers = {"Authorization": "Bearer " + token,
                         "Accept": "application/vnd.github+json",
+                        "Content-Type": "application/json",
                         "X-GitHub-Api-Version": "2022-11-28"}
 
     def call(self, path, data=None):

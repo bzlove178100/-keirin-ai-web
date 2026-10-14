@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch, MagicMock
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('bridge', ROOT / '.github/scripts/claude_task_bridge.py')
@@ -234,6 +235,19 @@ class BridgeTests(unittest.TestCase):
         self.api.fail_on = 'issues/300'
         self.refused_without_writes()
         self.assertEqual([p for p, _ in self.api.calls].count('issues/300'), 1)
+
+    def test_rest_transport_uses_fixed_origin_json_and_no_redirects(self):
+        opener = MagicMock()
+        opener.open.return_value.__enter__.return_value.read.return_value = b'{"sha":"example"}'
+        with patch.dict(b.os.environ, {'GH_TOKEN': 'SYNTHETIC_ONLY'}), \
+             patch.object(b.urllib.request, 'build_opener', return_value=opener) as build:
+            self.assertEqual(b.API().call('git/blobs', {'content': 'x'}), {'sha': 'example'})
+        request = opener.open.call_args.args[0]
+        self.assertEqual(request.full_url, f'https://api.github.com/repos/{REPO}/git/blobs')
+        self.assertEqual(request.get_method(), 'POST')
+        self.assertEqual(request.get_header('Content-type'), 'application/json')
+        self.assertEqual(json.loads(request.data), {'content': 'x'})
+        self.assertIsNone(build.call_args.args[0].redirect_request(None))
 
     def test_workflow_separates_credentials_and_fails_closed(self):
         workflow = (ROOT / '.github/workflows/claude-task-bridge.yml').read_text()

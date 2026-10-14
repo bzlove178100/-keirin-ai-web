@@ -18,7 +18,7 @@ base SHA, file scope/blobs, overlapping PRs and existing task branches are check
 before publishing. Only existing regular Python files (1–4, 24 KB/file, 60 KB total)
 can be proposed; generated code is never run by the credentialed publisher.
 New synthetic contract tests cover refusals, drift, partial failures and draft
-creation; a dedicated no-model CI workflow is added. Local 20/20 and basic web/
+creation; a dedicated no-model CI workflow is added. Local 21/21 and basic web/
 safety regression pass. Final new-head CI is PENDING until observed on GitHub.
 See docs/CLAUDE_TASK_BRIDGE.md for official source pins and activation gates.
 
