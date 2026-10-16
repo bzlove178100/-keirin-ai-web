@@ -58,14 +58,15 @@
     return seen.size === expected.size && Math.abs(mass - 1) <= 1e-6;
   }
 
-  function categoriesValid(selected) {
+  function categoriesValid(selected, cars) {
+    const expected = new Set(permutations3(cars));
     const categories = selected && selected.categories;
     if (!categories || typeof categories !== 'object' || Array.isArray(categories)) return false;
     for (const key of CATEGORY_KEYS) {
       const picks = categories[key] && categories[key].picks;
       if (!Array.isArray(picks) || picks.length > 3) return false;
       const keys = picks.map((pick) => pick && pick.combo_key);
-      if (!keys.every(validCombo) || new Set(keys).size !== keys.length) return false;
+      if (!keys.every((key) => expected.has(key)) || new Set(keys).size !== keys.length) return false;
     }
     return true;
   }
@@ -93,9 +94,9 @@
 
     const raceData = snapshot.race_data || {};
     const players = raceData.players;
-    if (!Array.isArray(players) || players.length !== 7) fail('seven_riders_required');
+    if (!Array.isArray(players) || ![7, 9].includes(players.length)) fail('seven_or_nine_riders_required');
     const cars = players.map((player) => player && player.car_number);
-    if (new Set(cars).size !== 7 || !cars.every((car) => Number.isInteger(car) && car >= 1 && car <= 7)) fail('invalid_car_numbers');
+    if (new Set(cars).size !== players.length || !cars.every((car) => Number.isInteger(car) && car >= 1 && car <= players.length)) fail('invalid_car_numbers');
 
     const engine = snapshot.engine_response || {};
     if (engine.success !== true) fail('engine_response_unsuccessful');
@@ -105,7 +106,7 @@
     if (version !== ENGINE_VERSION) fail('engine_version_mismatch');
     const prediction = engine.prediction || {};
     if (!fullProbabilityTableValid(prediction.trifecta_scores, cars)) fail('full_probability_table_invalid');
-    if (!categoriesValid(prediction.selected_predictions)) fail('selected_categories_invalid');
+    if (!categoriesValid(prediction.selected_predictions, cars)) fail('selected_categories_invalid');
     return true;
   }
 
@@ -265,9 +266,9 @@
     }
 
     const players = training.players;
-    if (!Array.isArray(players) || players.length !== 7) fail('seven_unique_riders_required');
+    if (!Array.isArray(players) || ![7, 9].includes(players.length)) fail('seven_or_nine_unique_riders_required');
     const cars = players.map((player) => player && player.car_number);
-    if (new Set(cars).size !== 7 || !cars.every((car) => Number.isInteger(car) && car >= 1 && car <= 9)) fail('invalid_car_number');
+    if (new Set(cars).size !== players.length || !cars.every((car) => Number.isInteger(car) && car >= 1 && car <= players.length)) fail('invalid_car_number');
     if (!players.every((player) => ['逃', '両', '追'].includes(player && player.style))) fail('invalid_style');
     if (metadata.engine_version !== ENGINE_VERSION) fail('baseline_version_mismatch');
     if (!fullProbabilityTableValid(record.trifecta_scores, cars)) fail('baseline_incomplete');

@@ -86,3 +86,14 @@ Deno.test('Real Ito 9R partial-odds fixture preserves confirmed-odds-only behavi
   assert(picks.length === 15, 'historical fixture must produce 15 picks');
   assert(new Set(picks.map((p:any)=>p.combo_key)).size === 15, 'historical fixture picks must be unique across categories');
 });
+
+Deno.test('synthetic nine-rider prediction has 504 probabilities and keeps unknown odds absent', () => {
+  const input = fixture();
+  for (const car of [8,9]) input.players.push({car_number:car,name:`synthetic-${car}`,style:'追',race_score:98-car,S:0,H:0,B:0,line_id:`L${car}`,line_position:1,line_length:1});
+  const result = buildFullPredictionWithWeights(input);
+  assert(result.trifecta_scores.length === 504, 'nine-rider probability table must have 504 rows');
+  assert(new Set(result.trifecta_scores.map((x:any)=>x.combo_key)).size === 504, 'nine-rider combinations must be unique');
+  assert(Math.abs(result.trifecta_scores.reduce((s:number,x:any)=>s+x.estimated_probability,0)-1) <= 1e-6, 'nine-rider probabilities must sum to one');
+  assert(result.trifecta_scores.filter((x:any)=>x.odds!=null).length === 210, 'prediction-time odds must remain partial');
+  assert(result.trifecta_scores.filter((x:any)=>x.odds==null).length === 294, 'missing odds must not be filled');
+});

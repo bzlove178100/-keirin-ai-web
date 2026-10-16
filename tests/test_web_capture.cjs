@@ -32,7 +32,7 @@ assert.equal(run('saved'),0);
 assert.equal(run("trainingReadiness({metadata:{evaluation_scope:'prospective'}})"),'学習用入力が含まれていません');
 run(`var rec={prediction_timestamp:'2026-09-24T02:59:00Z',metadata:{evaluation_scope:'prospective',result_timestamp:'2026-09-24T03:10:00Z',engine_version:'phase32-hit-priority-all210-v1',training_eligibility:{supervised_training:true}},training_input:{schema_version:'keirin-training-input-v1',evaluation_scope:'prospective',captured_at:'2026-09-24T02:59:00Z',players:Array.from({length:7},(_,i)=>({car_number:i+1,style:'追'}))},trifecta_scores:scores};`);
 assert.equal(run('trainingReadiness(rec)'),null);
-(async()=>{
+const captureChecks = (async()=>{
   run(`currentSession={}; loadedHistorySnapshot=lastDryRunSnapshot; var posts=0; authenticatedPost=async()=>{posts++;throw Error('unexpected network')};`);
   node('result-combo').value='1-2-3';node('result-odds').value='12.3';
   node('result-time').value='2099-01-01T00:00';
@@ -41,3 +41,34 @@ assert.equal(run('trainingReadiness(rec)'),null);
   assert.match(node('history-note').textContent,/未来/);
   console.log('Web capture, cutoff, probability and result-time checks: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});
+
+// Read the actual browser script with generated seven-/nine-rider snapshots.
+const fixtures = require('./test_prospective_tools.cjs');
+captureChecks.then(async()=>{
+  for (const count of [7,9]) {
+    const snap = fixtures.snapshot(0, 'synthetic', count);
+    const record = fixtures.history(0,count);
+    sandbox.riderRecord = record;
+    assert.equal(run('trainingReadiness(riderRecord)'),null);
+    assert.equal(run('normalizeDatasetRecord(riderRecord) !== null'),true);
+    sandbox.snapshotEvent = {target:{files:[{name:'synthetic.json',size:1000,text:async()=>JSON.stringify(snap)}]}};
+    await run('loadHistorySnapshotFile(snapshotEvent)');
+    assert.equal(run('loadedHistorySnapshot.race_data.players.length'),count);
+    assert.match(node('history-snapshot-note').textContent,new RegExp(`全${count*(count-1)*(count-2)}通り`));
+    snap.engine_response.prediction.selected_predictions.categories.hit_priority.picks[0].combo_key = '10-2-3';
+    await run('loadHistorySnapshotFile(snapshotEvent)');
+    assert.equal(run('loadedHistorySnapshot'),null);
+    record.trifecta_scores[0].combo_key = '10-2-3';
+    assert.equal(run('normalizeDatasetRecord(riderRecord)'),null);
+    assert.notEqual(run('trainingReadiness(riderRecord)'),null);
+  }
+  sandbox.riderRecord = fixtures.history(0,9);
+  delete sandbox.riderRecord.training_input;
+  assert.equal(run('normalizeDatasetRecord(riderRecord)'),null);
+  sandbox.riderRecord = fixtures.history(0,7);
+  delete sandbox.riderRecord.training_input;
+  assert.equal(run('normalizeDatasetRecord(riderRecord) !== null'),true);
+  sandbox.riderRecord.training_input = {};
+  assert.equal(run('normalizeDatasetRecord(riderRecord)'),null);
+  console.log('Web 7/9-rider import and training-readiness checks: PASS');
+}).catch(e=>{console.error(e);process.exitCode=1});

@@ -13,12 +13,12 @@ const { permutations } = (() => {
 })();
 const tools = require('../prospective-tools-core.js');
 
-const COMBOS = permutations([1,2,3,4,5,6,7]);
-
-function snapshot(i = 0, source = 'WINTICKET') {
+// Every value in this fixture is generated; source labels exercise parser rules.
+function snapshot(i = 0, source = 'WINTICKET', riderCount = 7) {
+  const COMBOS = permutations(Array.from({length:riderCount}, (_, i) => i + 1));
   const captured = new Date(Date.UTC(2026, 8, 24, 0 + i, 0, 0));
   const scheduled = new Date(captured.getTime() + 30 * 60 * 1000);
-  const players = Array.from({length: 7}, (_, index) => {
+  const players = Array.from({length: riderCount}, (_, index) => {
     const car = index + 1;
     return {
       car_number: car,
@@ -61,21 +61,21 @@ function snapshot(i = 0, source = 'WINTICKET') {
       saved: false,
       db_write_enabled: false,
       production_prediction_enabled: false,
-      input_quality: {trifecta_odds_count: 72, possible_trifecta_count: 210, trifecta_odds_coverage: 72/210},
+      input_quality: {trifecta_odds_count: 72, possible_trifecta_count: COMBOS.length, trifecta_odds_coverage: 72/COMBOS.length},
       odds_sanitization: {policy:'kdreams_9999_9_unbet_as_unavailable', source_matched:false, ignored_combos:[]},
       probability_calibration_status: 'uncalibrated',
       monetary_ev_enabled: false,
       odds_band_ranking: 'estimated_probability_only',
       prediction: {
-        trifecta_scores: COMBOS.map((combo) => ({combo_key:combo, estimated_probability:1/210, odds:known[combo] ?? null})),
+        trifecta_scores: COMBOS.map((combo) => ({combo_key:combo, estimated_probability:1/COMBOS.length, odds:known[combo] ?? null})),
         selected_predictions: {probability_calibration_status:'uncalibrated', monetary_ev_enabled:false, odds_band_ranking:'estimated_probability_only', categories},
       },
     },
   };
 }
 
-function history(i) {
-  const snap = snapshot(i);
+function history(i, riderCount = 7) {
+  const snap = snapshot(i, 'WINTICKET', riderCount);
   const captured = new Date(snap.captured_at);
   return tools.buildHistory(snap, {
     outcomeCombo: `${1 + (i % 5)}-${2 + (i % 5)}-${3 + (i % 5)}`,
@@ -142,7 +142,7 @@ function history(i) {
 })();
 
 (function testCollectionReadinessUsesChronologicalPartitions() {
-  const records = [0,1,2,3,4].map(history);
+  const records = [0,1,2,3,4].map(i => history(i));
   const status = tools.collectionStatus(records);
   assert.strictEqual(status.eligible_unique_races, 5);
   assert.strictEqual(status.distinct_prediction_times, 5);
@@ -163,7 +163,7 @@ function history(i) {
 })();
 
 (function testBoundaryPurgeCanStillBlockFiveTimes() {
-  const records = [0,1,2,3,4].map(history);
+  const records = [0,1,2,3,4].map(i => history(i));
   records[0].metadata.result_timestamp = records[4].metadata.result_timestamp;
   records[3].metadata.result_timestamp = records[4].metadata.result_timestamp;
   const status = tools.collectionStatus(records);
@@ -180,4 +180,47 @@ function history(i) {
   assert.strictEqual(records[0].race_id, record.race_id);
 })();
 
+(function testSevenAndNineRiderRoundTripAndGuards() {
+  for (const count of [7,9]) {
+    const snap = snapshot(0, 'WINTICKET', count);
+    assert.strictEqual(tools.validateSnapshot(snap), true);
+    const record = tools.buildHistory(snap, {outcomeCombo:`${count}-${count-1}-${count-2}`,
+      settlementOdds:42, resultTimestamp:'2026-09-24T00:40:00Z'});
+    assert.strictEqual(record.trifecta_scores.length, count*(count-1)*(count-2));
+    assert.strictEqual(tools.collectionStatus([record]).eligible_unique_races, 1);
+    assert.strictEqual(Object.keys(record.training_input.odds.trifecta).length, 72);
+    for (const value of [true, '1', null, 0, count+1, 2]) {
+      const bad = structuredClone(snap); bad.race_data.players[0].car_number = value;
+      assert.throws(() => tools.validateSnapshot(bad), /invalid_car_numbers/);
+      const badRecord = structuredClone(record); badRecord.training_input.players[0].car_number = value;
+      assert.strictEqual(tools.collectionStatus([badRecord]).eligible_unique_races, 0);
+    }
+    for (const mutate of [
+      s => s.engine_response.prediction.trifecta_scores.pop(),
+      s => s.engine_response.prediction.trifecta_scores[0].combo_key = '10-2-3',
+      s => s.engine_response.prediction.selected_predictions.categories.hit_priority.picks[0].combo_key = '10-2-3',
+      s => s.engine_response.saved = true,
+      s => s.engine_response.db_write_enabled = true,
+      s => s.engine_response.production_prediction_enabled = true,
+      s => s.snapshot_eligibility.prestart_confirmed = false,
+      s => s.captured_at = s.snapshot_eligibility.scheduled_start,
+    ]) {
+      const bad = structuredClone(snap); mutate(bad);
+      assert.throws(() => tools.validateSnapshot(bad));
+    }
+    const synthetic = structuredClone(record);
+    synthetic.training_input.prediction_context.source = 'synthetic';
+    assert.strictEqual(tools.collectionStatus([synthetic]).excluded.synthetic_excluded, 1);
+  }
+  for (const count of [6,8]) {
+    assert.throws(() => tools.validateSnapshot(snapshot(0, 'WINTICKET', count)), /seven_or_nine_riders_required/);
+  }
+  const mixed = [7,9,7,9,7].map((count,i) => history(i,count));
+  const status = tools.collectionStatus(mixed);
+  assert.strictEqual(status.eligible_unique_races, 5);
+  assert.strictEqual(status.chronological_evaluation_may_run, true);
+})();
+
+// Reuse generated fixtures in the browser and server contract tests.
+module.exports = {snapshot, history};
 console.log('prospective browser-local tools checks: PASS');

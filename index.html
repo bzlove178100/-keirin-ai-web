@@ -505,10 +505,22 @@ function prospectiveEligibility(raceData, scheduledStart, confirmed, now = new D
   return {prospective:true,reason:'before_scheduled_start',scheduled_start:start.toISOString(),prestart_confirmed:true,clock_source:'client_unverified'};
 }
 
-function fullProbabilityTableValid(scores) {
-  if (!Array.isArray(scores) || scores.length !== 210) return false;
+// A roster is authoritative; absent legacy training input defaults to seven cars.
+function raceCarNumbers(players) {
+  if (!Array.isArray(players) || ![7,9].includes(players.length)) return null;
+  const cars = players.map(p => p?.car_number);
+  return new Set(cars).size === players.length && cars.every(n => Number.isInteger(n) && n >= 1 && n <= players.length) ? cars : null;
+}
+
+function fullProbabilityTableValid(scores, cars = [1,2,3,4,5,6,7]) {
+  if (!cars || !raceCarNumbers(cars.map(car_number => ({car_number})))) return false;
+  const expected = new Set();
+  for (const a of cars) for (const b of cars) for (const c of cars) {
+    if (a !== b && a !== c && b !== c) expected.add(`${a}-${b}-${c}`);
+  }
+  if (!Array.isArray(scores) || scores.length !== expected.size) return false;
   const keys = scores.map(x => x?.combo_key);
-  if (!keys.every(validOutcomeCombo) || new Set(keys).size !== 210) return false;
+  if (!keys.every(key => expected.has(key)) || new Set(keys).size !== expected.size) return false;
   if (!scores.every(x => typeof x?.estimated_probability === 'number' && Number.isFinite(x.estimated_probability) && x.estimated_probability >= 0 && x.estimated_probability <= 1)) return false;
   return Math.abs(scores.reduce((sum,x) => sum+x.estimated_probability,0)-1) <= 1e-6;
 }
@@ -523,9 +535,9 @@ function trainingReadiness(record) {
   const predicted = Date.parse(record?.prediction_timestamp);
   const settled = Date.parse(meta?.result_timestamp);
   if (!Number.isFinite(captured) || captured !== predicted || !Number.isFinite(settled) || predicted >= settled) return '予測・結果時刻を確認してください';
-  if (!Array.isArray(training.players) || training.players.length !== 7 || !fullProbabilityTableValid(record?.trifecta_scores)) return '選手情報または全210通りの確率が不足しています';
-  const cars = training.players.map(p => p?.car_number);
-  if (new Set(cars).size !== 7 || !cars.every(n => Number.isInteger(n) && n >= 1 && n <= 7) || !training.players.every(p => ['逃','両','追'].includes(p?.style))) return '車番または脚質を確認してください';
+  const cars = raceCarNumbers(training.players);
+  if (!cars || !training.players.every(p => ['逃','両','追'].includes(p?.style))) return '7車・9車の車番または脚質を確認してください';
+  if (!fullProbabilityTableValid(record?.trifecta_scores, cars)) return '出走車数に応じた全組合せの確率が不足しています';
   if (meta?.engine_version !== 'phase32-hit-priority-all210-v1') return '比較対象の予測エンジンが一致しません';
   return null;
 }
@@ -685,7 +697,7 @@ async function checkDevEngine() {
       data.probability_calibration_status === 'uncalibrated' &&
       data.monetary_ev_enabled === false &&
       data.odds_sanitization_policy === 'kdreams_9999_9_unbet_as_unavailable';
-    show('dev-engine-status', dryReady && versionReady ? '準備済み（v16・全210・校正前EV無効）' : dryReady ? 'dry-run準備済み・版要確認' : '状態要確認', dryReady && versionReady ? 'ok' : dryReady ? 'pending' : 'error');
+    show('dev-engine-status', dryReady && versionReady ? '準備済み（v16・校正前EV無効）' : dryReady ? 'dry-run準備済み・版要確認' : '状態要確認', dryReady && versionReady ? 'ok' : dryReady ? 'pending' : 'error');
     show('data-source-status', data.data_source_connected ? '接続済み' : '未接続（JKA回答待ち）', data.data_source_connected ? 'ok' : 'pending');
     if (data.db_write_enabled === false) { show('dev-write-status','OFF（保存なし）','ok'); show('write-status','DB書き込みOFF（安全）','pending'); } else { show('dev-write-status','状態要確認','error'); }
     element('run-dry').disabled = !(dryReady && versionReady);
@@ -768,15 +780,13 @@ async function loadHistorySnapshotFile(event) {
     const categoryKeys = ['hit_priority','balance','middle','longshot','super_longshot'];
     const scoreKeys = Array.isArray(scores) ? scores.map(x => x?.combo_key) : [];
     const scoreSet = new Set(scoreKeys);
-    const probabilityMass = Array.isArray(scores)
-      ? scores.reduce((sum,x)=>sum + Number(x?.estimated_probability || 0),0)
-      : 0;
+    const cars = raceCarNumbers(parsed?.race_data?.players);
 
     const categoriesValid = cats && categoryKeys.every(key => {
       const picks = cats[key]?.picks;
       if (!Array.isArray(picks) || picks.length > 3) return false;
       const keys = picks.map(x => x?.combo_key);
-      return keys.every(validOutcomeCombo) && new Set(keys).size === keys.length;
+      return keys.every(key => scoreSet.has(key)) && new Set(keys).size === keys.length;
     });
 
     const snapshotSafe =
@@ -788,11 +798,8 @@ async function loadHistorySnapshotFile(event) {
       er?.db_write_enabled === false &&
       er?.production_prediction_enabled === false &&
       er?.architecture?.engine === 'phase32-hit-priority-all210-v1' &&
-      Array.isArray(scores) &&
-      scores.length === 210 &&
-      scoreSet.size === 210 &&
-      scoreKeys.every(validOutcomeCombo) &&
-      fullProbabilityTableValid(scores) &&
+      cars &&
+      fullProbabilityTableValid(scores, cars) &&
       categoriesValid;
 
     if (!snapshotSafe) throw new Error('snapshot_invalid');
@@ -809,7 +816,7 @@ async function loadHistorySnapshotFile(event) {
     const scopeLabel = evaluationScope === 'prospective' ? '前向き検証' : '再現・旧データ';
     show(
       'history-snapshot-note',
-      `読み込み済み：${file.name} / ${race.date ?? '-'} ${race.venue ?? '-'} ${race.race_number ?? '-'}R / スナップショット時刻 ${localCaptured}（日本時間） / ${scopeLabel} / 全210確率確認済み`,
+      `読み込み済み：${file.name} / ${race.date ?? '-'} ${race.venue ?? '-'} ${race.race_number ?? '-'}R / スナップショット時刻 ${localCaptured}（日本時間） / ${scopeLabel} / 全${scores.length}通りの確率確認済み`,
       evaluationScope === 'prospective' ? 'note ok' : 'note pending'
     );
     updateHistoryRunState();
@@ -818,7 +825,7 @@ async function loadHistorySnapshotFile(event) {
     lastHistoryBacktestPayload = null;
     element('save-history').disabled = true;
     element('history-json').value = '';
-    show('history-snapshot-note','現行v16互換の安全な予測スナップショットとして確認できませんでした。全210確率・保存OFF・本番予想OFFを確認してください。','note error');
+    show('history-snapshot-note','現行v16互換の安全な予測スナップショットとして確認できませんでした。7車・9車の全組合せ確率・保存OFF・本番予想OFFを確認してください。','note error');
     updateHistoryRunState();
   }
 }
@@ -947,11 +954,10 @@ function normalizeDatasetRecord(record) {
   if (!validOutcomeCombo(record.outcome_combo)) return null;
   if (!Number.isFinite(Number(record.settlement_odds)) || Number(record.settlement_odds) <= 0) return null;
   if (!record.selected_predictions?.categories || !Array.isArray(record.trifecta_scores)) return null;
-  if (!fullProbabilityTableValid(record.trifecta_scores)) return null;
-  const scoreKeys = record.trifecta_scores.map(x => x?.combo_key);
-  if (!scoreKeys.every(validOutcomeCombo) || new Set(scoreKeys).size !== 210) return null;
-  const probabilityMass = record.trifecta_scores.reduce((sum,x)=>sum + Number(x?.estimated_probability || 0),0);
-  if (Math.abs(probabilityMass - 1) > 0.02) return null;
+  const cars = record.training_input == null ? [1,2,3,4,5,6,7] : raceCarNumbers(record.training_input.players);
+  if (!fullProbabilityTableValid(record.trifecta_scores, cars)) return null;
+  const scoreKeys = new Set(record.trifecta_scores.map(x => x.combo_key));
+  if (!scoreKeys.has(record.outcome_combo)) return null;
   return record;
 }
 
@@ -1170,7 +1176,7 @@ function renderBacktestResult(data) {
     const c = result.categories?.[key];
     show(id, c ? formatMetricSummary(c, c.races, c.race_hit_rate) : 'データなし');
   }
-  show('backtest-note',`バックテスト完了：${result.records ?? 0}レース。保存0件。選択成績（払戻は確定オッズ）と全210通りの順位・確率品質を分離評価しています。将来の的中率を保証するものではありません。`,'note ok');
+  show('backtest-note',`バックテスト完了：${result.records ?? 0}レース。保存0件。選択成績（払戻は確定オッズ）と全組合せの順位・確率品質を分離評価しています。将来の的中率を保証するものではありません。`,'note ok');
 }
 
 async function runBacktestDryRun() {

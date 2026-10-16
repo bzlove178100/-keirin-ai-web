@@ -1,0 +1,37 @@
+name: keirin synthetic history pipeline
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'prospective-tools-core.js'
+      - 'supabase/functions/_shared/race_probability.ts'
+      - 'supabase/functions/predict-engine-dev/**'
+      - 'supabase/functions/history-*-dev/**'
+      - 'supabase/functions/backtest-engine-dev/**'
+      - 'tests/test_history_pipeline_local.cjs'
+      - 'tests/test_prospective_tools.cjs'
+      - '.github/workflows/keirin-history-local.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'prospective-tools-core.js'
+      - 'supabase/functions/_shared/race_probability.ts'
+      - 'supabase/functions/predict-engine-dev/**'
+      - 'supabase/functions/history-*-dev/**'
+      - 'supabase/functions/backtest-engine-dev/**'
+      - 'tests/test_history_pipeline_local.cjs'
+      - 'tests/test_prospective_tools.cjs'
+      - '.github/workflows/keirin-history-local.yml'
+permissions:
+  contents: read
+jobs:
+  synthetic-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Compare browser history with locally composed Edge handlers
+        run: node tests/test_history_pipeline_local.cjs
