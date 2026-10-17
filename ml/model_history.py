@@ -22,6 +22,8 @@ from ml.settle_snapshot import _iso
 
 SNAPSHOT_SCHEMA = 'ml-prediction-snapshot-v1'
 HISTORY_SCHEMA = 'ml-settled-history-v1'
+HELD_SCHEMA = 'ml-held-history-v1'
+HELD_STATUSES = ('dead_heat', 'withdrawn', 'cancelled')
 SAFETY = {
     'evidence_scope': 'synthetic_test_only',
     'production_prediction_enabled': False, 'db_write_enabled': False,
@@ -116,27 +118,51 @@ def settle_snapshot(snapshot: dict, settlement: dict, *, synthetic: bool = False
     validate_snapshot(snapshot, synthetic=synthetic)
     if not isinstance(settlement, dict) or settlement.get('race_id') != snapshot['race_id']:
         raise ValueError('settlement_race_mismatch')
-    outcome, odds = settlement.get('outcome_combo'), settlement.get('settlement_odds')
-    valid_keys = {row['combo_key'] for row in snapshot['prediction']['trifecta_scores']}
-    if not isinstance(outcome, str) or outcome not in valid_keys:
-        raise ValueError('outcome_not_in_riders')
-    if not _number(odds):
-        raise ValueError('settlement_odds_invalid')
+    status = settlement.get('result_status', 'normal')
+    if status not in ('normal', *HELD_STATUSES):
+        raise ValueError('result_status_invalid')
+    fields = {'race_id', 'result_timestamp'}
+    if status == 'normal':
+        fields |= {'outcome_combo', 'settlement_odds'}
+        if 'result_status' in settlement:
+            fields.add('result_status')
+    else:
+        fields.add('result_status')
+        if status == 'withdrawn':
+            fields.add('withdrawn_car_numbers')
+    # Do not silently drop dead_heat, multiple outcomes or other undeclared data.
+    if set(settlement) != fields:
+        raise ValueError('settlement_fields_invalid')
     result_time = _iso(settlement.get('result_timestamp'), 'result_timestamp')
-    if result_time < _iso(snapshot['scheduled_start'], 'scheduled_start'):
+    if result_time < _iso(snapshot['captured_at'], 'captured_at'):
+        raise ValueError('result_before_capture')
+    if status in ('normal', 'dead_heat') and result_time < _iso(snapshot['scheduled_start'], 'scheduled_start'):
         raise ValueError('result_before_scheduled_start')
+    if status == 'normal':
+        outcome, odds = settlement['outcome_combo'], settlement['settlement_odds']
+        valid_keys = {row['combo_key'] for row in snapshot['prediction']['trifecta_scores']}
+        if not isinstance(outcome, str) or outcome not in valid_keys:
+            raise ValueError('outcome_not_in_riders')
+        if not _number(odds):
+            raise ValueError('settlement_odds_invalid')
+    if status == 'withdrawn':
+        cars = settlement['withdrawn_car_numbers']
+        count = snapshot['prediction']['input_quality']['rider_count']
+        if (not isinstance(cars, list) or not cars or
+                any(type(c) is not int or not 1 <= c <= count for c in cars) or
+                len(set(cars)) != len(cars)):
+            raise ValueError('withdrawn_cars_invalid')
     return {
-        'schema_version': HISTORY_SCHEMA, **SAFETY,
+        'schema_version': HISTORY_SCHEMA if status == 'normal' else HELD_SCHEMA, **SAFETY,
         'race_id': snapshot['race_id'], 'prediction_timestamp': snapshot['captured_at'],
         'model_artifact_sha256': snapshot['prediction']['model_artifact']['sha256'],
         'snapshot': deepcopy(snapshot),
-        'settlement': {key: deepcopy(settlement[key]) for key in
-                       ('race_id', 'outcome_combo', 'settlement_odds', 'result_timestamp')},
+        'settlement': deepcopy(settlement),
     }
 
 
 def _validate_history(record: Any) -> None:
-    if not isinstance(record, dict) or record.get('schema_version') != HISTORY_SCHEMA:
+    if not isinstance(record, dict) or record.get('schema_version') not in (HISTORY_SCHEMA, HELD_SCHEMA):
         raise ValueError('ml_history_schema_mismatch')
     expected = settle_snapshot(record.get('snapshot'), record.get('settlement'), synthetic=True)
     if _canonical(record) != _canonical(expected):
@@ -153,14 +179,25 @@ def evaluate_histories(records: list[dict], *, synthetic: bool = False) -> dict:
             groups.setdefault(record['race_id'], []).append(record)
         except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as exc:
             excluded[str(exc) if isinstance(exc, ValueError) else 'malformed_record'] += 1
-    selected, duplicates = [], 0
+    selected, held, duplicates = [], [], 0
     for group in groups.values():
-        if len({_canonical(r['settlement']) for r in group}) != 1:
+        holds = [r for r in group if r['schema_version'] == HELD_SCHEMA]
+        if holds:
+            # A later ordinary record cannot erase an unresolved exception.
+            held.append({'race_id': group[0]['race_id'],
+                         'rider_count': group[0]['snapshot']['prediction']['input_quality']['rider_count'],
+                         'reasons': sorted({r['settlement']['result_status'] for r in holds}),
+                         'withdrawn_car_numbers': sorted({c for r in holds for c in r['settlement'].get('withdrawn_car_numbers', [])}),
+                         'excluded_records': len(group)})
+            excluded['nonstandard_race_requires_review'] += len(group)
+            continue
+        # Explicit normal and legacy omitted normal status mean the same event.
+        if len({_canonical({**r['settlement'], 'result_status': 'normal'}) for r in group}) != 1:
             excluded['conflicting_settlements'] += len(group)
             continue
         latest = max(_iso(r['prediction_timestamp'], 'prediction_timestamp') for r in group)
         tied = [r for r in group if _iso(r['prediction_timestamp'], 'prediction_timestamp') == latest]
-        if len({_canonical(r) for r in tied}) != 1:
+        if len({_canonical({**r, 'settlement': {**r['settlement'], 'result_status': 'normal'}}) for r in tied}) != 1:
             excluded['conflicting_latest_snapshots'] += len(group)
             continue
         selected.append(tied[0]); duplicates += len(group) - 1
@@ -183,6 +220,7 @@ def evaluate_histories(records: list[dict], *, synthetic: bool = False) -> dict:
         'status': 'completed_synthetic_frozen_review' if per_race else 'blocked_no_valid_histories',
         'probability_calibration_status': 'uncalibrated',
         'input_records': len(records), 'evaluated_races': len(per_race),
+        'held_races': len(held), 'held_cases': sorted(held, key=lambda r: r['race_id']),
         'model_artifacts': sorted({r['model_artifact_sha256'] for r in per_race}),
         'metrics_scope': 'pooled_frozen_synthetic_predictions',
         'excluded': dict(excluded), 'duplicate_snapshots_removed': duplicates,

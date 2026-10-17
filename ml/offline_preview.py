@@ -8,6 +8,7 @@ from string import Template
 from typing import Any
 
 from ml.category_selection import CATEGORY_RULES, _number, select_model_categories, validate_model_scores
+from ml.race_conditions import require_standard_conditions
 
 POSITIONS = ('first', 'second', 'third')
 
@@ -15,6 +16,8 @@ POSITIONS = ('first', 'second', 'third')
 def validate_preview(result: Any) -> None:
     if not isinstance(result, dict) or result.get('success') is not True:
         raise ValueError('successful offline inference result required')
+    if 'race_conditions' in result:
+        require_standard_conditions(result['race_conditions'])
     expected = {
         'mode': 'offline_inference_only', 'model_version': 'lightgbm-position-rankers-v1',
         'inference_version': 'lightgbm-offline-inference-v1',

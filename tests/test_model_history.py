@@ -130,5 +130,65 @@ class ModelHistoryTests(unittest.TestCase):
             run=subprocess.run(args+['--synthetic'],capture_output=True,text=True)
             self.assertNotEqual(run.returncode,0);self.assertEqual(output.read_bytes(),before)
 
+    def test_nonstandard_results_are_preserved_without_scoring_or_retraining(self):
+        for count in (7,9):
+            snap=snapshot(count); before=deepcopy(snap)
+            for status in ('dead_heat','withdrawn','cancelled'):
+                event={'race_id':snap['race_id'],'result_status':status,
+                       'result_timestamp':'2026-10-17T11:10:00+09:00'}
+                if status=='withdrawn':event['withdrawn_car_numbers']=[count]
+                record=settle_snapshot(snap,event,synthetic=True)
+                self.assertEqual(record['schema_version'],'ml-held-history-v1')
+                self.assertEqual(record['settlement'],event)
+                self.assertEqual(record['snapshot'],before)
+                self.assertNotIn('outcome_combo',record['settlement'])
+                self.assertFalse(supervised_eligibility(record)[0])
+                normal=settle_snapshot(snap,settlement(snap),synthetic=True)
+                newer=snapshot(count,now=NOW+timedelta(minutes=1))
+                stale_override=settle_snapshot(newer,settlement(newer),synthetic=True)
+                for records in ([record,normal,stale_override],[stale_override,normal,record]):
+                    report=evaluate_histories(records,synthetic=True)
+                    self.assertEqual(report['evaluated_races'],0)
+                    self.assertEqual(report['held_races'],1)
+                    self.assertEqual(report['held_cases'][0]['reasons'],[status])
+                    self.assertEqual(report['excluded'],{'nonstandard_race_requires_review':3})
+                    self.assertEqual(report['metrics'],{})
+                self.assertEqual(evaluate_histories([record,deepcopy(record)],synthetic=True)['held_races'],1)
+
+    def test_held_records_do_not_change_the_other_races_denominator(self):
+        seven,nine=snapshot(7),snapshot(9)
+        ordinary=settle_snapshot(nine,settlement(nine),synthetic=True)
+        hold=settle_snapshot(seven,{'race_id':seven['race_id'],'result_status':'cancelled',
+                                  'result_timestamp':'2026-10-17T10:10:00+09:00'},synthetic=True)
+        report=evaluate_histories([hold,ordinary],synthetic=True)
+        baseline=evaluate_histories([ordinary],synthetic=True)
+        self.assertEqual(report['metrics'],baseline['metrics'])
+        self.assertEqual((report['evaluated_races'],report['held_races']),(1,1))
+        # A legacy normal record and an explicit normal status are not a conflict.
+        explicit=settle_snapshot(nine,{**settlement(nine),'result_status':'normal'},synthetic=True)
+        self.assertEqual(evaluate_histories([ordinary,explicit],synthetic=True)['duplicate_snapshots_removed'],1)
+
+    def test_exception_contract_rejects_ambiguous_status_cars_and_times(self):
+        snap=snapshot()
+        event={'race_id':snap['race_id'],'result_status':'withdrawn','withdrawn_car_numbers':[7],
+               'result_timestamp':'2026-10-17T01:10:00Z'}
+        self.assertEqual(settle_snapshot(snap,event,synthetic=True)['schema_version'],'ml-held-history-v1')
+        invalid=[{**event,'withdrawn_car_numbers':cars} for cars in ([],[True],[8],[7,7],['7'],[7.0],None)]
+        invalid += [{**event,'result_timestamp':'2026-10-17T00:59:59Z'},
+                    {**event,'outcome_combo':'1-2-3'}, {**event,'settlement_odds':50},
+                    {**event,'result_status':'unknown'},
+                    {'race_id':snap['race_id'],'result_status':'dead_heat','result_timestamp':'2026-10-17T01:59:59Z'},
+                    {**settlement(snap),'dead_heat':True}, {**settlement(snap),'trifecta_outcomes':['1-2-3','2-1-3']},
+                    {**settlement(snap),'result_status':'dead_heat'}]
+        for bad in invalid:
+            with self.assertRaises(ValueError):settle_snapshot(snap,bad,synthetic=True)
+        held=settle_snapshot(snap,event,synthetic=True)
+        held['schema_version']='ml-settled-history-v1'
+        self.assertEqual(evaluate_histories([held],synthetic=True)['evaluated_races'],0)
+        for conditions in (None,{}, {'race_status':'cancelled','withdrawn_car_numbers':[]},
+                           {'race_status':'scheduled','withdrawn_car_numbers':[7]}):
+            bad=prediction();bad['race_conditions']=conditions
+            with self.assertRaises(ValueError):capture_prediction(bad,synthetic=True)
+
 
 if __name__=='__main__':unittest.main()

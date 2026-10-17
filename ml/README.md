@@ -186,7 +186,7 @@ EV remains disabled. Older preview JSON without selection is rendered using this
 policy; if selection is supplied, it must match the model table exactly.
 
 Only standard integer rosters 1..7 or 1..9 are accepted by this inference CLI. Missing
-riders/dead heats remain outside this flow. Model metadata version and feature columns
+riders/dead heats are explicitly held outside ordinary scoring (see below). Model metadata version and feature columns
 must match the runtime, as must the existing model/schema checks. Saved/unlicensed real
 data must not be trained or used to resume acquisition; source HOLD remains in force.
 
@@ -277,3 +277,48 @@ OMP_NUM_THREADS=2 python -m unittest discover -s tests -p 'test_synthetic_workbe
 # CI uses its existing Chrome and Playwright setup for the interactive flow:
 node tests/test_synthetic_workbench_ui.cjs
 ```
+
+
+## Declared conditions and held results (synthetic only)
+
+Generated fixtures declare `race_conditions` as
+`{"race_status":"scheduled","withdrawn_car_numbers":[]}`. When this object is
+present, inference rejects missing/extra keys, other statuses, and any withdrawal
+before loading a model; the same check protects preview/snapshot capture. Older
+inputs without this field remain readable, **not independently verified as having
+no withdrawals**. Provider-specific flags are not parsed here: a future authorized
+adapter must map them to this contract and reject unknown conditions. No actual
+provider data is fetched or inferred from a missing field.
+
+Normal settlement keeps its existing four fields and optionally accepts
+`"result_status":"normal"`. No other fields are silently discarded. For a nonstandard
+result, use the same `settle` CLI with this synthetic event instead:
+
+```json
+{
+  "race_id": "<exact snapshot race_id>",
+  "result_timestamp": "2026-10-17T11:10:00+09:00",
+  "result_status": "withdrawn",
+  "withdrawn_car_numbers": [7]
+}
+```
+
+Allowed held statuses are `dead_heat`, `withdrawn`, and `cancelled`. Only `withdrawn`
+requires a nonempty list of distinct integer car numbers from the original roster.
+For the other two statuses omit that list. Do not supply outcome/odds for a held
+record. All event times must be at/after capture; normal/dead-heat results must also
+be at/after scheduled start. The example time must be replaced with a time consistent
+with the generated snapshot. Cancellation/withdrawal can occur before start.
+
+The output schema is `ml-held-history-v1`, preserving the frozen prediction and
+reason without fabricating a winner, payout or training eligibility. Any valid hold
+excludes **all** records for that race, including later ordinary records. Evaluation
+returns `held_races` and `held_cases`; `excluded` counts excluded records. Held races
+do not enter hit-rate/log-loss/Brier denominators. Unrelated ordinary races retain
+their metrics. If all races are held, metrics are empty and evaluation is blocked
+(the CLI writes the report and exits 2). No hold-resolution/override is provided.
+
+The workbench result-state selector records these same events, hides ordinary
+finish/odds fields, and retains the held reason on reload/export. This is explicit
+exclusion support; it does not implement 6/8-rider inference, multiwinner scoring,
+refund calculations, or real event verification.

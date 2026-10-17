@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from itertools import permutations
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from ml.dataset import build_rows
 from ml.predict_position_models import load_models, predict_race, validate_race_data
@@ -20,7 +21,26 @@ from ml.train_position_models import train
 from ml.synthetic_demo import make_record
 
 
+def check_declared_race_conditions():
+    for count in (7,9):
+        source=make_record(16,count)['training_input']
+        for conditions in (None, {}, {'race_status':'unknown','withdrawn_car_numbers':[]},
+                           {'race_status':'cancelled','withdrawn_car_numbers':[]},
+                           {'race_status':'scheduled','withdrawn_car_numbers':[count]},
+                           {'race_status':'scheduled','withdrawn_car_numbers':[], 'dead_heat':True}):
+            bad=deepcopy(source);bad['race_conditions']=conditions
+            with patch('ml.predict_position_models.load_models') as loader:
+                try:
+                    predict_race(bad,Path('/unused'))
+                except ValueError:
+                    pass
+                else:
+                    raise AssertionError('nonstandard declaration accepted')
+                loader.assert_not_called()
+
+
 def main() -> None:
+    check_declared_race_conditions()
     records = [make_record(i, 7 if i % 2 == 0 else 9) for i in range(16)]
     rider_rows, summary = build_rows(records)
     assert summary['eligible_unique_races'] == 16
@@ -108,6 +128,7 @@ def main() -> None:
                             '--model-dir', str(output_dir), '--output', str(json_path),
                             '--html-output', str(html_path)], check=True, stdout=subprocess.DEVNULL)
             result = json.loads(json_path.read_text(encoding='utf-8'))
+            assert result['race_conditions'] == generated['race_conditions']
             html = html_path.read_text(encoding='utf-8')
             assert len(result['trifecta_scores']) == count*(count-1)*(count-2)
             assert html == render_preview(result)

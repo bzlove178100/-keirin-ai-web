@@ -75,13 +75,26 @@ class Workbench:
         return self.state()
 
     def settle(self, key, outcome, odds):
+        return self._record(key, {'outcome_combo':outcome, 'settlement_odds':odds})
+
+    def hold(self, key, status, withdrawn=None):
+        if status not in ('dead_heat', 'withdrawn', 'cancelled'):
+            raise ValueError('result_status_invalid')
+        fields = {'result_status':status}
+        if status == 'withdrawn':
+            fields['withdrawn_car_numbers'] = withdrawn
+        elif withdrawn is not None:
+            raise ValueError('settlement_fields_invalid')
+        return self._record(key, fields)
+
+    def _record(self, key, fields):
         if key not in self.snapshots:
             raise ValueError('snapshot_not_found')
         if key in self.histories:
             raise ValueError('snapshot_already_settled')
         snapshot = self.snapshots[key]
         self.histories[key] = settle_snapshot(snapshot, {
-            'race_id':snapshot['race_id'], 'outcome_combo':outcome, 'settlement_odds':odds,
+            'race_id':snapshot['race_id'], **fields,
             'result_timestamp':(self.scheduled + timedelta(minutes=10)).isoformat(),
         }, synthetic=True)
         return self.state()
@@ -171,6 +184,11 @@ def make_server(app: Workbench, port: int = 0):
                         result = app.predict(payload['rider_count'])
                     elif self.path == '/api/settle' and set(payload) == {'snapshot_id','outcome_combo','settlement_odds'}:
                         result = app.settle(payload['snapshot_id'],payload['outcome_combo'],payload['settlement_odds'])
+                    elif self.path == '/api/hold' and set(payload) in (
+                            {'snapshot_id','result_status'}, {'snapshot_id','result_status','withdrawn_car_numbers'}):
+                        if ('withdrawn_car_numbers' in payload) != (payload['result_status'] == 'withdrawn'):
+                            raise ValueError('settlement_fields_invalid')
+                        result = app.hold(payload['snapshot_id'],payload['result_status'],payload.get('withdrawn_car_numbers'))
                     else:
                         raise ValueError('unsupported_action_or_fields')
                 self.send(200, result)

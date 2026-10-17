@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -12,6 +13,7 @@ import numpy as np
 
 from ml.feature_extraction import extract_player_model_fields, sanitize_prediction_odds
 from ml.category_selection import select_model_categories
+from ml.race_conditions import require_standard_conditions
 from ml.position_features import FEATURE_COLUMNS, row_to_features
 from ml.train_position_models import MODEL_VERSION, _softmax
 from ml.trifecta_adapter import ADAPTER_VERSION, combine_position_probabilities, validate_trifecta_table
@@ -25,6 +27,11 @@ def validate_race_data(race_data: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(race_data, dict):
         return ["race_data must be an object"]
+    if 'race_conditions' in race_data:
+        try:
+            require_standard_conditions(race_data['race_conditions'])
+        except ValueError as exc:
+            errors.append(str(exc))
     race = race_data.get("race")
     if not isinstance(race, dict):
         errors.append("race is required")
@@ -175,6 +182,7 @@ def predict_race(race_data: dict[str, Any], model_dir: Path) -> dict[str, Any]:
         "odds_used_as_model_feature": False,
         "position_score_conversion": "softmax_within_race",
         "race": race_data.get("race"),
+        **({'race_conditions': deepcopy(race_data['race_conditions'])} if 'race_conditions' in race_data else {}),
         "position_probabilities": distributions,
         "position_rankings": _rank_positions(distributions),
         "trifecta_scores": scores,

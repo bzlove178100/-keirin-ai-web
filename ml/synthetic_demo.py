@@ -49,6 +49,7 @@ def make_record(index: int, rider_count: int = 7) -> dict:
             'captured_at': timestamp,
             'race': {'date': f'2026-08-{day:02d}', 'venue': 'SYN', 'race_number': 1},
             'players': players,
+            'race_conditions': {'race_status': 'scheduled', 'withdrawn_car_numbers': []},
             'odds': {'trifecta': {}},
             'prediction_context': {'source': 'synthetic_ci_only'},
             'evaluation_scope': 'prospective',

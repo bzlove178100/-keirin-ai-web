@@ -73,5 +73,28 @@ class SyntheticWorkbenchTests(unittest.TestCase):
         self.assertEqual(len(report['model_artifacts']),1)
         self.assertEqual(len(json.loads(self.request('/export/histories')[1])),2)
 
+        for count,status in ((7,'dead_heat'),(9,'withdrawn'),(7,'cancelled')):
+            state=json.loads(self.request('/api/predict',{'rider_count':count})[1])
+            key=state['current']['snapshot_id']
+            event={'snapshot_id':key,'result_status':status}
+            if status=='withdrawn':
+                self.assertEqual(self.request('/api/hold',event)[0],400)
+                self.assertEqual(self.request('/api/hold',{**event,'withdrawn_car_numbers':[True]})[0],400)
+                event['withdrawn_car_numbers']=[9]
+            self.assertEqual(self.request('/api/hold',{**event,'outcome_combo':'1-2-3'})[0],400)
+            code,body,_=self.request('/api/hold',event)
+            self.assertEqual(code,200,body)
+            current=json.loads(body)['current']
+            self.assertEqual(current['settlement']['result_status'],status)
+            held=json.loads(self.request('/history/'+key)[1])
+            self.assertEqual(held['schema_version'],'ml-held-history-v1')
+            self.assertNotIn('outcome_combo',held['settlement'])
+            self.assertEqual(json.loads(self.request('/api/state')[1])['current'],current)
+            self.assertEqual(self.request('/api/settle',{'snapshot_id':key,'outcome_combo':'1-2-3','settlement_odds':55.5})[0],400)
+        report=json.loads(self.request('/export/review')[1])
+        self.assertEqual((report['evaluated_races'],report['held_races']),(0,2))
+        self.assertEqual(report['metrics'],{})
+        self.assertEqual(report['excluded'],{'nonstandard_race_requires_review':5})
+
 
 if __name__=='__main__':unittest.main()
