@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'">
+<title>競輪AI モデル検証 — $title</title><style>
+:root{color-scheme:light;--ink:#172d43;--muted:#53697d;--line:#dbe3e9;--accent:#156b63}*{box-sizing:border-box}body{margin:0;background:#f3f6f8;color:var(--ink);font-family:system-ui,-apple-system,sans-serif;line-height:1.6}main{max-width:1100px;margin:auto;padding:32px 20px 56px}.eyebrow{letter-spacing:.12em;font-size:12px;font-weight:700;color:var(--accent)}h1{font-size:30px;line-height:1.25;margin:10px 0}h2{font-size:21px;margin:0 0 12px}h3{font-size:17px;margin:0 0 10px}p{margin:8px 0}.muted,footer{color:var(--muted);font-size:13px}.notice{background:#fff4d9;border-left:4px solid #c7972c;padding:14px 16px;border-radius:6px;margin:20px 0}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:24px 0}.metric,.card{background:white;border:1px solid var(--line);border-radius:14px;padding:18px}.metric strong{display:block;font-size:27px;font-variant-numeric:tabular-nums}.metric span{font-size:13px;color:var(--muted)}.card{margin-bottom:18px}.positions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}th,td{padding:10px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}th{font-weight:500;color:var(--muted);font-size:12px}th:first-child,td:first-child{text-align:left}.combo{font-size:16px;font-weight:700;color:var(--accent)}summary{cursor:pointer;font-weight:700;padding:2px 0 12px}.safety{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.safety span{font-size:12px;background:#e4f1ed;color:#15554d;border-radius:20px;padding:4px 11px}footer{overflow-wrap:anywhere;margin-top:20px}@media(max-width:700px){main{padding:22px 14px 40px}h1{font-size:26px}.positions{grid-template-columns:1fr}.stats{gap:8px}.metric{padding:12px 9px}.metric strong{font-size:23px}.card{padding:14px}}
+</style></head><body><main>
+<header><div class="eyebrow">KEIRIN AI / MODEL REVIEW</div><h1>学習モデルの出力を確認</h1><p>$title · $race_date</p><p class="muted">LightGBMの保存済みモデルを再読込して生成した、オフラインの確認画面です。</p></header>
+<div class="notice"><strong>$scope</strong><p>表示値は未校正のモデルスコアです。実際の的中率・利益を示すものではありません。実レースへの推奨や購入判断には使用しません。</p></div>
+<div class="safety"><span>本番予想 OFF</span><span>外部取得 OFF</span><span>DB書込 OFF</span><span>金銭的EV OFF</span></div>
+<section class="stats" aria-label="入力概要"><div class="metric"><strong>${count}車</strong><span>選手数</span></div><div class="metric"><strong>$possible</strong><span>3連単の全組合せ</span></div><div class="metric"><strong>$known/$possible</strong><span>確認済みオッズ</span></div></section>
+<h2>5カテゴリのモデル候補 · ${total_picks}点</h2>
+<p class="muted">各カテゴリ最大3点、全体で重複なし。「的中率優先」も未校正スコアによる順位です。オッズ帯の候補が足りない場合は点数を減らすか見送ります。</p>
+<div class="categories">$category_cards</div>
+<section class="card"><h2>3連単スコア上位10通り</h2><p class="muted">未確認のオッズは補完せず、スコア順に表示します。確定結果・払戻は含みません。</p>$top_table</section>
+<h2>着順ごとのモデル順位</h2><div class="positions">$position_cards</div>
+<details class="card"><summary>全${possible}通りのスコアを確認</summary>$full_table</details>
+<footer>モデル: $model_version<br>生成時刻: $generated_at<br>このHTMLは単体で表示できます。外部通信・モデルの再実行・データ送信は行いません。</footer>
+</main></body></html>

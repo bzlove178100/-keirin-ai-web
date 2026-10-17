@@ -7,7 +7,16 @@ on:
       - dev-offline-evaluation-v1
     paths:
       - 'ml/**'
+      - 'model-web-response.js'
+      - 'model-owner-preview.js'
+      - 'index.html'
       - 'tests/ml_position_smoke.py'
+      - 'tests/test_offline_preview.py'
+      - 'tests/test_offline_preview_ui.cjs'
+      - 'tests/test_category_selection.py'
+      - 'tests/test_model_history.py'
+      - 'tests/test_synthetic_workbench*'
+      - 'supabase/functions/predict-engine-dev/**'
       - 'tests/test_offline_evaluation.py'
       - 'tests/test_historical*.py'
       - 'tests/historical_training_smoke.py'
@@ -18,7 +27,16 @@ on:
       - main
     paths:
       - 'ml/**'
+      - 'model-web-response.js'
+      - 'model-owner-preview.js'
+      - 'index.html'
       - 'tests/ml_position_smoke.py'
+      - 'tests/test_offline_preview.py'
+      - 'tests/test_offline_preview_ui.cjs'
+      - 'tests/test_category_selection.py'
+      - 'tests/test_model_history.py'
+      - 'tests/test_synthetic_workbench*'
+      - 'supabase/functions/predict-engine-dev/**'
       - 'tests/test_offline_evaluation.py'
       - 'tests/test_historical*.py'
       - 'tests/historical_training_smoke.py'
@@ -45,8 +63,41 @@ jobs:
           cache-dependency-path: ml/requirements.txt
       - name: Install offline ML dependencies
         run: python -m pip install -r ml/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run offline preview validation and escaping checks
+        run: python -m unittest discover -s tests -p 'test_offline_preview.py' -v
+      - name: Run frozen ML snapshot, settlement and review contracts
+        run: python -m unittest discover -s tests -p 'test_model_history.py' -v
+      - name: Run local synthetic workbench API and boundary checks
+        env:
+          OMP_NUM_THREADS: '2'
+        run: python -m unittest discover -s tests -p 'test_synthetic_workbench*.py' -v
       - name: Run position-model train and inference smoke
+        env:
+          OMP_NUM_THREADS: '2'
+          KEIRIN_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/keirin-offline-preview
         run: python tests/ml_position_smoke.py
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check owner API module graph without credentials or deployment
+        run: deno check supabase/functions/predict-engine-dev/index.ts
+      - name: Check model category selection against the existing TypeScript policy
+        run: python -m unittest discover -s tests -p 'test_category_selection.py' -v
+      - name: Check generated preview in Chrome at phone and desktop widths
+        env:
+          KEIRIN_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/keirin-offline-preview
+        run: |
+          npm install --prefix "$RUNNER_TEMP/keirin-preview-browser" --no-audit --no-fund --ignore-scripts playwright@1.62.1
+          export KEIRIN_PLAYWRIGHT_MODULE="$RUNNER_TEMP/keirin-preview-browser/node_modules/playwright"
+          export KEIRIN_BROWSER_EXECUTABLE="$(command -v google-chrome || command -v chromium)"
+          test -n "$KEIRIN_BROWSER_EXECUTABLE"
+          node tests/test_offline_preview_ui.cjs
+          node tests/test_synthetic_workbench_ui.cjs
+          node tests/test_synthetic_workbench_restart_ui.cjs
+          node tests/test_synthetic_workbench_owner_web_ui.cjs
       - name: Run paired holdout and leakage checks
         run: python tests/test_offline_evaluation.py
       - name: Run historical review and chronological checks

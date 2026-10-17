@@ -1,0 +1,10 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>競輪AI 保存済みモデルのWeb表示</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f6f8;color:#172d43;font-family:system-ui,sans-serif;line-height:1.6}main{max-width:1050px;margin:auto;padding:28px 20px}h1{font-size:27px;line-height:1.4}h2{font-size:18px}.notice{padding:14px;background:#fff4d9;border-left:4px solid #c7972c;border-radius:7px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:20px 0}.card{padding:18px;background:white;border:1px solid #dbe3e9;border-radius:12px}.pick-item{padding:9px 0;border-bottom:1px solid #dbe3e9}.combo{font-weight:bold;color:#156b63}.meta,.note,footer{font-size:13px;color:#53697d}p,footer{overflow-wrap:anywhere}a{color:#156b63}@media(max-width:650px){main{padding:20px 14px}.grid{grid-template-columns:1fr}h1{font-size:24px}}
+</style></head><body><main><h1>保存済みモデルのWeb表示</h1>
+<div class="notice"><strong>合成データの確認専用</strong><p>保存時点の予測を表示します。未校正スコアであり、実レースの的中率・利益ではありません。結果・保留状態は元の操作画面で確認してください。</p></div>
+<p>外部取得 OFF · 実データ学習 OFF · DB書込 OFF · 本番予想 OFF</p>
+<p id="model-status" role="status" aria-live="polite">準備しています。</p><p id="model-race"></p><p id="input-quality"></p>
+<div class="grid"><section class="card"><h2>的中率優先</h2><div id="cat-hit"></div></section><section class="card"><h2>穴＋バランス</h2><div id="cat-balance"></div></section><section class="card"><h2>中穴</h2><div id="cat-middle"></div></section><section class="card"><h2>大穴</h2><div id="cat-longshot"></div></section><section class="card"><h2>超大穴</h2><div id="cat-super"></div></section></div>
+<p id="model-identity" class="note"></p><p><a href="/">合成操作画面に戻る</a></p><footer>この画面はローカル開発用です。会員認証・プランの利用権を確認する画面ではありません。</footer>
+<script>/* MODEL_WEB_SCRIPT */</script></main></body></html>
