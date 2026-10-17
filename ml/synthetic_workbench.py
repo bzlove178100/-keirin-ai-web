@@ -18,6 +18,7 @@ from uuid import uuid4
 from ml.dataset import build_rows
 from ml.model_history import capture_prediction, settle_snapshot, evaluate_histories, _digest
 from ml.offline_preview import render_preview
+from ml.model_web_response import model_web_response, render_model_web_preview
 from ml.synthetic_demo import make_record
 from ml.synthetic_session import SCHEMA, MAX_SNAPSHOTS, SessionStore, SessionSaveError
 from ml.settle_snapshot import _iso
@@ -176,7 +177,7 @@ def make_server(app: Workbench, port: int = 0):
         def log_message(self, *_args):
             pass
 
-        def send(self, status, payload, content_type='application/json; charset=utf-8', filename=None):
+        def send(self, status, payload, content_type='application/json; charset=utf-8', filename=None, page_script_hash=None):
             data = (json.dumps(payload, ensure_ascii=False, allow_nan=False) if content_type.startswith('application/json') else payload).encode()
             self.send_response(status)
             self.send_header('Content-Type', content_type)
@@ -184,7 +185,7 @@ def make_server(app: Workbench, port: int = 0):
             self.send_header('Cache-Control', 'no-store')
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Referrer-Policy', 'no-referrer')
-            self.send_header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-" + script_hash + "'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+            self.send_header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-" + (page_script_hash or script_hash) + "'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
             if filename:
                 self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
             self.end_headers(); self.wfile.write(data)
@@ -207,6 +208,16 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, page, 'text/html; charset=utf-8')
                 if self.path == '/api/state':
                     return self.send(200, app.state())
+                match = re.fullmatch(r'/(api/model-view|web-view)/([0-9a-f]{32})', self.path)
+                if match and match[2] in app.snapshots:
+                    try:
+                        response = model_web_response(app.snapshots[match[2]], match[2])
+                        if match[1] == 'api/model-view':
+                            return self.send(200, response)
+                        html, digest = render_model_web_preview(match[2])
+                        return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
+                    except (ValueError, KeyError, TypeError):
+                        return self.send(409, {'error':'model_display_contract_invalid'})
                 if self.path == '/export/review':
                     return self.send(200, app.report(), filename='synthetic-review.json')
                 if self.path == '/export/histories':

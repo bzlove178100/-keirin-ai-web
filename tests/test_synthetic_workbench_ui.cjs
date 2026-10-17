@@ -24,6 +24,36 @@ const assert=require('node:assert/strict');
     await page.getByText('予測を保存し、モデル候補を表示しました。',{exact:true}).waitFor({timeout:60000});
     assert.equal(await page.locator('.category').count(),5);
     assert((await page.locator('#race-title').textContent()).startsWith(count+'車'));
+    const context=page.context(),webRequests=[];
+    const track=r=>webRequests.push(r.url());context.on('request',track);
+    const opened=context.waitForEvent('page');await page.locator('#web-preview').click();
+    const web=await opened;web.on('pageerror',e=>errors.push(e.message));
+    await web.getByText('保存済みの合成予測を表示しました。',{exact:true}).waitFor();
+    const key=new URL(web.url()).pathname.split('/').pop();
+    const view=await web.evaluate(async key=>(await fetch('/api/model-view/'+key)).json(),key);
+    assert.equal(view.quality.rider_count,count);
+    assert((await web.locator('#input-quality').textContent()).includes(count===7?'2/210':'24/504'));
+    const ids=['cat-hit','cat-balance','cat-middle','cat-longshot','cat-super'];
+    for(const [i,category] of Object.values(view.categories).entries()){
+     assert.equal(await web.locator('#'+ids[i]+' .pick-item').count(),category.picks.length);
+     assert.deepEqual(await web.locator('#'+ids[i]+' .combo').allTextContents(),category.picks.map(p=>`${p.rank}位  ${p.combo_key}`));
+    }
+    assert.equal(await web.locator('.pick-item p').count(),0);
+    assert(await web.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    if(process.env.KEIRIN_SMOKE_ARTIFACT_DIR)await web.screenshot({path:path.join(process.env.KEIRIN_SMOKE_ARTIFACT_DIR,`model-web-${count}-${width}.png`),fullPage:true});
+    for(const mismatch of ['unsafe','other_snapshot']){
+     const bad=structuredClone(view);if(mismatch==='unsafe')bad.db_write_enabled=true;else bad.snapshot_id='0'.repeat(32);
+     await web.route('**/api/model-view/**',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(bad)}));
+     await web.evaluate(view=>KeirinModelWeb.render(view,{document,renderCategory}),view);
+     assert.equal(await web.locator('.pick-item').count(),view.total_picks);
+     await web.evaluate(key=>KeirinModelWeb.load('/api/model-view/'+key,{document,renderCategory}),key);
+     await web.getByText('モデル応答を確認できないため表示を停止しました。',{exact:true}).waitFor();
+     assert.equal(await web.locator('.pick-item').count(),0);
+     assert.equal(await web.locator('#model-race').textContent(),'');
+     await web.unroute('**/api/model-view/**');
+    }
+    assert(webRequests.every(u=>u.startsWith(url+'/')));
+    context.off('request',track);await web.close();
     await page.locator('#second').selectOption('1');await page.locator('#settle').click();
     await page.getByText('異なる3車を選んでください。',{exact:true}).waitFor();
     for(const [id,value] of [['first',count===7?'1':'9'],['second',count===7?'2':'8'],['third',count===7?'3':'7']])await page.locator('#'+id).selectOption(value);
@@ -47,6 +77,7 @@ const assert=require('node:assert/strict');
    assert.deepEqual(errors,[]);assert(requests.every(u=>u.startsWith(url+'/')));
    if(process.env.KEIRIN_SMOKE_ARTIFACT_DIR)await page.screenshot({path:path.join(process.env.KEIRIN_SMOKE_ARTIFACT_DIR,`workbench-${width}.png`),fullPage:true});
    console.log(`${width}px: actual train/inference/capture/settlement/review, invalid input recovery, export, reload, no external requests PASS`);
+   console.log(`${width}px: actual 7/9 ML response through existing five-category renderer, unsafe/mismatched response clears old picks PASS`);
    await page.close();
   }
   for(const width of [390,1280]){

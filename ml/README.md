@@ -371,3 +371,32 @@ the same directory does not clear records or reset the limit.
 ```sh
 node tests/test_synthetic_workbench_restart_ui.cjs  # CI Chrome + Playwright
 ```
+
+## Display frozen ML predictions with the existing Web renderer
+
+In the synthetic workbench, open **既存Web形式で表示** after selecting a prediction.
+The loopback-only `/api/model-view/<snapshot-id>` endpoint validates the frozen
+synthetic snapshot and projects `keirin-ml-web-response-v1`. It includes race/model
+identity, capture time, odds coverage and the five category picks; it excludes full
+score tables, histories and arbitrary metadata. `/web-view/<snapshot-id>` loads only
+the current `index.html` functions `appendPick` and `renderCategory`, plus the separate
+`model-web-response.js` validator. No owner bootstrap, live prediction API or Phase32
+history capture runs. Changes to the two renderer boundaries fail closed; CI includes
+`index.html` changes so compatibility can be checked before integration.
+
+The browser rejects mismatched request/response snapshot IDs, unknown versions,
+unsafe flags and invalid category picks, and clears stale results on failure. It
+uses only the fixed local endpoint, without credentials or redirects. The server
+validates the full source prediction; the projected browser response cannot prove
+ranking against omitted candidates. Digests are identifiers/integrity checks, not
+signatures or authentication. Authentication and entitlement are explicitly
+`not_asserted`; this endpoint must not be published as a subscription API.
+
+This proves renderer compatibility for generated synthetic predictions. The deployed
+owner Web/API is not connected to ML by this change; authentication, member-plan
+filtering, cloud execution/storage and publication remain separate unfinished work.
+
+```sh
+python -m unittest discover -s tests -p 'test_synthetic_workbench_web_response.py' -v
+node tests/test_synthetic_workbench_ui.cjs  # CI Chrome: actual 7/9 output and rejected responses
+```

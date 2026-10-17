@@ -2,6 +2,7 @@ import http.client
 import json
 from threading import Thread
 import unittest
+from unittest.mock import patch
 
 from ml.model_history import validate_snapshot
 from ml.synthetic_workbench import Workbench, make_server
@@ -55,6 +56,23 @@ class SyntheticWorkbenchTests(unittest.TestCase):
             snap=json.loads(body);validate_snapshot(snap,synthetic=True)
             self.assertIn('attachment',headers['Content-Disposition'])
             original=json.dumps(snap,sort_keys=True)
+            code,body,headers=self.request('/api/model-view/'+key)
+            self.assertEqual(code,200)
+            view=json.loads(body)
+            self.assertEqual(view['snapshot_sha256'],snap['snapshot_sha256'])
+            self.assertEqual(view['quality']['rider_count'],count)
+            self.assertEqual(view['quality']['known_trifecta_odds_count'],2 if count==7 else 24)
+            self.assertEqual(view['authentication_status'],'not_asserted')
+            code,body,headers=self.request('/web-view/'+key)
+            self.assertEqual(code,200)
+            self.assertIn('KeirinModelWeb.load',body.decode())
+            self.assertIn("script-src 'sha256-",headers['Content-Security-Policy'])
+            self.assertEqual(self.request('/api/model-view/'+'0'*32)[0],404)
+            self.assertEqual(self.request('/web-view/'+key,headers={'Origin':'https://untrusted.invalid'})[0],403)
+            bad_snap={**snap,'snapshot_sha256':'0'*64}
+            with patch.dict(self.app.snapshots,{key:bad_snap}):
+                for path in ('/api/model-view/','/web-view/'):
+                    self.assertEqual(self.request(path+key)[0],409)
             bad={'snapshot_id':key,'outcome_combo':'1-1-2','settlement_odds':55.5}
             self.assertEqual(self.request('/api/settle',bad)[0],400)
             valid={**bad,'outcome_combo':'1-2-3' if count==7 else '9-8-7'}

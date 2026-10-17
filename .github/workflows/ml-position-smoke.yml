@@ -7,6 +7,8 @@ on:
       - dev-offline-evaluation-v1
     paths:
       - 'ml/**'
+      - 'model-web-response.js'
+      - 'index.html'
       - 'tests/ml_position_smoke.py'
       - 'tests/test_offline_preview.py'
       - 'tests/test_offline_preview_ui.cjs'
@@ -24,6 +26,8 @@ on:
       - main
     paths:
       - 'ml/**'
+      - 'model-web-response.js'
+      - 'index.html'
       - 'tests/ml_position_smoke.py'
       - 'tests/test_offline_preview.py'
       - 'tests/test_offline_preview_ui.cjs'
