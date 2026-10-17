@@ -63,17 +63,20 @@ def _full_probability_table(scores: Any, cars: list[int]) -> bool:
     return abs(sum(seen.values()) - 1.0) <= 1e-6
 
 
-def _categories_valid(selected: Any) -> bool:
+def _categories_valid(selected: Any, cars: list[int]) -> bool:
     categories = (selected or {}).get("categories") if isinstance(selected, dict) else None
     if not isinstance(categories, dict):
         return False
+    allowed = {"-".join(map(str, p)) for p in permutations(cars, 3)}
     for key in CATEGORIES:
         block = categories.get(key)
         picks = block.get("picks") if isinstance(block, dict) else None
         if not isinstance(picks, list) or len(picks) > 3:
             return False
         keys = [pick.get("combo_key") for pick in picks if isinstance(pick, dict)]
-        if len(keys) != len(picks) or len(set(keys)) != len(keys) or not all(_combo(x) for x in keys):
+        if (len(keys) != len(picks)
+                or not all(_combo(x) and x in allowed for x in keys)
+                or len(set(keys)) != len(keys)):
             return False
     return True
 
@@ -106,10 +109,12 @@ def validate_snapshot(snapshot: dict[str, Any]) -> None:
 
     race_data = snapshot.get("race_data") or {}
     players = race_data.get("players")
-    if not isinstance(players, list) or len(players) != 7:
-        raise ValueError("seven_riders_required")
+    if not isinstance(players, list) or len(players) not in (7, 9):
+        raise ValueError("seven_or_nine_riders_required")
     cars = [player.get("car_number") for player in players if isinstance(player, dict)]
-    if len(cars) != 7 or len(set(cars)) != 7 or not all(isinstance(car, int) and 1 <= car <= 7 for car in cars):
+    if (len(cars) != len(players)
+            or not all(type(car) is int and 1 <= car <= len(players) for car in cars)
+            or len(set(cars)) != len(players)):
         raise ValueError("invalid_car_numbers")
 
     engine = snapshot.get("engine_response") or {}
@@ -127,7 +132,7 @@ def validate_snapshot(snapshot: dict[str, Any]) -> None:
     scores = prediction.get("trifecta_scores")
     if not _full_probability_table(scores, cars):
         raise ValueError("full_probability_table_invalid")
-    if not _categories_valid(prediction.get("selected_predictions")):
+    if not _categories_valid(prediction.get("selected_predictions"), cars):
         raise ValueError("selected_categories_invalid")
 
 

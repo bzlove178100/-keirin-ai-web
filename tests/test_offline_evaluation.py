@@ -14,20 +14,57 @@ from ml.evaluation_protocol import readiness as protocol_readiness
 from ml.evaluation_protocol import split_records as protocol_split_records
 
 
-def fixture(i):
+def fixture(i, rider_count=7):
     record = make_record(i)
+    for car in range(8, rider_count + 1):
+        player = deepcopy(record['training_input']['players'][-1])
+        player.update(car_number=car, line_id=f'L{car}', line_position=1, line_length=1)
+        record['training_input']['players'].append(player)
+    if rider_count == 9:
+        record['outcome_combo'] = '9-8-7'
     record['metadata']['result_timestamp'] = (
         datetime.fromisoformat(record['prediction_timestamp']) + timedelta(minutes=10)
     ).isoformat()
     record['metadata']['engine_version'] = BASELINE
     record['trifecta_scores'] = [
-        {'combo_key': '-'.join(map(str, p)), 'estimated_probability': 1 / 210}
-        for p in permutations(range(1, 8), 3)
+        {'combo_key': '-'.join(map(str, p)), 'estimated_probability': 1 / (rider_count * (rider_count - 1) * (rider_count - 2))}
+        for p in permutations(range(1, rider_count + 1), 3)
     ]
     return record
 
 
 class EvaluationTest(unittest.TestCase):
+    def test_mixed_seven_nine_rider_holdout(self):
+        records = [fixture(i, 7 if i % 2 == 0 else 9) for i in range(16)]
+        selected, quality = prepare(records, synthetic=True)
+        self.assertEqual(quality['rider_rows'], 128)
+        self.assertEqual(quality['excluded'], {})
+        self.assertEqual([len(x['baseline']) for x in selected], [210, 504] * 8)
+        report = evaluate_records(records, synthetic=True)
+        self.assertEqual(report['status'], 'completed_offline_holdout')
+        self.assertEqual(report['evidence_scope'], 'synthetic_test_only')
+        self.assertFalse(report['promotion_eligible'])
+        self.assertFalse(report['db_write_enabled'])
+        self.assertFalse(report['external_fetch_enabled'])
+        self.assertFalse(report['production_prediction_enabled'])
+        json.dumps(report, allow_nan=False)
+
+    def test_evaluation_rejects_mismatched_riders_and_tables(self):
+        for kind in ('count', 'duplicate', 'bool', 'float', 'range', 'short_table', 'duplicate_combo'):
+            bad = fixture(0, 9)
+            players = bad['training_input']['players']
+            if kind == 'count': players.pop(0)
+            elif kind == 'duplicate': players[0]['car_number'] = 2
+            elif kind == 'bool': players[0]['car_number'] = True
+            elif kind == 'float': players[0]['car_number'] = 1.0
+            elif kind == 'range': players[0]['car_number'] = 10
+            elif kind == 'short_table': bad['trifecta_scores'] = fixture(1)['trifecta_scores']
+            else: bad['trifecta_scores'][-1] = deepcopy(bad['trifecta_scores'][0])
+            with self.subTest(kind=kind):
+                selected, report = prepare([bad, fixture(1)], synthetic=True)
+                self.assertEqual([x['race_id'] for x in selected], ['SYN-001'])
+                self.assertEqual(sum(report['excluded'].values()), 1)
+
     def test_web_export_envelope(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / 'history.json'

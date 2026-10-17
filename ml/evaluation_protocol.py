@@ -70,13 +70,16 @@ def prepare(records: list[dict], *, synthetic: bool = False) -> tuple[list[dict]
             captured = timestamp(record["training_input"].get("captured_at"))
             if captured != prediction_time or not prediction_time < result_time:
                 raise ValueError("invalid_temporal_order")
-            rows = rider_rows(record)
-            raw_cars = [player["car_number"] for player in record["training_input"]["players"]]
-            if any(isinstance(car, bool) or str(car) not in {str(i) for i in range(1, 10)} for car in raw_cars):
+            players = record["training_input"]["players"]
+            if not isinstance(players, list) or len(players) not in (7, 9):
+                raise ValueError("seven_or_nine_unique_riders_required")
+            raw_cars = [player["car_number"] for player in players]
+            if any(isinstance(car, bool) or str(car) not in {str(i) for i in range(1, len(players) + 1)} for car in raw_cars):
                 raise ValueError("invalid_car_number")
+            rows = rider_rows(record)
             cars = [row["car_number"] for row in rows]
-            if len(rows) != len(raw_cars) or len(set(cars)) != len(cars) or len(cars) != 7:
-                raise ValueError("seven_unique_riders_required")
+            if len(rows) != len(raw_cars) or len(set(cars)) != len(cars):
+                raise ValueError("seven_or_nine_unique_riders_required")
             if any(row["style"] not in {"逃", "両", "追"} for row in rows):
                 raise ValueError("invalid_style")
             if record["metadata"].get("engine_version") != BASELINE:
