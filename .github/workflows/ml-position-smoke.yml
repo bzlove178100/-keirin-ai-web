@@ -64,7 +64,7 @@ jobs:
       - name: Run local synthetic workbench API and boundary checks
         env:
           OMP_NUM_THREADS: '2'
-        run: python -m unittest discover -s tests -p 'test_synthetic_workbench.py' -v
+        run: python -m unittest discover -s tests -p 'test_synthetic_workbench*.py' -v
       - name: Run position-model train and inference smoke
         env:
           OMP_NUM_THREADS: '2'
@@ -85,6 +85,7 @@ jobs:
           test -n "$KEIRIN_BROWSER_EXECUTABLE"
           node tests/test_offline_preview_ui.cjs
           node tests/test_synthetic_workbench_ui.cjs
+          node tests/test_synthetic_workbench_restart_ui.cjs
       - name: Run paired holdout and leakage checks
         run: python tests/test_offline_evaluation.py
       - name: Run historical review and chronological checks

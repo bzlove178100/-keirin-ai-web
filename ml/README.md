@@ -267,13 +267,14 @@ requests are rejected. No existing authentication or Supabase settings are chang
 See Python's [HTTP server documentation](https://docs.python.org/3.12/library/http.server.html)
 for the development-only server's deployment limits. Do not expose it using a public tunnel.
 
-Models and up to 20 snapshots are temporary to the process. Export records before
-shutdown; persisted session restoration and licensed real-data entry are not enabled.
+Models are temporary to the process. Records default to temporary storage; use the
+optional local session directory below to resume them after process exit. Each session
+holds at most 20 snapshots. Licensed real-data entry remains disabled.
 The shared `ml.synthetic_demo.make_record` is the original generated smoke fixture,
 moved without changing its content. No private source files are read or trained.
 
 ```sh
-OMP_NUM_THREADS=2 python -m unittest discover -s tests -p 'test_synthetic_workbench.py' -v
+OMP_NUM_THREADS=2 python -m unittest discover -s tests -p 'test_synthetic_workbench*.py' -v
 # CI uses its existing Chrome and Playwright setup for the interactive flow:
 node tests/test_synthetic_workbench_ui.cjs
 ```
@@ -322,3 +323,51 @@ The workbench result-state selector records these same events, hides ordinary
 finish/odds fields, and retains the held reason on reload/export. This is explicit
 exclusion support; it does not implement 6/8-rider inference, multiwinner scoring,
 refund calculations, or real event verification.
+
+
+## Resume a local synthetic session
+
+On the tested Linux/POSIX development environment, opt into checkpoint storage with
+a directory **outside the repository** on a retained local disk:
+
+```sh
+OMP_NUM_THREADS=2 python -m ml.synthetic_workbench --synthetic --state-dir /absolute/path/keirin-synthetic-session
+```
+
+Restart with the same directory to restore saved predictions, normal/held results,
+and the selected record. Choose any saved prediction from the resume list, including
+an unfinished prediction. Its original model scores, model identifier and schedule
+are preserved; reviewing/settling it does not train a model. A new prediction trains
+only the code-generated fixture when necessary; model files are not persisted or
+loaded from the session. After the active synthetic start time passes, new predictions
+receive a new race number/series so they cannot overwrite an earlier race's review.
+
+The browser shows temporary/automatic-save/restored/error status. Predict, settle,
+hold and selection changes are acknowledged only after the configured checkpoint
+write succeeds. The full-session download includes unfinished predictions; the
+existing history/review downloads remain available. There is no browser file-upload
+or arbitrary path/URL input. Only this workbench's generated synthetic records belong
+in the fixed `synthetic-session.json` file. This is not a licensed real-data importer.
+
+The session store has a versioned schema, a 32 MiB limit, an integrity digest, strict
+snapshot/history cross-checks, a nonblocking process lock, regular-file/no-symlink
+checks, and write→flush→fsync→atomic replacement→directory fsync. Corrupt/incompatible
+state fails startup without falling back to an empty session. External file changes
+are not overwritten. An error before replacement leaves the old checkpoint and memory;
+an error after replacement reports an uncertain save, stops writes and requires a
+restart to reconcile the complete checkpoint. Do not blindly resubmit a failed action.
+Interrupted `.partial` files are ignored, never loaded as a checkpoint.
+
+Implementation references: Python [file replacement/fsync](https://docs.python.org/3.12/library/os.html)
+and [process locking](https://docs.python.org/3.12/library/fcntl.html). Hashes are not
+signatures or permission evidence, and locks only coordinate cooperating processes.
+The tests cover process restart/SIGKILL and injected filesystem errors, not real power
+loss, disk loss or network filesystems. Keep independent exports: a checkpoint in a
+transient workspace is not a backup. Windows persistence and multi-host sharing are
+not qualified. No authentication changes, Supabase/DB writes or public hosting occur.
+At the 20-record limit use a new empty session directory after exporting; restarting
+the same directory does not clear records or reset the limit.
+
+```sh
+node tests/test_synthetic_workbench_restart_ui.cjs  # CI Chrome + Playwright
+```
