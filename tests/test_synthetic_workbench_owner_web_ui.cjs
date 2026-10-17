@@ -49,8 +49,9 @@ global.fetch=async(url,options)=>{
      if(url.pathname==='/functions/v1/predict-engine-dev'){
       assert.equal(request.headers().authorization,'Bearer '+token);
       const body=request.postData();if(body)posts.push(JSON.parse(body));
+      const forwardedHeaders=new Headers(request.headers());forwardedHeaders.set('Origin',origin);
       const response=await (unavailable?createPredictHandler(null):handler)(new Request(request.url(),{
-       method:request.method(),headers:{...request.headers(),Origin:origin},...(body?{body}:{})}));
+       method:request.method(),headers:forwardedHeaders,...(body?{body}:{})}));
       let data=await response.json();
       if(corrupt&&body&&JSON.parse(body).mode==='synthetic_model_view')data.model_view.snapshot_id='a'.repeat(32);
       if(delay&&body){if(started)started();await new Promise(resolve=>release=resolve);}
