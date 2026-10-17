@@ -156,3 +156,37 @@ code 2; no model is trained. The command does not save or promote model files,
 write a database, fetch external data, or change deployed functions. Repeatedly
 using this test period to choose models makes it development data; reserve a
 new untouched period for the next final evaluation.
+
+
+## Offline result page (7/9 riders)
+
+The existing inference CLI can now write a self-contained HTML preview alongside JSON:
+
+```sh
+python -m ml.predict_position_models synthetic-race.json \
+  --model-dir synthetic-models --output prediction.json \
+  --html-output prediction.html
+```
+
+The page contains the top ten trifecta scores, all three position rankings, the complete
+210/504-combination table, partial confirmed-odds coverage and OFF/uncalibrated labels.
+It has no scripts or external resources, and can be opened without a server. This is
+an offline output connection; it does not run LightGBM inside the browser or connect
+the candidate to the hosted prediction API. Model evidence_scope is a recorded label,
+not an authenticity or licensing attestation. Missing scope is displayed as unverified.
+
+Only standard integer rosters 1..7 or 1..9 are accepted by this inference CLI. Missing
+riders/dead heats remain outside this flow. Model metadata version and feature columns
+must match the runtime, as must the existing model/schema checks. Saved/unlicensed real
+data must not be trained or used to resume acquisition; source HOLD remains in force.
+
+For a reproducible synthetic train/save/reload/inference/page check:
+
+```sh
+PYTHONPATH=. OMP_NUM_THREADS=2 python tests/ml_position_smoke.py
+python -m unittest discover -s tests -p 'test_offline_preview.py'
+```
+
+The smoke generates all records in code (mixed 7/9, 16 races, 128 rider rows), and
+uses temporary model files. Optional KEIRIN_SMOKE_ARTIFACT_DIR retains only generated
+prediction JSON/HTML for visual checks. It never reads private source datasets.

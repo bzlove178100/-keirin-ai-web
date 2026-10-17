@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import csv
+import json
+import os
+import subprocess
+import sys
+from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from ml.dataset import build_rows
-from ml.predict_position_models import predict_race
+from ml.predict_position_models import load_models, predict_race, validate_race_data
+from ml.offline_preview import render_preview
 from ml.train_position_models import train
 
 
-def make_record(index: int) -> dict:
-    styles = ['逃', '逃', '両', '追', '追', '両', '追']
+def make_record(index: int, rider_count: int = 7) -> dict:
+    styles = ['逃', '逃', '両', '追', '追', '両', '追', '両', '追']
     players = []
-    for car in range(1, 8):
+    for car in range(1, rider_count + 1):
         players.append({
             'car_number': car,
             'style': styles[car - 1],
@@ -43,6 +49,8 @@ def make_record(index: int) -> dict:
         })
 
     outcomes = ['1-4-5', '2-5-6', '3-6-7', '4-1-2']
+    if rider_count == 9:
+        outcomes = ['1-8-9', '8-5-6', '3-9-7', '9-1-2']
     outcome = outcomes[index % len(outcomes)]
     day = 1 + index
     timestamp = f'2026-08-{day:02d}T12:00:00+09:00'
@@ -72,10 +80,10 @@ def make_record(index: int) -> dict:
 
 
 def main() -> None:
-    records = [make_record(i) for i in range(16)]
+    records = [make_record(i, 7 if i % 2 == 0 else 9) for i in range(16)]
     rider_rows, summary = build_rows(records)
     assert summary['eligible_unique_races'] == 16
-    assert len(rider_rows) == 112
+    assert len(rider_rows) == 128
 
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -99,7 +107,11 @@ def main() -> None:
         assert (output_dir / 'feature_schema.json').exists()
         assert (output_dir / 'metrics.json').exists()
 
-        source = records[-1]['training_input']
+        # This marker is added only after training from the generated records above.
+        metrics['evidence_scope'] = 'synthetic_test_only'
+        (output_dir / 'metrics.json').write_text(json.dumps(metrics), encoding='utf-8')
+
+        source = make_record(16)['training_input']
         race_data = {
             'race': source['race'],
             'players': source['players'],
@@ -136,7 +148,45 @@ def main() -> None:
         assert next(row for row in scores if row['combo_key'] == '1-4-5')['odds'] == 12.3
         assert all(row['monetary_expected_value'] is None for row in scores)
 
-    print('LightGBM position-model train + offline inference smoke: PASS')
+        for count in (7, 9):
+            generated = make_record(16, count)['training_input']
+            generated['odds'] = {'trifecta': {'1-2-3': 25.4, '2-3-4': 72.0}}
+            race_path = root / f'race-{count}.json'
+            json_path = root / f'prediction-{count}.json'
+            html_path = root / f'prediction-{count}.html'
+            race_path.write_text(json.dumps(generated), encoding='utf-8')
+            # Exercise the real CLI, including model reload and both output files.
+            subprocess.run([sys.executable, '-m', 'ml.predict_position_models', str(race_path),
+                            '--model-dir', str(output_dir), '--output', str(json_path),
+                            '--html-output', str(html_path)], check=True, stdout=subprocess.DEVNULL)
+            result = json.loads(json_path.read_text(encoding='utf-8'))
+            html = html_path.read_text(encoding='utf-8')
+            assert len(result['trifecta_scores']) == count*(count-1)*(count-2)
+            assert html == render_preview(result)
+            assert '合成データでの動作検証' in html
+            assert f'2/{count*(count-1)*(count-2)}' in html
+            for value in (True, '1', 1.5, 0, count+1):
+                bad = deepcopy(generated); bad['players'][0]['car_number'] = value
+                assert validate_race_data(bad)
+            artifact_dir = os.environ.get('KEIRIN_SMOKE_ARTIFACT_DIR')
+            if artifact_dir:
+                destination = Path(artifact_dir); destination.mkdir(parents=True, exist_ok=True)
+                (destination / html_path.name).write_text(html, encoding='utf-8')
+                (destination / json_path.name).write_text(json.dumps(result), encoding='utf-8')
+
+        for key, value in (('model_version', 'wrong-version'), ('feature_columns', []), ('production_enabled', True)):
+            bad = {**metrics, key:value}
+            (output_dir / 'metrics.json').write_text(json.dumps(bad), encoding='utf-8')
+            try:
+                load_models(output_dir)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f'mismatched model artifact accepted: {key}')
+        (output_dir / 'metrics.json').write_text(json.dumps(metrics), encoding='utf-8')
+
+
+    print('LightGBM mixed 7/9 train → save → reload → inference → offline HTML: PASS')
 
 
 if __name__ == '__main__':

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any
@@ -26,8 +27,8 @@ def validate_race_data(race_data: Any) -> list[str]:
     if not isinstance(race, dict):
         errors.append("race is required")
     players = race_data.get("players")
-    if not isinstance(players, list) or len(players) < 4:
-        errors.append("players must contain at least 4 riders")
+    if not isinstance(players, list) or len(players) not in (7, 9):
+        errors.append("players must contain seven or nine riders")
         return errors
 
     cars: set[int] = set()
@@ -35,10 +36,9 @@ def validate_race_data(race_data: Any) -> list[str]:
         if not isinstance(player, dict):
             errors.append(f"players[{index}] must be an object")
             continue
-        try:
-            car = int(player.get("car_number"))
-        except (TypeError, ValueError):
-            errors.append(f"players[{index}].car_number must be an integer")
+        car = player.get("car_number")
+        if type(car) is not int or not 1 <= car <= len(players):
+            errors.append(f"players[{index}].car_number must be an integer in 1..{len(players)}")
             continue
         if car in cars:
             errors.append(f"duplicate car_number: {car}")
@@ -62,6 +62,8 @@ def load_models(model_dir: Path) -> tuple[dict[str, lgb.Booster], dict[str, Any]
         raise ValueError("model version does not match runtime")
     if schema.get("feature_columns") != FEATURE_COLUMNS:
         raise ValueError("model feature schema does not match runtime")
+    if metrics.get("model_version") != MODEL_VERSION or metrics.get("feature_columns") != FEATURE_COLUMNS:
+        raise ValueError("model metrics do not match runtime schema")
     if metrics.get("status") != "trained_offline_validation_only":
         raise ValueError("model artifact is not a completed offline validation artifact")
     if metrics.get("production_enabled") is not False:
@@ -150,6 +152,8 @@ def predict_race(race_data: dict[str, Any], model_dir: Path) -> dict[str, Any]:
         "success": True,
         "mode": "offline_inference_only",
         "inference_version": INFERENCE_VERSION,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "model_artifact": {"evidence_scope": artifact["training_metrics"].get("evidence_scope", "not_verified")},
         "model_version": MODEL_VERSION,
         "adapter_version": ADAPTER_VERSION,
         "production_prediction_enabled": False,
@@ -184,15 +188,23 @@ def main() -> int:
     parser.add_argument("race_json", type=Path, help="Pre-race JSON. May be raw race_data or {'race_data': ...}.")
     parser.add_argument("--model-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--html-output", type=Path, help="Self-contained offline preview; no server or network needed.")
     args = parser.parse_args()
 
+    if args.output and args.html_output and args.output.resolve() == args.html_output.resolve():
+        parser.error("JSON and HTML output paths must differ")
     payload = json.loads(args.race_json.read_text(encoding="utf-8"))
     race_data = payload.get("race_data") if isinstance(payload, dict) and isinstance(payload.get("race_data"), dict) else payload
     result = predict_race(race_data, args.model_dir)
+    from ml.offline_preview import render_preview
+    preview = render_preview(result) if args.html_output else None
     text = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(text, encoding="utf-8")
+    if args.html_output:
+        args.html_output.parent.mkdir(parents=True, exist_ok=True)
+        args.html_output.write_text(preview, encoding="utf-8")
     print(text)
     return 0
 
