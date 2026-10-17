@@ -12,6 +12,7 @@ on:
       - 'tests/test_offline_preview_ui.cjs'
       - 'tests/test_category_selection.py'
       - 'tests/test_model_history.py'
+      - 'tests/test_synthetic_workbench*'
       - 'supabase/functions/predict-engine-dev/engine_phase32.ts'
       - 'tests/test_offline_evaluation.py'
       - 'tests/test_historical*.py'
@@ -28,6 +29,7 @@ on:
       - 'tests/test_offline_preview_ui.cjs'
       - 'tests/test_category_selection.py'
       - 'tests/test_model_history.py'
+      - 'tests/test_synthetic_workbench*'
       - 'supabase/functions/predict-engine-dev/engine_phase32.ts'
       - 'tests/test_offline_evaluation.py'
       - 'tests/test_historical*.py'
@@ -59,6 +61,10 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_offline_preview.py' -v
       - name: Run frozen ML snapshot, settlement and review contracts
         run: python -m unittest discover -s tests -p 'test_model_history.py' -v
+      - name: Run local synthetic workbench API and boundary checks
+        env:
+          OMP_NUM_THREADS: '2'
+        run: python -m unittest discover -s tests -p 'test_synthetic_workbench.py' -v
       - name: Run position-model train and inference smoke
         env:
           OMP_NUM_THREADS: '2'
@@ -78,6 +84,7 @@ jobs:
           export KEIRIN_BROWSER_EXECUTABLE="$(command -v google-chrome || command -v chromium)"
           test -n "$KEIRIN_BROWSER_EXECUTABLE"
           node tests/test_offline_preview_ui.cjs
+          node tests/test_synthetic_workbench_ui.cjs
       - name: Run paired holdout and leakage checks
         run: python tests/test_offline_evaluation.py
       - name: Run historical review and chronological checks

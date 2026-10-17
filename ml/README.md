@@ -243,3 +243,37 @@ python -m unittest discover -s tests -p 'test_model_history.py' -v
 The owner Web/API and browser history tools do not yet import these ML schemas.
 Real-data authorization, trustworthy pre-race capture and data lineage require
 separate review before this synthetic-only path can be extended.
+
+## Synthetic browser workbench
+
+With the existing ML dependencies installed, start the development UI:
+
+```sh
+OMP_NUM_THREADS=2 python -m ml.synthetic_workbench --synthetic
+```
+
+Open the printed loopback URL in the **same environment**. Choosing 7 or 9 riders
+trains a generated model once, runs existing inference, and captures the prediction
+before displaying the five categories. Enter a synthetic result to settle the frozen
+prediction and view the existing review metrics. The full-score preview and snapshot,
+settled history, combined histories and review JSON are available as downloads.
+Refreshing the page retains server-session state and the recorded result.
+
+This is a local development workbench, not the deployed owner Web/API or a public
+smartphone URL. Binding is fixed to `127.0.0.1`; there is no remote-host option.
+It accepts only generated 7/9 fixtures, not race uploads, arbitrary paths or URLs.
+POSTs require same-origin/Host checks and a JSON-only custom header; cross-site
+requests are rejected. No existing authentication or Supabase settings are changed.
+See Python's [HTTP server documentation](https://docs.python.org/3.12/library/http.server.html)
+for the development-only server's deployment limits. Do not expose it using a public tunnel.
+
+Models and up to 20 snapshots are temporary to the process. Export records before
+shutdown; persisted session restoration and licensed real-data entry are not enabled.
+The shared `ml.synthetic_demo.make_record` is the original generated smoke fixture,
+moved without changing its content. No private source files are read or trained.
+
+```sh
+OMP_NUM_THREADS=2 python -m unittest discover -s tests -p 'test_synthetic_workbench.py' -v
+# CI uses its existing Chrome and Playwright setup for the interactive flow:
+node tests/test_synthetic_workbench_ui.cjs
+```

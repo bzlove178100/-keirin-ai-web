@@ -1,0 +1,50 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>競輪AI 合成データ確認</title>
+<style>
+:root{color-scheme:light;--ink:#172d43;--muted:#53697d;--accent:#156b63;--line:#dbe3e9}*{box-sizing:border-box}body{margin:0;background:#f3f6f8;color:var(--ink);font-family:system-ui,sans-serif;line-height:1.6}main{max-width:1050px;margin:auto;padding:28px 20px 48px}h1{font-size:28px;line-height:1.3}h2{font-size:21px;margin:0 0 12px}h3{font-size:17px;margin:0 0 8px}p{margin:8px 0}.eyebrow{color:var(--accent);font-size:12px;letter-spacing:.12em;font-weight:700}.notice{background:#fff4d9;border-left:4px solid #c7972c;padding:14px;margin:20px 0;border-radius:6px}.card{background:white;border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px}.muted{color:var(--muted);font-size:13px}.actions,.exports{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0}button{border:0;border-radius:9px;padding:12px 20px;background:var(--accent);color:white;font:inherit;font-weight:600;cursor:pointer;min-height:46px}button:disabled{opacity:.45;cursor:wait}a{color:var(--accent)}select,input{font:inherit;padding:10px;border:1px solid #9cabb8;border-radius:7px;max-width:100%}.fields{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.fields label{display:flex;flex-direction:column;gap:4px}.fields input{width:130px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.category{padding:14px;background:#f4f8f9;border-radius:9px}.pick{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.metrics{display:flex;gap:24px;flex-wrap:wrap}.metrics strong{display:block;font-size:28px}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--line)}#message{min-height:26px;overflow-wrap:anywhere}#message.error{color:#9a241c}.safety{color:var(--accent);font-size:13px}footer{color:var(--muted);font-size:13px;overflow-wrap:anywhere}@media(max-width:650px){main{padding:22px 14px}.card{padding:16px}.grid{grid-template-columns:1fr}h1{font-size:25px}.actions button{flex:1}.metrics{gap:18px}}
+</style></head><body><main>
+<div class="eyebrow">KEIRIN AI / SYNTHETIC WORKBENCH</div><h1>予測から評価までを確認</h1>
+<div class="notice"><strong>コードで生成した合成データ専用</strong><p>実レースの的中率・利益を示す画面ではありません。結果も合成入力として扱います。</p></div>
+<p class="safety">実データ取得 OFF · 実データ学習 OFF · DB書込 OFF · 本番予想 OFF</p>
+<section class="card"><h2>1. 合成レースを選ぶ</h2><p class="muted">初回だけ合成モデルを準備します。予測は表示前に自動保存されます。</p><div class="actions"><button id="predict7">7車を試す</button><button id="predict9">9車を試す</button></div><p id="message" role="status" aria-live="polite">準備状況を確認しています。</p><p id="saved" class="muted"></p></section>
+<section id="prediction" class="card" hidden><h2 id="race-title">モデル候補</h2><p class="muted">未校正スコアによる順位です。各カテゴリ最大3点、未確認オッズの補完なし。</p><div id="categories" class="grid"></div><div class="exports"><a id="preview" target="_blank" rel="noopener">全スコアを表示</a><a id="snapshot-download">予測の記録を保存</a></div></section>
+<section id="settlement" class="card" hidden><h2>2. 合成結果を入力して評価</h2><p class="muted">未来の架空レースの結果を模擬します。選んだ3車は重複できません。</p><div class="fields"><label>1着<select id="first"></select></label><label>2着<select id="second"></select></label><label>3着<select id="third"></select></label><label>合成確定オッズ<input id="odds" type="number" min="0.1" step="0.1" value="55.5"></label></div><div class="actions"><button id="settle">結果を照合して評価</button></div><p id="settlement-note" class="muted"></p><a id="history-download" hidden>結果照合の記録を保存</a></section>
+<section id="evaluation" class="card" hidden><h2>3. 保存した予測の評価</h2><p class="muted">結果を見た後の再学習は行いません。同じレースは最後に保存した有効な予測を採用します。</p><div class="metrics"><div><strong id="race-count"></strong><span>評価対象レース</span></div><div><strong id="top3"></strong><span>上位3候補の的中率（合成）</span></div><div><strong id="duplicates"></strong><span>除外した古い重複</span></div></div><div class="table-wrap"><table><thead><tr><th>車数</th><th>正解の順位</th><th>的中したカテゴリ</th></tr></thead><tbody id="review-rows"></tbody></table></div><p id="exclusions" class="muted"></p><div class="exports"><a href="/export/review">評価の記録を保存</a></div></section>
+<div class="exports"><a href="/export/histories">照合済み履歴をまとめて保存</a></div>
+<footer>この確認画面は同じ実行環境内だけで動作します。終了すると作業中のモデルと記録は消えるため、必要な記録は上の保存リンクから取得してください。1回の起動につき予測は20件までです。</footer>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);let current=null,busy=false;
+const names={hit_priority:'的中率優先',balance:'穴＋バランス',middle:'中穴',longshot:'大穴',super_longshot:'超大穴'};
+const errors={outcome_not_in_riders:'異なる3車を選んでください。',settlement_odds_invalid:'オッズは0より大きい数値で入力してください。',snapshot_already_settled:'この予測は結果照合済みです。',model_snapshot_time_order_invalid:'確認用レースの予定時刻を過ぎました。記録を保存して画面の実行環境を再起動してください。',session_limit_export_and_restart:'20件に達しました。記録を保存して実行環境を再起動してください。'};
+function message(text,error=false){$('message').textContent=text;$('message').className=error?'error':'';}
+function disabled(){for(const id of ['predict7','predict9','settle'])$(id).disabled=busy||(id==='settle'&&(!current||current.settled));for(const id of ['first','second','third','odds'])$(id).disabled=busy||!current||current.settled;}
+function render(state){
+ current=state.current;$('saved').textContent=`予測保存 ${state.saved_snapshots}件 · 結果照合 ${state.saved_histories}件`;
+ $('prediction').hidden=!current;$('settlement').hidden=!current;
+ if(current){
+  const n=current.input_quality.rider_count;$('race-title').textContent=`${n}車 · 5カテゴリのモデル候補`;
+  $('categories').replaceChildren();
+  for(const [key,category] of Object.entries(current.selected_predictions.categories)){
+   const card=document.createElement('section');card.className='category';card.dataset.category=key;
+   const title=document.createElement('h3');title.textContent=category.category_name;card.append(title);
+   for(const pick of category.picks){const p=document.createElement('p');p.className='pick';p.textContent=`${pick.combo_key} · ${(pick.estimated_probability*100).toFixed(3)}% · ${pick.odds===null?'オッズ未確認':pick.odds.toFixed(1)+'倍'}`;card.append(p);}
+   if(category.category_note){const p=document.createElement('p');p.className='muted';p.textContent=category.category_note;card.append(p);}
+   $('categories').append(card);
+  }
+  const outcome=current.settlement?current.settlement.outcome_combo.split('-'):['1','2','3'];
+  for(const [index,id] of ['first','second','third'].entries()){$(id).replaceChildren();for(let car=1;car<=n;car++){const option=document.createElement('option');option.value=car;option.textContent=car+'番';$(id).append(option);}$(id).value=outcome[index];}
+  $('odds').value=current.settlement?current.settlement.settlement_odds:55.5;
+  $('preview').href='/preview/'+current.snapshot_id;$('snapshot-download').href='/snapshot/'+current.snapshot_id;
+  $('history-download').href='/history/'+current.snapshot_id;$('history-download').hidden=!current.settled;
+  $('settlement-note').textContent=current.settled?'結果照合済みです。保存した予測は変更していません。':'';
+ }
+ const r=state.report;$('evaluation').hidden=state.saved_histories===0;
+ $('race-count').textContent=r.evaluated_races;$('top3').textContent=r.evaluated_races?(100*r.metrics.top3).toFixed(1)+'%':'—';$('duplicates').textContent=r.duplicate_snapshots_removed;
+ $('review-rows').replaceChildren();for(const row of r.per_race){const tr=document.createElement('tr');for(const text of [row.rider_count+'車',row.metrics.rank+'位',Object.entries(row.categories).filter(([,c])=>c.hit).map(([k])=>names[k]).join('、')||'なし']){const td=document.createElement('td');td.textContent=text;tr.append(td);}$('review-rows').append(tr);}
+ $('exclusions').textContent=Object.keys(r.excluded).length?'入力の不一致により除外された記録があります：'+JSON.stringify(r.excluded):'不正・矛盾した記録の除外：0件';disabled();
+}
+async function action(path,payload){busy=true;disabled();message('処理中です。初回の合成モデル準備には少し時間がかかります。');try{const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Keirin-Local':'synthetic-only'},body:JSON.stringify(payload)});const state=await response.json();if(!response.ok)throw new Error(state.error);render(state);message(path.endsWith('predict')?'予測を保存し、モデル候補を表示しました。':'合成結果を照合し、保存した予測を評価しました。');}catch(e){message(errors[e.message]||'処理を完了できませんでした。入力や実行環境を確認してください。',true);}finally{busy=false;disabled();}}
+$('predict7').onclick=()=>action('/api/predict',{rider_count:7});$('predict9').onclick=()=>action('/api/predict',{rider_count:9});
+$('settle').onclick=()=>action('/api/settle',{snapshot_id:current.snapshot_id,outcome_combo:['first','second','third'].map(id=>$(id).value).join('-'),settlement_odds:Number($('odds').value)});
+fetch('/api/state').then(r=>{if(!r.ok)throw new Error();return r.json();}).then(s=>{render(s);message('7車または9車を選んで開始できます。');}).catch(()=>message('実行環境に接続できません。',true));
+</script></main></body></html>
