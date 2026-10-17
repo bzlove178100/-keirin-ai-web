@@ -190,10 +190,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
   </div>
 </section>
 
+<div id="owner-model-host"></div>
 <footer class="note">競輪AI・個人利用版 開発中<br>データ取得・予想・保存・表示を分離し、後から機能追加できる構造で開発しています。</footer>
 </main>
 
 <script src="prospective-tools-core.js"></script>
+<script src="model-web-response.js"></script>
+<script src="model-owner-preview.js"></script>
 <script>
 'use strict';
 
@@ -230,6 +233,7 @@ function saveSession(data) {
 }
 
 function clearSession() {
+  ownerModelPreview.reset();
   currentSession = null;
   currentProfile = null;
   sessionStorage.removeItem(SESSION_KEY);
@@ -346,6 +350,7 @@ async function login() {
 }
 
 async function logout() {
+  ownerModelPreview.reset();
   const token = currentSession?.access_token;
   try {
     if (token) await fetch(SUPABASE_URL + '/auth/v1/logout',{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
@@ -1277,6 +1282,20 @@ async function checkStatus() {
     button.disabled = false;
   }
 }
+
+const ownerModelPreview = (() => {
+try { return KeirinOwnerModelPreview.attach({
+  document, host: document.getElementById('owner-model-host'),
+  get: () => authenticatedGet(DEV_ENGINE_URL),
+  post: body => authenticatedPost(DEV_ENGINE_URL, body),
+  identity: () => currentSession?.user?.id || null,
+  renderCategory
+}); } catch (_) {
+  const unavailable = () => { document.getElementById('owner-model-host').textContent = '合成モデル画面を読み込めませんでした。ページを再読み込みしてください。'; };
+  unavailable();
+  return Object.freeze({ reset: unavailable });
+}
+})();
 
 element('login').addEventListener('click',login);
 element('logout').addEventListener('click',logout);

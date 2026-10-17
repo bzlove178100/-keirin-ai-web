@@ -35,7 +35,10 @@ class OwnerWebTests(unittest.TestCase):
             for name,digest in receipt['files'].items():
                 self.assertEqual(hashlib.sha256((output/name).read_bytes()).hexdigest(),digest)
             html = (output/'index.html').read_text()
-            self.assertEqual(html,prepare_html(original.decode()))
+            self.assertEqual(html,prepare_html(original.decode(),allow_integrated=True))
+            self.assertEqual(receipt['source_already_integrated'],html==original.decode())
+            if receipt['source_already_integrated']:
+                self.assertEqual((output/'owner-web-integration.patch').read_text(),'')
             # Authentication and existing prediction paths are left byte-identical.
             for start,end in [('async function refreshSessionIfNeeded()', 'async function loadProfile()'),
                               ('async function authenticatedGet(', 'function clearCategory('),
@@ -50,7 +53,7 @@ class OwnerWebTests(unittest.TestCase):
         self.assertEqual((ROOT/'index.html').read_bytes(),original)
         with self.assertRaisesRegex(ValueError,'outside_repository'):prepare(ROOT/'must-not-create-owner-candidate')
         with self.assertRaisesRegex(ValueError,'anchor_changed'):
-            prepare_html(original.decode().replace('async function logout() {','async function logoutChanged() {'))
+            prepare_html(original.decode().replace('async function logout() {','async function logoutChanged() {'),allow_integrated=True)
 
 
 if __name__ == '__main__': unittest.main()
