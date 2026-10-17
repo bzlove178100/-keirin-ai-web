@@ -55,6 +55,10 @@ jobs:
       - name: Exercise the combined owner page with synthetic authentication only
         working-directory: ${{ runner.temp }}/keirin-integrated/source
         run: |
+          python -m ml.owner_review_package prepare --synthetic --output-dir "$RUNNER_TEMP/owner-package-created"
+          mv "$RUNNER_TEMP/owner-package-created" "$RUNNER_TEMP/owner-package-moved"
+          python -m ml.owner_review_package verify --package-dir "$RUNNER_TEMP/owner-package-moved"
+          export KEIRIN_OWNER_REVIEW_PACKAGE="$RUNNER_TEMP/owner-package-moved"
           export KEIRIN_PLAYWRIGHT_MODULE="$RUNNER_TEMP/keirin-browser/node_modules/playwright"
           export KEIRIN_BROWSER_EXECUTABLE="$(command -v google-chrome || command -v chromium)"
           test -n "$KEIRIN_BROWSER_EXECUTABLE"

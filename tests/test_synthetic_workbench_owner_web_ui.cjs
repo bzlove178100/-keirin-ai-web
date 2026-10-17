@@ -20,10 +20,18 @@ global.fetch=async(url,options)=>{
  const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'keirin-owner-web-ui-'));
  let browser;
  try{
-  const output=path.join(tmp,'candidate');
-  execFileSync(process.env.PYTHON||'python',['-m','ml.prepare_owner_web_preview','--output-dir',output]);
-  const bundle=JSON.parse(execFileSync(process.env.PYTHON||'python',['-c',
-   "import sys,json;sys.path.insert(0,'tests');from test_synthetic_workbench_owner_web import bundle;print(json.dumps(bundle()))"],{encoding:'utf8'}));
+  const packageDir=process.env.KEIRIN_OWNER_REVIEW_PACKAGE||path.join(tmp,'package');
+  const python=process.env.PYTHON||'python';
+  if(!process.env.KEIRIN_OWNER_REVIEW_PACKAGE)execFileSync(python,['-m','ml.owner_review_package','prepare','--synthetic','--output-dir',packageDir]);
+  const receipt=JSON.parse(execFileSync(python,['-m','ml.owner_review_package','verify','--package-dir',packageDir],{encoding:'utf8'}));
+  assert.equal(receipt.integrity_verified,true);assert.equal(receipt.real_auth_verified,false);
+  const output=path.join(packageDir,'web');
+  // Read generated JSON without evaluating an externally supplied module.
+  const module=await fs.readFile(path.join(packageDir,'bundle','synthetic_model_views.ts'),'utf8');
+  const prefix='export const SYNTHETIC_MODEL_VIEWS: unknown = ';
+  assert(module.startsWith(prefix)&&module.endsWith(';\n'));
+  const bundle=JSON.parse(module.slice(prefix.length,-2));
+  assert.deepEqual(bundle.views.map(v=>v.snapshot_id),receipt.snapshots.map(s=>s.snapshot_id));
   const {createPredictHandler}=await import('../supabase/functions/predict-engine-dev/index.ts');
   const handler=createPredictHandler(bundle);
   browser=await chromium.launch({headless:true,executablePath:process.env.KEIRIN_BROWSER_EXECUTABLE||undefined});
@@ -99,7 +107,7 @@ global.fetch=async(url,options)=>{
    assert.equal(await page.locator('#owner-model-panel .pick-item').count(),0);
    assert(posts.every(b=>b.mode==='synthetic_model_view'&&Object.keys(b).sort().join(',')==='mode,snapshot_id'));
    assert.deepEqual(unexpected,[]);assert.deepEqual(errors,[]);
-   console.log(`${width}px: full owner page login + actual synthetic handler + 7/9 display + failure/logout clearing PASS`);
+   console.log(`${width}px: generated LightGBM package + full owner page login + actual synthetic handler + 7/9 display + failure/logout clearing PASS`);
    await page.close();
   }
  }finally{if(browser)await browser.close();await fs.rm(tmp,{recursive:true,force:true});}
