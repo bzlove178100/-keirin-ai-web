@@ -71,7 +71,7 @@
       const race = (parsed.race_data || {}).race || {};
       const captured = new Date(parsed.captured_at).toLocaleString('ja-JP');
       const knownOdds = Object.keys((((parsed.race_data || {}).odds || {}).trifecta) || {}).length;
-      snapshotStatus.textContent = `確認済み：${race.date || '-'} ${race.venue || '-'} ${race.race_number || '-'}R / 予測 ${captured} / 既知3連単オッズ ${knownOdds}/210`;
+      snapshotStatus.textContent = `確認済み：${race.date || '-'} ${race.venue || '-'} ${race.race_number || '-'}R / 予測 ${captured} / 既知3連単オッズ ${knownOdds}/${parsed.engine_response.prediction.trifecta_scores.length}`;
       setClass(snapshotStatus, 'note ok');
     } catch (error) {
       snapshotStatus.textContent = `読み込み不可：${error.code || error.message || 'invalid snapshot'}`;

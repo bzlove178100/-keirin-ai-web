@@ -85,3 +85,50 @@ Deno.test('prospective WINTICKET input preserves confirmed partial odds without 
   assert(!('1-3-2' in odds), 'missing combinations must never be invented');
   assert(result.prediction_context?.source === 'WINTICKET', 'source context must be preserved');
 });
+
+// Generated data only: the same full-field contract used by history/backtest.
+import { fullProbabilityInput, raceCarNumbers } from '../supabase/functions/_shared/race_probability.ts';
+
+function generatedRecord(count: number): any {
+  const players = Array.from({length:count}, (_, i) => ({car_number:i+1, style:'追'}));
+  const trifecta_scores = [];
+  for (let a=1;a<=count;a++) for (let b=1;b<=count;b++) for (let c=1;c<=count;c++) {
+    if (a!==b && a!==c && b!==c) trifecta_scores.push({combo_key:`${a}-${b}-${c}`,estimated_probability:1/(count*(count-1)*(count-2))});
+  }
+  return {training_input:{players},trifecta_scores};
+}
+
+Deno.test('history/backtest full probability contract accepts 7/9 and preserves legacy seven', () => {
+  for (const count of [7,9]) {
+    const record = generatedRecord(count);
+    assert(fullProbabilityInput(record), `${count}-rider table rejected`);
+    assert(record.trifecta_scores.length === (count===7 ? 210 : 504), 'wrong combination count');
+    delete record.training_input;
+    assert(fullProbabilityInput(record) === (count===7), 'roster-free legacy inference changed');
+  }
+});
+
+Deno.test('history/backtest rejects malformed rosters and incomplete probability tables', () => {
+  for (const count of [7,9]) {
+    for (const value of [true,'1',null,0,count+1,2]) {
+      const record = generatedRecord(count);
+      record.training_input.players[0].car_number = value;
+      assert(raceCarNumbers(record.training_input.players) === null, 'malformed roster accepted');
+      assert(!fullProbabilityInput(record), 'invalid roster fell back to legacy seven');
+    }
+    for (const mutate of [
+      (r:any) => r.trifecta_scores.pop(),
+      (r:any) => r.trifecta_scores[0].combo_key = '10-2-3',
+      (r:any) => r.trifecta_scores[0].combo_key = r.trifecta_scores[1].combo_key,
+      (r:any) => r.trifecta_scores[0].estimated_probability = NaN,
+      (r:any) => r.trifecta_scores[0].estimated_probability = '0.1',
+      (r:any) => r.trifecta_scores.forEach((x:any) => x.estimated_probability *= 0.99),
+      (r:any) => { r.trifecta_scores[0].estimated_probability = -0.1; r.trifecta_scores[1].estimated_probability += 0.1+1/(count*(count-1)*(count-2)); },
+    ]) {
+      const record = generatedRecord(count); mutate(record);
+      assert(!fullProbabilityInput(record), 'malformed probability table accepted');
+    }
+  }
+  for (const count of [6,8,10]) assert(!fullProbabilityInput(generatedRecord(count)), 'unsupported field accepted');
+  assert(!fullProbabilityInput({...generatedRecord(7),training_input:{}}), 'missing players accepted');
+});
