@@ -6,7 +6,7 @@ import subprocess
 from tempfile import TemporaryDirectory
 import unittest
 
-from ml.keirin_dev_deployment_package import prepare, verify
+from ml.keirin_dev_deployment_package import OBSERVED_NAMES, capture_observation, prepare, verify
 
 
 def digest(data):
@@ -14,6 +14,69 @@ def digest(data):
 
 
 class DeploymentPackageTests(unittest.TestCase):
+    def capture_args(self, root, *, content="// 合成ソース\r\nexport const VALUE=1;"):
+        responses = [
+            {"slug": slug, "version": 1, "status": "ACTIVE", "verify_jwt": True,
+             "import_map": False,
+             "files": [{"name": name, "content": content} for name in mapping]}
+            for slug, mapping in OBSERVED_NAMES.items()
+        ]
+        source = root / "responses.json"
+        source.write_text(json.dumps(responses))
+        return responses, dict(sources_json=source, project_id="synthetic-project",
+                              project_name="synthetic-staging", observed_at="2026-10-17T15:00:00Z")
+
+    def test_capture_preserves_exact_utf8_eof_crlf_and_rollback(self):
+        with TemporaryDirectory() as tmp_name:
+            root = Path(tmp_name)
+            repo, rollback_commit, _ = self.make_repo(root)
+            owner = self.make_owner_package(root)
+            for number, content in enumerate(("// 合成\r\nexport const VALUE=1;",
+                                               "// synthetic\n", "// synthetic\n\n")):
+                responses, args = self.capture_args(root, content=content)
+                observation = root / f"observation-{number}"
+                metadata = capture_observation(observation, **args)
+                output = root / f"package-{number}"
+                package = prepare(output, owner_package=owner, observation_dir=observation,
+                                  rollback_commit=rollback_commit, source_root=repo)
+                for response in responses:
+                    slug = response["slug"]
+                    for source in response["files"]:
+                        name = source["name"]
+                        logical = OBSERVED_NAMES[slug][name]
+                        data = content.encode("utf-8")
+                        self.assertEqual((observation / slug / name).read_bytes(), data)
+                        self.assertEqual((output / "rollback" / logical).read_bytes(), data)
+                        self.assertEqual(metadata["targets"][slug]["observed_files"][logical], digest(data))
+                        self.assertEqual(package["targets"][slug]["rollback_files"][logical], digest(data))
+                with self.assertRaises(FileExistsError):
+                    capture_observation(observation, **args)
+
+    def test_capture_rejects_bad_metadata_files_and_duplicate_targets_before_write(self):
+        mutations = (
+            lambda data: data.append(data[0]),
+            lambda data: data.__setitem__(1, data[0]),
+            lambda data: data[0].update(verify_jwt=False),
+            lambda data: data[0].update(import_map=True),
+            lambda data: data[0].update(version=True),
+            lambda data: data[0].update(status="INACTIVE"),
+            lambda data: data[0]["files"].pop(),
+            lambda data: data[0]["files"].__setitem__(1, data[0]["files"][0]),
+            lambda data: data[0]["files"][0].update(name="../index.ts"),
+            lambda data: data[0]["files"][0].update(content=None),
+        )
+        with TemporaryDirectory() as tmp_name:
+            root = Path(tmp_name)
+            for number, mutate in enumerate(mutations):
+                with self.subTest(number=number):
+                    responses, args = self.capture_args(root)
+                    mutate(responses)
+                    args["sources_json"].write_text(json.dumps(responses))
+                    output = root / f"rejected-{number}"
+                    with self.assertRaises(ValueError):
+                        capture_observation(output, **args)
+                    self.assertFalse(output.exists())
+
     def git(self, repo, *args):
         subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 

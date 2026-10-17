@@ -221,6 +221,72 @@ def _load_observation(observation_dir):
     return metadata, observed
 
 
+def capture_observation(output_dir, *, sources_json, project_id, project_name, observed_at):
+    """Preserve connector-returned UTF-8 source bytes, including EOF and CRLF.
+
+    The input is a JSON array of get_edge_function responses, not rendered code
+    copied into text files. This is an offline import, not a live-source attestation.
+    """
+    output = Path(output_dir).resolve()
+    repo = Path(__file__).resolve().parents[1]
+    if output == repo or repo in output.parents:
+        raise ValueError("output_must_be_outside_repository")
+    if output.exists():
+        raise FileExistsError(output)
+    if not all(isinstance(value, str) and value.strip() for value in
+               (project_id, project_name, observed_at)):
+        raise ValueError("observation_metadata_required")
+    responses = _read_json(Path(sources_json))
+    if not isinstance(responses, list) or len(responses) != len(OBSERVED_NAMES):
+        raise ValueError("observation_targets_invalid")
+    targets, sources = {}, {}
+    for response in responses:
+        if not isinstance(response, dict):
+            raise ValueError("observation_target_state_invalid")
+        slug = response.get("slug")
+        if not isinstance(slug, str) or slug not in OBSERVED_NAMES or slug in targets:
+            raise ValueError("observation_targets_invalid")
+        if (response.get("status") != "ACTIVE"
+                or response.get("verify_jwt") is not True
+                or response.get("import_map") is not False
+                or type(response.get("version")) is not int
+                or response["version"] < 1):
+            raise ValueError("observation_target_state_invalid:" + slug)
+        files = response.get("files")
+        if not isinstance(files, list) or len(files) != len(OBSERVED_NAMES[slug]):
+            raise ValueError("observation_file_set_mismatch:" + slug)
+        hashes = {}
+        for source in files:
+            if not isinstance(source, dict):
+                raise ValueError("observation_source_invalid:" + slug)
+            name, content = source.get("name"), source.get("content")
+            if (not isinstance(name, str) or name not in OBSERVED_NAMES[slug]
+                    or not isinstance(content, str) or not content):
+                raise ValueError("observation_source_invalid:" + slug)
+            logical = OBSERVED_NAMES[slug][name]
+            if logical in hashes:
+                raise ValueError("observation_source_duplicate:" + slug)
+            data = content.encode("utf-8")
+            hashes[logical] = _digest_bytes(data)
+            sources[f"{slug}/{name}"] = data
+        targets[slug] = {
+            "version": response["version"], "status": "ACTIVE", "verify_jwt": True,
+            "observed_files": hashes,
+        }
+    metadata = {
+        "schema_version": OBSERVATION_SCHEMA, "project_id": project_id,
+        "project_name": project_name, "created_at": observed_at, "targets": targets,
+    }
+    output.mkdir(parents=True, exist_ok=False)
+    for name, data in sources.items():
+        path = output / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    (output / "observation.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    _load_observation(output)
+    return metadata
+
+
 def _write_tree(root, side, sources):
     result = {}
     for slug, files in sources.items():
@@ -382,6 +448,12 @@ def main():
     create.add_argument("--source-root", type=Path)
     check = commands.add_parser("verify")
     check.add_argument("--package-dir", type=Path, required=True)
+    capture = commands.add_parser("capture-observation")
+    capture.add_argument("--output-dir", type=Path, required=True)
+    capture.add_argument("--sources-json", type=Path, required=True)
+    capture.add_argument("--project-id", required=True)
+    capture.add_argument("--project-name", required=True)
+    capture.add_argument("--observed-at", required=True)
     args = parser.parse_args()
     if args.command == "prepare":
         result = prepare(
@@ -390,6 +462,11 @@ def main():
             observation_dir=args.observation_dir,
             rollback_commit=args.rollback_commit,
             source_root=args.source_root,
+        )
+    elif args.command == "capture-observation":
+        result = capture_observation(
+            args.output_dir, sources_json=args.sources_json, project_id=args.project_id,
+            project_name=args.project_name, observed_at=args.observed_at,
         )
     else:
         result = verify(args.package_dir)

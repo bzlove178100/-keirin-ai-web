@@ -22,7 +22,7 @@
 - `ml.owner_review_package` がコード生成fixtureだけで作った7車/9車の合成bundle。
 - Functionごとのentrypoint、`verify_jwt=true`、配備順、逆順のrollback順、追加・変更ファイル一覧。
 
-候補では次を文字列ではなく固定契約として検査する。
+候補では次の設定文字列の存在を静的検査する。任意のコードの動作や安全性を証明する検査ではなく、レビュー済みソースのhash固定・既存回帰試験と併用する。
 
 - DB書込OFF。
 - production source未接続、caller supplied only。
@@ -56,3 +56,40 @@
 配備する場合も、最初にremoteのversion・status・verify_jwt・ソースhashがこの観測から変わっていないか照合し、変化していれば停止して作り直す。承認後の候補順はbacktest→history→predict、問題時の戻し順はpredict→history→backtest。各Functionごとに配備後の読み戻しとowner認証下の合成dry-runを確認し、次へ進む。実データは使わない。
 
 現時点では配備、#261のマージ/公開、実認証、DB書込、外部取得、実データ学習、本番予想を実行していない。KEIRIN.JP HOLDと既存owner条件を維持する。
+
+## 原本保存の訂正・配備直前確認（2026-10-18 JST）
+
+上記の初回deployment manifest `3c8cc0a0…` は配備に使用しない。
+再取得した3 Functionはversion/status/verify_jwtが同一だが、初回の戻し用7ファイルには
+取得APIのcontentより末尾LFが1文字ずつ多かった。7本とも差はこの1バイトだけと確認。
+以前の「取得原本と同hash」「4依存が配備版と同hash」は厳密なbyte比較として撤回する。
+Functionの配備変更や意味上のコード差を観測したわけではない。
+
+手渡し保存を繰り返さず、`capture-observation` を追加した。`get_edge_function` の
+JSON応答3件を配列として保存した入力から、UTF-8 contentをstrip/改行補完せず取り込む。
+ACTIVE・verify_jwt=true・import_map=false・正の整数version・既知3対象・正確なファイル集合を
+出力前に検査。重複・欠落・未知ファイル・パス逸脱・既存出力を拒否する。
+これは呼出元提供の観測の保存であり、ライブ接続や観測時刻の独立証明ではない。
+
+```sh
+python -m ml.keirin_dev_deployment_package capture-observation \
+  --sources-json /path/to/connector-responses.json \
+  --output-dir /path/to/new-observation \
+  --project-id APPROVED_PROJECT_ID --project-name APPROVED_PROJECT_NAME \
+  --observed-at ACTUAL_OBSERVATION_TIME
+```
+
+既存の合成owner packageを再利用し、修正済みobservationからpackageを再生成。
+manifest SHA-256は `e0b0f8004eec7d954171cdc00b7aff87e962feda79da9764aa1b5d88f44a4553`。
+candidateは同じ `c9d94b1`、全candidate/bundle hashは初回と一致。学習は再実行していない。
+rollback7本は今回取得APIのcontentとUTF-8 byte一致。metadataの時刻は呼出元入力である。
+
+新規2試験を含む計4試験成功。末尾LFなし・LF1個・LF2個・CRLF・日本語を含め、
+capture→package→rollbackのbyte一致、不正入力10種類の出力前拒否を確認。
+新headのCIはPR本文で追跡し、旧headの成功を引き継がない。
+
+ユーザーの23:51 JST「続けて」は、直前に提示した#262反映→配備直前照合→
+backtest/history/predict段階配備とowner合成確認→成功後の#261/Pagesという範囲で受領。
+実取得・実学習・DB書込・本番予想・権限変更・課金は承認範囲外。
+現在の検証ブラウザは未ログイン。owner実認証を確保するまでFunction置換を開始しない。
+新しい候補の保存とCI確認は進めるが、認証・配備・実データ運用を成功扱いしない。
