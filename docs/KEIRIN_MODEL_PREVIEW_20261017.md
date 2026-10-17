@@ -169,3 +169,21 @@ Chrome試験は既存実モデル操作を再利用し、390px/1280pxの各7/9�
 
 次の一手：このheadの未完CIだけを確定し、既存owner APIへMLを接続するサーバー側境界を具体化する。現行ソースのないpredict-race/predict-statusや別Workの未公開実装は未確認のまま扱う。公開スマホURL・既存owner Web/APIの実接続・商品会員制御・実データ評価は未完。今回の既存描画互換成功を公開サービス完成としない。
 Jarvis/共有WORK文書/他PR担当ファイル未編集、全Draft未マージ。データ許諾/費用は#257の既存記録を再利用し、新しい資料がない状態の再調査/原本9fbb95d探索/問い合わせを反復していない。KEIRIN.JP HOLD、実取得・実学習・予想DB書込・本番予想OFFと既存承認条件を維持。
+
+## 追記：既存owner APIへの合成モデル結果の受渡し（2026-10-17 21時台JST）
+
+main `3795de4`・公開#250/#257/#258/#259/#260のheadに再開時の差分なし。前head `9366ff3`の残CI（回帰39003794449、DB39003794410）もsuccessとなり、ML/Chrome39003794507・UI39003794544を含む4系統成功確定。#259の変更14ファイルと今回のAPI追加に重複なし。非公開Work/未push作業は未確認。
+
+- 既存`predict-engine-dev`へ`synthetic_model_view`を追加。Auth user照合→profileのrole/plan双方ownerという既存関数・判定は変更しない。その後だけサーバー成果物の保存済みモデル結果を返す。既存dry_runは継続。
+- server側の`synthetic_model_views.ts`はnullをコミット。標準状態は503（未準備）。成果物がある場合のGETは7/9車のsnapshot IDを返す。POSTはmodeとIDだけ許可し、予測・bundle・race_data・URLの持込みを拒否する。
+- `ml.synthetic_model_bundle`が既存の合成生成/学習/推論/snapshot/表示projectionを再利用して、7車と9車のサーバー用TypeScript moduleとhash付きreceiptを作成。任意実データ/モデル/セッションの入力経路はない。出力はcheckout外の新規ディレクトリのみ。既存成果物を上書きせず、ソースのnull moduleも自動置換しない。upload/配備なし。
+- サーバーも既存`model-web-response.js`のvalidatorを使い、両予測の版/安全flag/カテゴリ/時刻・ID重複・車数・SYNTHETIC会場を照合。異常bundleは503、未知IDは404。外側の認証情報は既存照合後のentry pointだけが付け、表示データ内のnot_assertedと混同しない。
+- これは凍結した合成予測の配信経路。要求時にPython/LightGBMをEdge内で実行する実装ではない。予測の新規生成・DB保存をfalseと明示し、Phase32出力をMLとして返さない。
+
+ローカル：新規2試験＋変更した表示契約の既存3試験＝5試験成功。新規試験は実LightGBMで生成した7/9車bundleを実TypeScript entry pointに通し、未認証/期限切れ相当/roleまたはplan不足/admin/複数profile、Origin違反、未準備・不正bundle・未知ID・呼出側持込みを拒否。owner取得内容の完全一致と既存7車dry_run（210通り）も成功。既存API安全flag/オッズsanitizer順序チェックも成功。
+最初の実モデル試験は一時領域のlightgbmが不在で起動失敗。既存requirementsを一時領域へ復元した後に成功（lightgbm4.7.0/numpy2.5.4）。製品ロジックの失敗とは区別。Auth/profileは合成応答を注入しており、実Supabase認証の成功ではない。Node実行とCIのDeno型/依存関係確認、配備済みEdge実行を分けて扱う。新headのCI結果はPR本文に記録する。
+
+公式の[Edge構成](https://supabase.com/docs/guides/functions/architecture)と[changelog](https://supabase.com/changelog)を確認。`.md`取得は取得側のcontent-type制限で失敗し、公式HTMLを参照した。module graphのbundle方式を参照し、今回認証方式・鍵・RLS・CLI設定は変更しない。実際のEdge bundling/配備/実アカウントの試験は未実施。
+
+次の一手：新head CIを確定後、既存Webからこの専用モードを使う操作を接続する。#259が変更中のindex.htmlを同時編集せず、取り込み順と重複しない最小差分をレビュー可能にする。公開するにはサーバー成果物/実行環境・配備と実認証の承認が別途必要。学習/推論の定期実行・商品会員権限・価格/課金・実データ許諾/実精度評価は未完。追加の許諾調査や原本探索を根拠なく反復しない。
+Jarvis/共有WORK文書/他PR担当ファイルは未編集。全PR未マージ。KEIRIN.JP HOLD、実取得・実学習・予想DB書込・本番予想OFF、既存の承認・停止条件を維持。

@@ -400,3 +400,48 @@ filtering, cloud execution/storage and publication remain separate unfinished wo
 python -m unittest discover -s tests -p 'test_synthetic_workbench_web_response.py' -v
 node tests/test_synthetic_workbench_ui.cjs  # CI Chrome: actual 7/9 output and rejected responses
 ```
+
+## Prepare a synthetic owner API artifact (no deployment)
+
+The existing `predict-engine-dev` entry point now has a separate
+`synthetic_model_view` mode behind its unchanged Auth user lookup and exact
+`role=owner` plus `plan=owner` checks. It serves **frozen synthetic predictions**,
+not on-demand Python inference. Its checked-in `synthetic_model_views.ts` is null:
+an owner request gets HTTP 503 until a reviewed server artifact exists. An
+authenticated GET reports availability and the saved snapshot IDs. The new POST
+accepts only `{"mode":"synthetic_model_view","snapshot_id":"<32 hex characters>"}`.
+Caller-provided predictions, bundles, race inputs or URLs are rejected.
+
+Generate a package in a **new directory outside the checkout**:
+
+```sh
+OMP_NUM_THREADS=2 python -m ml.synthetic_model_bundle --synthetic --output-dir /absolute/new/path/keirin-owner-synthetic
+```
+
+This reuses the code-generated workbench fixture to train one model set and capture
+one 7-rider and one 9-rider prediction. It validates each full snapshot, projects
+only the existing Web display contract, and writes `synthetic_model_views.ts` plus
+`bundle_receipt.json` with the module SHA-256, snapshot/model identifiers and
+`deployed:false`. It accepts no real records, existing model/session files, URLs or
+credentials. Existing directories and checkout destinations are refused. A failed
+generation may leave an incomplete directory; no success receipt means it is not
+a completed package. Use a new output directory after correcting the cause.
+
+The generator does not replace the checked-in null module, upload a file, register
+credentials, change access, or deploy anything. The generated module is for a
+separately reviewed deployment package only. Never place real predictions/models
+in this public repository. The server validates both saved views using the same
+browser contract and returns 503 for an invalid bundle, 404 for an unknown ID.
+The owner response wraps the view without claiming a new prediction or DB save.
+The nested view's `not_asserted` authentication fields describe the portable data;
+only the entry point adds authenticated owner claims after its existing verifier.
+
+Local tests run the real TypeScript handler with Node Web APIs and synthetic
+Auth/profile responses; no real identity service is called. CI also checks the
+Deno module graph. These checks are not deployed Edge execution, real account
+authentication, scheduled model generation, member-plan enforcement or production
+acceptance. Public Web integration and approved hosting remain unfinished.
+
+```sh
+python -m unittest discover -s tests -p 'test_synthetic_workbench_owner_api.py' -v
+```

@@ -15,7 +15,7 @@ on:
       - 'tests/test_category_selection.py'
       - 'tests/test_model_history.py'
       - 'tests/test_synthetic_workbench*'
-      - 'supabase/functions/predict-engine-dev/engine_phase32.ts'
+      - 'supabase/functions/predict-engine-dev/**'
       - 'tests/test_offline_evaluation.py'
       - 'tests/test_historical*.py'
       - 'tests/historical_training_smoke.py'
@@ -34,7 +34,7 @@ on:
       - 'tests/test_category_selection.py'
       - 'tests/test_model_history.py'
       - 'tests/test_synthetic_workbench*'
-      - 'supabase/functions/predict-engine-dev/engine_phase32.ts'
+      - 'supabase/functions/predict-engine-dev/**'
       - 'tests/test_offline_evaluation.py'
       - 'tests/test_historical*.py'
       - 'tests/historical_training_smoke.py'
@@ -61,6 +61,9 @@ jobs:
           cache-dependency-path: ml/requirements.txt
       - name: Install offline ML dependencies
         run: python -m pip install -r ml/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - name: Run offline preview validation and escaping checks
         run: python -m unittest discover -s tests -p 'test_offline_preview.py' -v
       - name: Run frozen ML snapshot, settlement and review contracts
@@ -74,9 +77,11 @@ jobs:
           OMP_NUM_THREADS: '2'
           KEIRIN_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/keirin-offline-preview
         run: python tests/ml_position_smoke.py
-      - uses: actions/setup-node@v4
+      - uses: denoland/setup-deno@v2
         with:
-          node-version: '24'
+          deno-version: v2.x
+      - name: Check owner API module graph without credentials or deployment
+        run: deno check supabase/functions/predict-engine-dev/index.ts
       - name: Check model category selection against the existing TypeScript policy
         run: python -m unittest discover -s tests -p 'test_category_selection.py' -v
       - name: Check generated preview in Chrome at phone and desktop widths

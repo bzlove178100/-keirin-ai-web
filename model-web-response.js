@@ -73,7 +73,8 @@
    return render(data,options);
   }catch(error){clear(options.document);options.document.getElementById('model-status').textContent='モデル応答を確認できないため表示を停止しました。';return null;}
  }
- const api={validate,render,load};
+ const api=Object.freeze({validate,render,load});
+ // The same validator is imported by the server; importing it performs no IO.
+ root.KeirinModelWeb=api;
  if(typeof module==='object'&&module.exports)module.exports=api;
- else root.KeirinModelWeb=Object.freeze(api);
 })(globalThis);
