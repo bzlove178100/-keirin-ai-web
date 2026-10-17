@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 from pathlib import Path
 
 from ml.build_training_dataset import load_records
@@ -22,18 +21,7 @@ from ml.evaluation_protocol import (
 from ml.predict_position_models import _position_distributions
 from ml.train_position_models import _train_one
 from ml.trifecta_adapter import combine_position_probabilities
-
-
-def score(table: dict[str, float], outcome: str) -> dict:
-    ordered = sorted(table, key=lambda key: (-table[key], key))
-    rank = ordered.index(outcome) + 1
-    return {
-        'rank': rank,
-        'reciprocal_rank': 1 / rank,
-        'log_loss': -math.log(max(table[outcome], 1e-15)),
-        'brier_sum': sum((probability - int(key == outcome)) ** 2 for key, probability in table.items()),
-        **{f'top{k}': int(rank <= k) for k in (1, 3, 5, 10)},
-    }
+from ml.probability_metrics import score
 
 
 def evaluate_records(records: list[dict], *, synthetic: bool = False) -> dict:

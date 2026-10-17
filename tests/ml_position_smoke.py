@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from itertools import permutations
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -149,8 +150,12 @@ def main() -> None:
         assert next(row for row in scores if row['combo_key'] == '1-4-5')['odds'] == 12.3
         assert all(row['monetary_expected_value'] is None for row in scores)
 
+        history_paths = []
         for count in (7, 9):
             generated = make_record(16, count)['training_input']
+            scheduled = datetime.now(timezone.utc) + timedelta(hours=count)
+            generated['race'].update(date=scheduled.astimezone(timezone(timedelta(hours=9))).date().isoformat(),
+                                     race_number=1 if count==7 else 2, scheduled_start_jst=scheduled.isoformat())
             generated['odds'] = {'trifecta': {'1-2-3': 25.4, '2-3-4': 72.0}}
             if count == 9:
                 generated['odds']['trifecta'] = {'-'.join(map(str, combo)): [25.4,72.0,200.0,600.0][i % 4]
@@ -182,6 +187,24 @@ def main() -> None:
             else:
                 assert selection['complete_category_count'] == 1
             assert '5カテゴリのモデル候補' in html
+            # Freeze the actual reloaded model's output, then settle/evaluate it
+            # without retraining or substituting a Phase32 engine identity.
+            snap_path=root/f'snapshot-{count}.json'
+            settlement_path=root/f'settlement-{count}.json'
+            history_path=root/f'history-{count}.json'
+            command=[sys.executable,'-m','ml.model_history']
+            subprocess.run(command+['capture',str(json_path),'--synthetic','--output',str(snap_path)],
+                           check=True,stdout=subprocess.DEVNULL)
+            snap=json.loads(snap_path.read_text())
+            settlement_path.write_text(json.dumps({'race_id':snap['race_id'],
+                'outcome_combo':'1-2-3' if count==7 else '9-8-7', 'settlement_odds':55.5,
+                'result_timestamp':(scheduled+timedelta(minutes=10)).isoformat()}))
+            subprocess.run(command+['settle',str(snap_path),str(settlement_path),'--synthetic','--output',str(history_path)],
+                           check=True,stdout=subprocess.DEVNULL)
+            history=json.loads(history_path.read_text())
+            assert history['snapshot']['prediction']==result
+            assert history['model_artifact_sha256']==result['model_artifact']['sha256']
+            history_paths.append(history_path)
             for value in (True, '1', 1.5, 0, count+1):
                 bad = deepcopy(generated); bad['players'][0]['car_number'] = value
                 assert validate_race_data(bad)
@@ -190,6 +213,16 @@ def main() -> None:
                 destination = Path(artifact_dir); destination.mkdir(parents=True, exist_ok=True)
                 (destination / html_path.name).write_text(html, encoding='utf-8')
                 (destination / json_path.name).write_text(json.dumps(result), encoding='utf-8')
+
+        report_path=root/'model-review.json'
+        subprocess.run([sys.executable,'-m','ml.model_history','evaluate',*[str(p) for p in history_paths],
+                        '--synthetic','--output',str(report_path)],check=True,stdout=subprocess.DEVNULL)
+        report=json.loads(report_path.read_text())
+        assert report['status']=='completed_synthetic_frozen_review'
+        assert report['evaluated_races']==2
+        assert report['promotion_eligible'] is False
+        assert {r['rider_count'] for r in report['per_race']}=={7,9}
+        assert len(report['model_artifacts'])==1
 
         for key, value in (('model_version', 'wrong-version'), ('feature_columns', []), ('production_enabled', True)):
             bad = {**metrics, key:value}
@@ -203,7 +236,7 @@ def main() -> None:
         (output_dir / 'metrics.json').write_text(json.dumps(metrics), encoding='utf-8')
 
 
-    print('LightGBM mixed 7/9 train → save → reload → inference → five categories → offline HTML: PASS')
+    print('LightGBM mixed 7/9 train → save → reload → inference → categories/HTML → frozen snapshot → settlement → review: PASS')
 
 
 if __name__ == '__main__':

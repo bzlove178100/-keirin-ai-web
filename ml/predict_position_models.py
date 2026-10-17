@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -81,7 +82,12 @@ def load_models(model_dir: Path) -> tuple[dict[str, lgb.Booster], dict[str, Any]
         if booster.feature_name() != FEATURE_COLUMNS:
             raise ValueError(f"{position} model feature names do not match runtime schema")
         models[position] = booster
-    return models, {"feature_schema": schema, "training_metrics": metrics}
+    digest = hashlib.sha256()
+    for name in ('feature_schema.json', 'metrics.json', 'first.txt', 'second.txt', 'third.txt'):
+        digest.update(name.encode('utf-8') + b'\0')
+        digest.update((model_dir / name).read_bytes())
+        digest.update(b'\0')
+    return models, {"feature_schema": schema, "training_metrics": metrics, "sha256": digest.hexdigest()}
 
 
 def _position_distributions(
@@ -154,7 +160,11 @@ def predict_race(race_data: dict[str, Any], model_dir: Path) -> dict[str, Any]:
         "mode": "offline_inference_only",
         "inference_version": INFERENCE_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "model_artifact": {"evidence_scope": artifact["training_metrics"].get("evidence_scope", "not_verified")},
+        "model_artifact": {
+            "evidence_scope": artifact["training_metrics"].get("evidence_scope", "not_verified"),
+            "sha256": artifact['sha256'],
+            "trained_at": artifact['training_metrics'].get('trained_at'),
+        },
         "model_version": MODEL_VERSION,
         "adapter_version": ADAPTER_VERSION,
         "production_prediction_enabled": False,

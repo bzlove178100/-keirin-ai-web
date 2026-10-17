@@ -201,3 +201,45 @@ python -m unittest discover -s tests -p 'test_category_selection.py'  # Node 24 
 The smoke generates all records in code (mixed 7/9, 16 races, 128 rider rows), and
 uses temporary model files. Optional KEIRIN_SMOKE_ARTIFACT_DIR retains only generated
 prediction JSON/HTML for visual checks. It never reads private source datasets.
+
+## Frozen model history and review (synthetic only)
+
+The same smoke now exercises actual CLI capture, settlement and review for both
+7 and 9 riders after reloading the saved models. `model_artifact.sha256` identifies
+the five saved model/schema/metrics files; `trained_at` is recorded metadata, not
+an independently verified training cutoff. A digest is not a signature or use permission.
+
+```sh
+python -m ml.model_history capture prediction.json --synthetic --output snapshot.json
+python -m ml.model_history settle snapshot.json synthetic-settlement.json --synthetic --output history.json
+python -m ml.model_history evaluate history.json --synthetic --output review.json
+```
+
+Capture requires generated synthetic model evidence, complete 7/9 scores and saved
+categories, a model file digest, timezone-aware training/inference/capture/scheduled
+timestamps in order, and `race.scheduled_start_jst`. The race date must match the
+scheduled date in Japan. Its clock is local/unverified. Every output is created
+exclusively: an existing path is never overwritten.
+
+Settlement input contains the snapshot's exact `race_id`, `outcome_combo`, positive
+`settlement_odds`, and timezone-aware `result_timestamp` at/after scheduled start.
+The generated smoke uses synthetic future result timestamps to simulate this
+sequence; it does not assert that a real result was already confirmed. Result fields
+remain outside the frozen prediction and do not replace prediction-time odds.
+
+The distinct schemas `ml-prediction-snapshot-v1` and `ml-settled-history-v1` must not
+be passed off as Phase32 snapshots or training-eligible `backtest-record-v2` records.
+Review validates each saved snapshot, selects the latest valid snapshot per race,
+excludes conflicting settlements/tied snapshots, and reuses the existing rank,
+top-k, log-loss and Brier metrics. It also reports category selection counts/hits.
+No model is retrained. This is a frozen synthetic prediction review, **not** the
+existing paired Phase32/LightGBM holdout or evidence of real predictive quality.
+No ROI, monetary EV, training eligibility or promotion is enabled.
+
+```sh
+python -m unittest discover -s tests -p 'test_model_history.py' -v
+```
+
+The owner Web/API and browser history tools do not yet import these ML schemas.
+Real-data authorization, trustworthy pre-race capture and data lineage require
+separate review before this synthetic-only path can be extended.
