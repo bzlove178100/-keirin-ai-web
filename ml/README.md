@@ -445,3 +445,33 @@ acceptance. Public Web integration and approved hosting remain unfinished.
 ```sh
 python -m unittest discover -s tests -p 'test_synthetic_workbench_owner_api.py' -v
 ```
+
+## Prepare the owner Web connection for review
+
+`python -m ml.prepare_owner_web_preview --output-dir /tmp/keirin-owner-web-review`
+creates a new directory with a candidate `index.html`, its three script
+dependencies, `owner-web-integration.patch`, and a SHA-256 receipt. The directory
+must be outside the checkout and must not already exist. It never applies the
+patch, replaces repository files, uploads, or deploys. Missing/duplicate source
+anchors and already-prepared HTML are rejected.
+
+The candidate uses the existing login/session refresh and authenticated GET/POST
+helpers. Its separate panel requests the server's synthetic snapshot catalog,
+then sends only `mode=synthetic_model_view` and the selected snapshot ID. The
+server still checks owner role **and** owner plan. A null server bundle shows
+"not prepared"; it is not silently replaced by example results. Five categories
+are rendered through the existing renderer into separate DOM IDs, without
+changing the real-race input, Phase32 snapshot, or history pipeline.
+
+Review this generated patch together with PR #259's `index.html` changes. The
+integration anchors were also checked against #259 head `d688e810`; recheck the
+current file before applying. The patch adds only a panel host, script includes,
+the adapter initialization, and reset calls on logout/session clearing. The
+repository `index.html` is intentionally not edited by this preparation step.
+
+The candidate still contains the existing application's API URLs. Do not treat
+opening it as an offline test: the complete-page CI intercepts every network
+request and substitutes synthetic authentication. Actual login, bundle
+placement, hosting, deployment and production operation require their existing
+separate approvals. Tests of this candidate do not establish real-service
+availability or prediction accuracy.

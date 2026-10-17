@@ -8,6 +8,7 @@ on:
     paths:
       - 'ml/**'
       - 'model-web-response.js'
+      - 'model-owner-preview.js'
       - 'index.html'
       - 'tests/ml_position_smoke.py'
       - 'tests/test_offline_preview.py'
@@ -27,6 +28,7 @@ on:
     paths:
       - 'ml/**'
       - 'model-web-response.js'
+      - 'model-owner-preview.js'
       - 'index.html'
       - 'tests/ml_position_smoke.py'
       - 'tests/test_offline_preview.py'
@@ -95,6 +97,7 @@ jobs:
           node tests/test_offline_preview_ui.cjs
           node tests/test_synthetic_workbench_ui.cjs
           node tests/test_synthetic_workbench_restart_ui.cjs
+          node tests/test_synthetic_workbench_owner_web_ui.cjs
       - name: Run paired holdout and leakage checks
         run: python tests/test_offline_evaluation.py
       - name: Run historical review and chronological checks
