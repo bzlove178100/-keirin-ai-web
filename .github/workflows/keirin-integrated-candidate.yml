@@ -1,0 +1,61 @@
+name: keirin synthetic integrated candidate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ml/**'
+      - 'model-*.js'
+      - 'tests/test_integrated_candidate.py'
+      - 'tests/test_synthetic_workbench*'
+      - '.github/workflows/keirin-integrated-candidate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    if: github.head_ref == 'feat/keirin-offline-model-preview-20261017'
+    runs-on: ubuntu-latest
+    env:
+      BASE: 3795de4d36c4a7834d033b3a2a038c757e7a0923
+      SETTLE: df740d0984c0ac5f2cc4a5f39deddfdf84338a3a
+      WEB: d688e810eb739b1f6e795ef7e8dbb9c64d05c44f
+      MODEL: ${{ github.event.pull_request.head.sha }}
+      PYTHONPATH: .
+      OMP_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Fetch only the immutable public review inputs
+        run: git fetch --no-tags --depth=64 https://github.com/bzlove178100/-keirin-ai-web.git "$BASE" "$SETTLE" "$WEB" "$MODEL"
+      - name: Check candidate preparation and export without merging
+        run: |
+          python -m unittest discover -s tests -p test_integrated_candidate.py -v
+          python -m ml.prepare_integrated_candidate --base "$BASE" --component "$SETTLE" --component "$WEB" --component "$MODEL" --output-dir "$RUNNER_TEMP/keirin-integrated"
+      - name: Install declared test dependencies
+        run: |
+          python -m pip install -r ml/requirements.txt
+          npm install --prefix "$RUNNER_TEMP/keirin-browser" --no-audit --no-fund --ignore-scripts playwright@1.62.1
+      - name: Exercise the combined 7/9-rider history and model paths
+        working-directory: ${{ runner.temp }}/keirin-integrated/source
+        run: |
+          PYTHONPATH=.:tests python -m unittest test_settle_snapshot test_offline_evaluation test_collection_status -v
+          node tests/test_history_pipeline_local.cjs
+          node tests/test_web_capture.cjs
+          python -m unittest discover -s tests -p 'test_synthetic_workbench*.py' -v
+      - name: Exercise the combined owner page with synthetic authentication only
+        working-directory: ${{ runner.temp }}/keirin-integrated/source
+        run: |
+          export KEIRIN_PLAYWRIGHT_MODULE="$RUNNER_TEMP/keirin-browser/node_modules/playwright"
+          export KEIRIN_BROWSER_EXECUTABLE="$(command -v google-chrome || command -v chromium)"
+          test -n "$KEIRIN_BROWSER_EXECUTABLE"
+          node tests/test_synthetic_workbench_owner_web_ui.cjs
