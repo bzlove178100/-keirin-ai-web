@@ -8,6 +8,9 @@
 <div class="notice"><strong>$scope</strong><p>表示値は未校正のモデルスコアです。実際の的中率・利益を示すものではありません。実レースへの推奨や購入判断には使用しません。</p></div>
 <div class="safety"><span>本番予想 OFF</span><span>外部取得 OFF</span><span>DB書込 OFF</span><span>金銭的EV OFF</span></div>
 <section class="stats" aria-label="入力概要"><div class="metric"><strong>${count}車</strong><span>選手数</span></div><div class="metric"><strong>$possible</strong><span>3連単の全組合せ</span></div><div class="metric"><strong>$known/$possible</strong><span>確認済みオッズ</span></div></section>
+<h2>5カテゴリのモデル候補 · ${total_picks}点</h2>
+<p class="muted">各カテゴリ最大3点、全体で重複なし。「的中率優先」も未校正スコアによる順位です。オッズ帯の候補が足りない場合は点数を減らすか見送ります。</p>
+<div class="categories">$category_cards</div>
 <section class="card"><h2>3連単スコア上位10通り</h2><p class="muted">未確認のオッズは補完せず、スコア順に表示します。確定結果・払戻は含みません。</p>$top_table</section>
 <h2>着順ごとのモデル順位</h2><div class="positions">$position_cards</div>
 <details class="card"><summary>全${possible}通りのスコアを確認</summary>$full_table</details>

@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 from copy import deepcopy
+from itertools import permutations
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -151,6 +152,9 @@ def main() -> None:
         for count in (7, 9):
             generated = make_record(16, count)['training_input']
             generated['odds'] = {'trifecta': {'1-2-3': 25.4, '2-3-4': 72.0}}
+            if count == 9:
+                generated['odds']['trifecta'] = {'-'.join(map(str, combo)): [25.4,72.0,200.0,600.0][i % 4]
+                    for i, combo in enumerate(list(permutations(range(1, count + 1), 3))[:24])}
             race_path = root / f'race-{count}.json'
             json_path = root / f'prediction-{count}.json'
             html_path = root / f'prediction-{count}.html'
@@ -164,7 +168,20 @@ def main() -> None:
             assert len(result['trifecta_scores']) == count*(count-1)*(count-2)
             assert html == render_preview(result)
             assert '合成データでの動作検証' in html
-            assert f'2/{count*(count-1)*(count-2)}' in html
+            assert f'{2 if count == 7 else 24}/{count*(count-1)*(count-2)}' in html
+            selection = result['selected_predictions']
+            assert len(selection['categories']) == 5
+            assert selection['total_picks'] == selection['unique_picks']
+            assert selection['monetary_ev_enabled'] is False
+            assert all(len(c['picks']) <= 3 for c in selection['categories'].values())
+            assert all('reason' not in p and 'score' not in p and p['fallback'] is False
+                       for c in selection['categories'].values() for p in c['picks'])
+            if count == 9:
+                assert selection['complete_category_count'] == 5
+                assert selection['total_picks'] == 15
+            else:
+                assert selection['complete_category_count'] == 1
+            assert '5カテゴリのモデル候補' in html
             for value in (True, '1', 1.5, 0, count+1):
                 bad = deepcopy(generated); bad['players'][0]['car_number'] = value
                 assert validate_race_data(bad)
@@ -186,7 +203,7 @@ def main() -> None:
         (output_dir / 'metrics.json').write_text(json.dumps(metrics), encoding='utf-8')
 
 
-    print('LightGBM mixed 7/9 train → save → reload → inference → offline HTML: PASS')
+    print('LightGBM mixed 7/9 train → save → reload → inference → five categories → offline HTML: PASS')
 
 
 if __name__ == '__main__':

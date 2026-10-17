@@ -10,6 +10,8 @@ on:
       - 'tests/ml_position_smoke.py'
       - 'tests/test_offline_preview.py'
       - 'tests/test_offline_preview_ui.cjs'
+      - 'tests/test_category_selection.py'
+      - 'supabase/functions/predict-engine-dev/engine_phase32.ts'
       - 'tests/test_offline_evaluation.py'
       - 'tests/test_historical*.py'
       - 'tests/historical_training_smoke.py'
@@ -23,6 +25,8 @@ on:
       - 'tests/ml_position_smoke.py'
       - 'tests/test_offline_preview.py'
       - 'tests/test_offline_preview_ui.cjs'
+      - 'tests/test_category_selection.py'
+      - 'supabase/functions/predict-engine-dev/engine_phase32.ts'
       - 'tests/test_offline_evaluation.py'
       - 'tests/test_historical*.py'
       - 'tests/historical_training_smoke.py'
@@ -59,6 +63,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Check model category selection against the existing TypeScript policy
+        run: python -m unittest discover -s tests -p 'test_category_selection.py' -v
       - name: Check generated preview in Chrome at phone and desktop widths
         env:
           KEIRIN_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/keirin-offline-preview

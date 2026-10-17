@@ -10,6 +10,7 @@ import lightgbm as lgb
 import numpy as np
 
 from ml.feature_extraction import extract_player_model_fields, sanitize_prediction_odds
+from ml.category_selection import select_model_categories
 from ml.position_features import FEATURE_COLUMNS, row_to_features
 from ml.train_position_models import MODEL_VERSION, _softmax
 from ml.trifecta_adapter import ADAPTER_VERSION, combine_position_probabilities, validate_trifecta_table
@@ -167,6 +168,7 @@ def predict_race(race_data: dict[str, Any], model_dir: Path) -> dict[str, Any]:
         "position_probabilities": distributions,
         "position_rankings": _rank_positions(distributions),
         "trifecta_scores": scores,
+        "selected_predictions": select_model_categories(scores, len(player_rows)),
         "input_quality": {
             "rider_count": len(player_rows),
             "known_trifecta_odds_count": known,

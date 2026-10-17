@@ -2,6 +2,7 @@ from itertools import permutations
 import unittest
 
 from ml.offline_preview import render_preview, validate_preview
+from ml.category_selection import select_model_categories
 
 
 def fixture(count=7):
@@ -35,6 +36,18 @@ class OfflinePreviewTests(unittest.TestCase):
             self.assertNotIn('<script',html)
             self.assertNotIn('<form',html)
             self.assertEqual(result,fixture(count))
+            self.assertEqual(html.count('class="card category"'), 5)
+
+    def test_selection_must_match_model_scores(self):
+        for count in (7,9):
+            result=fixture(count)
+            result['selected_predictions']=select_model_categories(result['trifecta_scores'], count)
+            self.assertIn('5カテゴリのモデル候補 · 3点',render_preview(result))
+            result['selected_predictions']['categories']['hit_priority']['picks'][0]['odds']=999
+            with self.assertRaises(ValueError):render_preview(result)
+            result['selected_predictions']=select_model_categories(result['trifecta_scores'], count)
+            result['selected_predictions']['monetary_ev_enabled']=0
+            with self.assertRaises(ValueError):render_preview(result)
 
     def test_text_is_escaped_and_unknown_provenance_not_promoted(self):
         result=fixture()

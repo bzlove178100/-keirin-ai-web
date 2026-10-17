@@ -2,19 +2,14 @@
 from __future__ import annotations
 
 from html import escape
-from itertools import permutations
-import math
+import json
 from pathlib import Path
 from string import Template
 from typing import Any
 
+from ml.category_selection import CATEGORY_RULES, _number, select_model_categories, validate_model_scores
+
 POSITIONS = ('first', 'second', 'third')
-
-
-def _number(value: Any, *, probability: bool = False) -> bool:
-    return type(value) in (int, float) and math.isfinite(value) and (
-        0 <= value <= 1 if probability else value > 0
-    )
 
 
 def validate_preview(result: Any) -> None:
@@ -39,31 +34,19 @@ def validate_preview(result: Any) -> None:
     if type(count) is not int or count not in (7, 9):
         raise ValueError('standard seven or nine riders required')
     cars = set(range(1, count + 1))
-    expected_keys = {'-'.join(map(str, xs)) for xs in permutations(sorted(cars), 3)}
     scores = result.get('trifecta_scores')
-    if not isinstance(scores, list) or len(scores) != len(expected_keys):
-        raise ValueError('complete probability table required')
-    seen, mass, known = set(), 0.0, 0
-    for row in scores:
-        if not isinstance(row, dict):
-            raise ValueError('invalid probability row')
-        key, p, odds = row.get('combo_key'), row.get('estimated_probability'), row.get('odds')
-        if not isinstance(key, str) or key not in expected_keys or key in seen or not _number(p, probability=True):
-            raise ValueError('invalid probability row')
-        if odds is not None and not _number(odds):
-            raise ValueError('invalid confirmed odds')
-        if row.get('monetary_expected_value') is not None:
-            raise ValueError('monetary EV must remain unavailable')
-        seen.add(key)
-        mass += p
-        known += odds is not None
-    if abs(mass - 1) > 1e-6:
-        raise ValueError('probability mass must equal one')
+    known = validate_model_scores(scores, count)
     if (type(quality.get('possible_trifecta_count')) is not int or
-            quality['possible_trifecta_count'] != len(expected_keys) or
+            quality['possible_trifecta_count'] != len(scores) or
             type(quality.get('known_trifecta_odds_count')) is not int or
             quality['known_trifecta_odds_count'] != known):
         raise ValueError('coverage metadata does not match probability table')
+    # Older preview JSON can still be viewed. If supplied, selection must exactly
+    # match the model table; never display stale or substituted category picks.
+    if 'selected_predictions' in result:
+        expected_selection = select_model_categories(scores, count)
+        if json.dumps(result['selected_predictions'], sort_keys=True, allow_nan=False) != json.dumps(expected_selection, sort_keys=True, allow_nan=False):
+            raise ValueError('category selection does not match model table')
     rankings = result.get('position_rankings')
     if not isinstance(rankings, dict):
         raise ValueError('position rankings required')
@@ -110,11 +93,22 @@ def render_preview(result: dict[str, Any]) -> str:
     scope = '合成データでの動作検証' if metadata.get('evidence_scope') == 'synthetic_test_only' else '学習データの由来は未確認'
     ranked = sorted(result['trifecta_scores'], key=lambda r: (-r['estimated_probability'], tuple(map(int, r['combo_key'].split('-')))))
     cards = ''.join(f'<section class="card"><h3>{i}着モデル</h3>{_table(result["position_rankings"][position], positions=True)}</section>' for i, position in enumerate(POSITIONS, start=1))
+    selection = select_model_categories(result['trifecta_scores'], quality['rider_count'])
+    category_cards = []
+    for key, category in selection['categories'].items():
+        _, minimum, maximum = CATEGORY_RULES[key]
+        band = ('全組合せからスコア順' if key == 'hit_priority' else
+                f'{minimum}倍以上' + (f'・{maximum}倍未満' if maximum is not None else ''))
+        status = {'ready': '3点', 'partial': f"{len(category['picks'])}点・候補不足", 'skipped': '見送り'}[category['status']]
+        content = _table(category['picks']) if category['picks'] else ''
+        note = f'<p class="muted">{_safe(category["category_note"])}</p>' if category['category_note'] else ''
+        category_cards.append(f'<section class="card category" data-category="{key}"><h3>{_safe(category["category_name"])} <span class="muted">{status}</span></h3><p class="muted">{band}</p>{content}{note}</section>')
     template = Template((Path(__file__).parent / 'templates' / 'offline_preview.html').read_text(encoding='utf-8'))
     return template.substitute(
         title=f"{_safe(race.get('venue'))} {_safe(race.get('race_number'))}R",
         race_date=_safe(race.get('date')), scope=scope, count=quality['rider_count'],
         possible=quality['possible_trifecta_count'], known=quality['known_trifecta_odds_count'],
         top_table=_table(ranked[:10]), position_cards=cards, full_table=_table(ranked),
+        category_cards=''.join(category_cards), total_picks=selection['total_picks'],
         model_version=_safe(result['model_version']), generated_at=_safe(result.get('generated_at')),
     )
