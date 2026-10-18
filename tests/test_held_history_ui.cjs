@@ -36,6 +36,8 @@ const upload=(name,value)=>({name,mimeType:'application/json',buffer:Buffer.from
      assert.match(await page.locator('#history-status').innerText(),/保留理由を記録/);
      assert.equal(await page.locator('#download-history').isDisabled(),false);
      console.log('click held download',await page.locator('#history-summary').textContent());
+     // Pace this matrix below Chromium's per-frame download rate limit.
+     await new Promise(resolve=>setTimeout(resolve,300));
      const pending=page.waitForEvent('download');await page.locator('#download-history').click();
      console.log('held download click returned',await page.locator('#download-history').isDisabled(),await page.locator('#history-status').textContent());
      const download=await pending;
@@ -48,6 +50,7 @@ const upload=(name,value)=>({name,mimeType:'application/json',buffer:Buffer.from
      await page.waitForFunction(()=>document.getElementById('held-count').textContent==='1');
      const report=JSON.parse(await page.locator('#collection-summary').innerText());
      assert.equal(report.eligible_unique_races,0);assert.equal(report.excluded.race_has_held_result,1);
+     await new Promise(resolve=>setTimeout(resolve,300));
      const bundlePending=page.waitForEvent('download');await page.locator('#save-history-bundle').click();
      const bundle=JSON.parse(await fs.readFile(await (await bundlePending).path(),'utf8'));
      assert.equal(bundle.payload.records.length,2);assert.equal(core.collectionStatus(bundle.payload.records).held_unique_races,1);
