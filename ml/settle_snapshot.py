@@ -14,6 +14,11 @@ from pathlib import Path
 import re
 from typing import Any
 
+try:
+    from .race_conditions import require_standard_conditions
+except ImportError:  # Direct CLI remains supported.
+    from race_conditions import require_standard_conditions
+
 ENGINE_VERSION = "phase32-hit-priority-all210-v1"
 TRAINING_SCHEMA = "keirin-training-input-v1"
 OUTPUT_SCHEMA = "backtest-record-v2"
@@ -108,6 +113,8 @@ def validate_snapshot(snapshot: dict[str, Any]) -> None:
     _snapshot_times(snapshot)
 
     race_data = snapshot.get("race_data") or {}
+    if "race_conditions" in race_data:
+        require_standard_conditions(race_data["race_conditions"])
     players = race_data.get("players")
     if not isinstance(players, list) or len(players) not in (7, 9):
         raise ValueError("seven_or_nine_riders_required")
@@ -138,6 +145,8 @@ def validate_snapshot(snapshot: dict[str, Any]) -> None:
 
 def build_training_input(snapshot: dict[str, Any], evaluation_scope: str = "prospective") -> dict[str, Any]:
     race_data = snapshot["race_data"]
+    if "race_conditions" in race_data:
+        require_standard_conditions(race_data["race_conditions"])
     engine = snapshot["engine_response"]
     race = deepcopy(race_data.get("race") or {})
     players = deepcopy(race_data.get("players") or [])
@@ -157,6 +166,7 @@ def build_training_input(snapshot: dict[str, Any], evaluation_scope: str = "pros
         "captured_at": snapshot["captured_at"],
         "race": race,
         "players": players,
+        **({"race_conditions": deepcopy(race_data["race_conditions"])} if "race_conditions" in race_data else {}),
         "odds": {"trifecta": raw},
         "prediction_context": context,
         "odds_sanitization": {

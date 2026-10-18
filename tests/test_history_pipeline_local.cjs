@@ -4,6 +4,7 @@ const {stripTypeScriptTypes}=require('node:module');
 const root=process.cwd();
 const common=require(root+'/supabase/functions/_shared/race_probability.ts');
 const training=require(root+'/supabase/functions/history-pipeline-dev/training_input.ts');
+const {validateRaceData}=require(root+'/supabase/functions/predict-engine-dev/race_data_contract.ts');
 const {buildFullPredictionWithWeights}=require(root+'/supabase/functions/predict-engine-dev/engine_phase32.ts');
 const {snapshot}=require(root+'/tests/test_prospective_tools.cjs');
 const browserCore=require(root+'/prospective-tools-core.js');
@@ -25,6 +26,8 @@ for(const slug of ['history-builder-dev','backtest-engine-dev','history-pipeline
 (async()=>{
  for(const count of [7,9]){
   const snap=snapshot(0,'synthetic',count);
+  snap.race_data.players.forEach(p=>p.name=`SYNTHETIC RIDER ${p.car_number}`);
+  snap.race_data.race_conditions={race_status:'scheduled',withdrawn_car_numbers:[]};
   snap.engine_response.prediction=buildFullPredictionWithWeights(snap.race_data);
   assert.equal(browserCore.validateSnapshot(snap),true);
   const browserRecord=browserCore.buildHistory(snap,{outcomeCombo:`${count}-${count-1}-${count-2}`,settlementOdds:42,resultTimestamp:'2026-09-24T00:40:00Z'});
@@ -37,7 +40,35 @@ for(const slug of ['history-builder-dev','backtest-engine-dev','history-pipeline
   assert.equal(data.history_warnings.length,0);
   assert.equal(data.saved,false);assert.equal(data.db_write_enabled,false);assert.equal(data.production_prediction_enabled,false);
   assert.equal(Object.keys(data.history_record.training_input.odds.trifecta).length,72);
+  assert.deepEqual(data.history_record.training_input.race_conditions,snap.race_data.race_conditions);
+  assert.deepEqual(browserRecord.training_input.race_conditions,snap.race_data.race_conditions);
+  assert.equal(validateRaceData(snap.race_data).length,0);
   assert(!JSON.stringify(data.history_record.training_input).includes('outcome_combo'));
+  const invalid=[null,{},[],false,'scheduled',
+    {race_status:'cancelled',withdrawn_car_numbers:[]},
+    {race_status:'scheduled',withdrawn_car_numbers:[count]},
+    {race_status:'scheduled',withdrawn_car_numbers:null},
+    {race_status:'scheduled',withdrawn_car_numbers:[],extra:true}];
+  for(const conditions of invalid){
+    const bad=structuredClone(snap);bad.race_data.race_conditions=conditions;
+    assert(validateRaceData(bad.race_data).length>0,'predict must reject declared nonstandard conditions');
+    assert.throws(()=>browserCore.validateSnapshot(bad));
+    assert.throws(()=>browserCore.buildTrainingInput(bad));
+    assert.throws(()=>training.buildTrainingInput(bad,bad.engine_response,'prospective'));
+    const badRecord=structuredClone(browserRecord);badRecord.training_input.race_conditions=conditions;
+    const payloads={
+      'history-pipeline-dev':{mode:'dry_run',require_prospective:true,snapshot:bad,settlement:{outcome_combo:`${count}-${count-1}-${count-2}`,settlement_odds:42,result_timestamp:'2026-09-24T00:40:00Z'}},
+      'history-builder-dev':{mode:'dry_run',include_backtest:true,payload:{race:{race_id:browserRecord.race_id},prediction:{prediction_timestamp:browserRecord.prediction_timestamp,selected_predictions:browserRecord.selected_predictions,trifecta_scores:browserRecord.trifecta_scores,training_input:badRecord.training_input},settlement:{outcome_combo:browserRecord.outcome_combo,settlement_odds:42,result_timestamp:'2026-09-24T00:40:00Z'}}},
+      'backtest-engine-dev':{mode:'dry_run',payload:{records:[badRecord]}},
+    };
+    for(const [slug,body] of Object.entries(payloads)){
+      calls.length=0;
+      const res=await handlers[slug](new Request('https://synthetic.invalid/'+slug,{method:'POST',headers:{Authorization:'Bearer synthetic-only','Content-Type':'application/json'},body:JSON.stringify(body)}));
+      const rejected=await res.json();assert.equal(res.status,422,JSON.stringify(rejected));
+      assert.equal(rejected.saved,false);assert.equal(rejected.db_write_enabled,false);
+      assert(calls.every(([url])=>!url.includes('/functions/v1/')),'invalid conditions must not call a child function');
+    }
+  }
   console.log(`Synthetic ${count}-rider engine → history pipeline → builder → backtest: PASS`);
  }
  assert(calls.every(([url,method])=>method==='GET'||url.includes('/functions/v1/')));

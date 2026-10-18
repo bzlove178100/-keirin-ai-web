@@ -1,5 +1,18 @@
 // Standard seven-/nine-rider fields only. Missing legacy rosters retain the
 // historical seven-rider interpretation; a malformed present roster never does.
+// Optional legacy-compatible declaration. Omission is not proof of normality.
+export function raceConditionErrors(input: any): string[] {
+  if (!input || typeof input !== 'object' ||
+      !Object.prototype.hasOwnProperty.call(input, 'race_conditions')) return [];
+  const c = input.race_conditions;
+  if (!c || typeof c !== 'object' || Array.isArray(c) ||
+      Object.keys(c).sort().join(',') !== 'race_status,withdrawn_car_numbers')
+    return ['race_conditions_contract_invalid'];
+  if (c.race_status !== 'scheduled') return ['nonstandard_race_requires_review'];
+  if (!Array.isArray(c.withdrawn_car_numbers)) return ['race_conditions_contract_invalid'];
+  return c.withdrawn_car_numbers.length ? ['withdrawal_requires_review'] : [];
+}
+
 export function raceCarNumbers(players: any): number[] | null {
   if (!Array.isArray(players) || ![7, 9].includes(players.length)) return null;
   const cars = players.map(p => p?.car_number);

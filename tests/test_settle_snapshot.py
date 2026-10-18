@@ -87,6 +87,33 @@ def snapshot(*, source="WINTICKET", odds_count=72, rider_count=7):
 
 
 class SettleSnapshotTest(unittest.TestCase):
+    def test_declared_conditions_survive_and_nonstandard_inputs_are_excluded(self):
+        from dataset import supervised_eligibility
+        from evaluation_protocol import prepare
+        for count in (7, 9):
+            snap = snapshot(source="synthetic", rider_count=count)
+            conditions = {"race_status": "scheduled", "withdrawn_car_numbers": []}
+            snap["race_data"]["race_conditions"] = deepcopy(conditions)
+            record = build_history_record(snap, outcome_combo=f"{count}-{count-1}-{count-2}",
+                settlement_odds=42.0, result_timestamp="2026-09-24T17:24:17+09:00")
+            self.assertEqual(record["training_input"]["race_conditions"], conditions)
+            self.assertIsNot(record["training_input"]["race_conditions"], snap["race_data"]["race_conditions"])
+            self.assertEqual(len(prepare([record], synthetic=True)[0]), 1)
+            for invalid in (None, {}, [], False, "scheduled",
+                    {"race_status": "cancelled", "withdrawn_car_numbers": []},
+                    {"race_status": "scheduled", "withdrawn_car_numbers": [count]},
+                    {"race_status": "scheduled", "withdrawn_car_numbers": None},
+                    {**conditions, "extra": True}):
+                with self.subTest(count=count, conditions=invalid):
+                    bad = deepcopy(snap)
+                    bad["race_data"]["race_conditions"] = invalid
+                    with self.assertRaises(ValueError): validate_snapshot(bad)
+                    with self.assertRaises(ValueError): build_training_input(bad)
+                    bad_record = deepcopy(record)
+                    bad_record["training_input"]["race_conditions"] = invalid
+                    self.assertFalse(supervised_eligibility(bad_record)[0])
+                    self.assertEqual(len(prepare([bad_record], synthetic=True)[0]), 0)
+
     def test_seven_and_nine_rider_settlement_round_trip(self):
         from evaluation_protocol import prepare
         for count, total, outcome in ((7, 210, "7-6-5"), (9, 504, "9-8-7")):

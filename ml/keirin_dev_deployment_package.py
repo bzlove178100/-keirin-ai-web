@@ -16,6 +16,7 @@ REPOSITORY_PATHS = {
         "supabase/functions/predict-engine-dev/index.ts",
         "supabase/functions/predict-engine-dev/engine_phase32.ts",
         "supabase/functions/predict-engine-dev/race_data_contract.ts",
+        "supabase/functions/_shared/race_probability.ts",
         "supabase/functions/predict-engine-dev/data_source_contract.ts",
         "supabase/functions/predict-engine-dev/persistence_contract.ts",
         "supabase/functions/predict-engine-dev/model_preview.ts",

@@ -47,5 +47,11 @@ global.fetch=async(url,options)=>{
  response=await handler(request({mode:'dry_run',race_data:input.legacy_input}));assert.equal(response.status,200);
  const legacy=await response.json();assert.equal(legacy.mode,'dry_run');assert.equal(legacy.prediction_generated,true);assert.equal(legacy.saved,false);assert(!('model_view' in legacy));
  assert.equal(legacy.prediction.trifecta_scores.length,210);
+ for(const race_conditions of [null,{},[],{race_status:'cancelled',withdrawn_car_numbers:[]},{race_status:'scheduled',withdrawn_car_numbers:[7]}]){
+  response=await handler(request({mode:'dry_run',race_data:{...input.legacy_input,race_conditions}}));
+  assert.equal(response.status,422);
+  const rejected=await response.json();assert.equal(rejected.prediction_generated,false);
+  assert.equal(rejected.saved,false);assert.equal(rejected.db_write_enabled,false);
+ }
  console.log('owner API: actual 7/9 ML bundle, unchanged role+plan gate, no bundle/unsafe/client override rejection, legacy dry-run PASS');
 })().catch(error=>{console.error(error);process.exitCode=1;});
