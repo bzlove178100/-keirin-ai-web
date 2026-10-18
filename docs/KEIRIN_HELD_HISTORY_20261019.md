@@ -33,9 +33,9 @@ withdrawnのみ `withdrawn_car_numbers` が必須で、空・重複・型違い�
   検査scriptが不在なら通常履歴だけを取込まず停止し、旧データセット/バックテスト入力を消去。
 - 既存の統合JSON形式で保留も保持。保存は明示的なJSONダウンロードで、DB保存ではない。
 
-Edge側は#266の通常結果ガードを維持するだけで、保留の生成・集計を実装していない。
+Edge側は通常結果ガードと直接履歴入力の拒否を行う。保留の生成・集計は未実装。
 ML model_historyの保留優先規則に合わせたが、MLモデルsnapshot/schemaとの相互変換は未実装。
-直接APIに非標準注記付き通常履歴を渡す経路のガードは今後の対象。
+直接APIに非標準注記付き通常履歴を渡す経路の拒否ガードは下記の追加修正で接続した。
 Python通常settlement CLIに保留オプションは追加していない（Python関数とブラウザ入口あり）。
 
 ## 検証と次工程
@@ -55,3 +55,23 @@ Python通常settlement CLIに保留オプションは追加していない（Pyt
 #265の旧版19/11/10/6を今回の復元対象として流用しない。
 KEIRIN.JP HOLD、実取得・実学習・DB書込・本番予想OFF。
 GitHubの他open PR #250/#257に対象コード重複なし。非公開Work/未push作業は未確認。
+
+## 2026-10-19 直接履歴入力の拒否ガード
+
+backtest-engine-devがroot/metadataのresult_statusを捨てて通常指標を返す問題を、
+合成の同着申告で再現（修正前200、期待422）。修正後は混在要求全体を422で拒否し、
+部分的な指標を返さない。保存OFF、子Function呼出しなし。認証とowner照会は既存のまま。
+
+- rootとmetadataのstatusは省略またはnormalのみ互換受入。省略は正常結果の証明ではない。
+- dead_heat / withdrawn_car_numbers / trifecta_outcomes / settlementは存在だけで拒否。
+  false、空配列、nullも黙って捨てない。
+- phase32-held-history-v1とml-held-history-v1は通常ラベルを付加しても拒否。
+  Pythonの直接適格判定とbrowserの収集判定にも同じ保留schemaガードを追加。
+- 不正なmetadata型もAPIで拒否。通常レコードへの明示normal追加で全指標が一致。
+- APIは保留を受入・除外集計する段階には達していない。保留を含む評価はオフライン経路を使用する。
+
+変更対象の合成試験のみ実行：7/9車のroot/metadata×status/補助項目/保留schema、
+通常記録との前後順混在、保留JSON、metadata異常を実handlerで確認。
+Python5試験にschema偽装とJS収集照合を追加して成功。実Web script＋実handlerも7/9車成功。
+前head e5f561のChrome（ML CI39176166356）は保存・再読込・統合成功。
+この追加修正のCI結果はPR本文でheadを区別して記録する。新規配備・実owner backend受入なし。

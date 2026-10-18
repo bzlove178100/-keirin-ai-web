@@ -112,17 +112,29 @@ for(const s of d.events)assert.throws(()=>core.buildHeldHistory(d.snapshot,s));
         self.assertEqual(quality["held_unique_races"], 1)
 
     def test_direct_nonstandard_annotations_cannot_be_training_labels(self):
+        rejected = []
         for location in ("root", "metadata"):
             for change in ({"result_status": "cancelled"}, {"result_status": None},
+                           {"schema_version": "phase32-held-history-v1"},
+                           {"schema_version": "ml-held-history-v1"},
                            {"dead_heat": True}, {"trifecta_outcomes": ["1-2-3", "2-1-3"]}):
                 record = self.normal()
                 (record if location == "root" else record["metadata"]).update(change)
                 self.assertFalse(supervised_eligibility(record)[0])
                 self.assertEqual(build_rows([record])[0], [])
                 self.assertEqual(prepare([record])[0], [])
+                rejected.append(record)
         good = self.normal()
         good["metadata"]["result_status"] = "normal"
         self.assertTrue(supervised_eligibility(good)[0])
+        script = """
+const fs=require('fs'),assert=require('assert/strict'),core=require('./prospective-tools-core.js');
+const d=JSON.parse(fs.readFileSync(0,'utf8'));
+for(const record of d.rejected)assert.equal(core.collectionStatus([record]).eligible_unique_races,0);
+assert.equal(core.collectionStatus([d.good]).eligible_unique_races,1);
+"""
+        subprocess.run(["node", "-e", script], cwd=ROOT,
+                       input=json.dumps({"rejected": rejected, "good": good}), text=True, check=True)
 
 
 if __name__ == "__main__":

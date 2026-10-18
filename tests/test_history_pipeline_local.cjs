@@ -45,6 +45,36 @@ for(const slug of ['history-builder-dev','backtest-engine-dev','history-pipeline
   assert.equal(validateRaceData(snap.race_data).length,0);
   assert(!JSON.stringify(data.history_record.training_input).includes('outcome_combo'));
   const normalSettlement={outcome_combo:browserRecord.outcome_combo,settlement_odds:42,result_timestamp:'2026-09-24T00:40:00Z'};
+  async function directBacktest(records, accepted) {
+    calls.length=0;
+    const res=await handlers['backtest-engine-dev'](new Request('https://synthetic.invalid/backtest',{method:'POST',headers:{Authorization:'Bearer synthetic-only','Content-Type':'application/json'},body:JSON.stringify({mode:'dry_run',payload:{records}})}));
+    const result=await res.json();
+    assert.equal(res.status,accepted?200:422,JSON.stringify(result));
+    assert.equal(result.saved,false);assert.equal(result.db_write_enabled,false);
+    assert(calls.every(([url,method])=>method==='GET'&&!url.includes('/functions/v1/')),'direct review must only read synthetic owner identity');
+    if(!accepted){assert.equal(result.input_validation_ok,false);assert.equal(result.result,undefined,'rejected batch must not return partial metrics');}
+    return result.result;
+  }
+  const originalMetrics=await directBacktest([browserRecord],true);
+  for(const location of ['root','metadata']){
+    const normal=structuredClone(browserRecord);
+    (location==='root'?normal:normal.metadata).result_status='normal';
+    assert.deepEqual(await directBacktest([normal],true),originalMetrics,'normal declaration must preserve all metrics');
+    for(const declaration of [{result_status:'dead_heat'},{result_status:'withdrawn'},{result_status:'cancelled'},
+      {result_status:'unknown'},{result_status:null},{result_status:0},{result_status:false},
+      {dead_heat:false},{withdrawn_car_numbers:[]},{trifecta_outcomes:['1-2-3','2-1-3']},{settlement:null},
+      {schema_version:'phase32-held-history-v1'},{schema_version:'ml-held-history-v1'}]){
+      const bad=structuredClone(browserRecord);
+      Object.assign(location==='root'?bad:bad.metadata,declaration);
+      await directBacktest([bad],false);
+      await directBacktest([browserRecord,bad],false);
+      await directBacktest([bad,browserRecord],false);
+    }
+  }
+  const held=browserCore.buildHeldHistory(snap,{result_status:'cancelled',result_timestamp:normalSettlement.result_timestamp});
+  await directBacktest([browserRecord,held],false);
+  for(const metadata of [[],false,0,'normal'])await directBacktest([{...browserRecord,metadata}],false);
+  console.log(`Synthetic ${count}-rider direct backtest result declarations: PASS`);
   for(const declaration of [{result_status:'normal'},{result_status:'dead_heat'},{result_status:'withdrawn',withdrawn_car_numbers:[count]},{result_status:'cancelled'},{result_status:null},{result_status:'unknown'},{dead_heat:true},{trifecta_outcomes:['1-2-3','2-1-3']},{unexpected:true}]){
     const accepted=declaration.result_status==='normal';
     const settlement={...normalSettlement,...declaration};

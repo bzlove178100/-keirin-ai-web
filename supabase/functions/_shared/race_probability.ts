@@ -61,3 +61,23 @@ export function settlementDeclarationErrors(settlement: any): string[] {
     return ['nonstandard_result_requires_review'];
   return settlement.result_status === 'normal' ? [] : ['result_status_invalid'];
 }
+
+// Direct history intake must not discard declarations before computing metrics.
+// Legacy omission is accepted for compatibility, not evidence of a normal race.
+export function historyResultDeclarationErrors(record: any): string[] {
+  const errors: string[] = [];
+  for (const part of [record, record?.metadata ?? {}]) {
+    if (!part || typeof part !== 'object' || Array.isArray(part)) {
+      errors.push('history_result_metadata_invalid');
+      continue;
+    }
+    if (['phase32-held-history-v1', 'ml-held-history-v1'].includes(part.schema_version))
+      errors.push('held_history_requires_offline_review');
+    if (Object.prototype.hasOwnProperty.call(part, 'result_status') && part.result_status !== 'normal')
+      errors.push('nonstandard_result_requires_review');
+    if (['dead_heat', 'withdrawn_car_numbers', 'trifecta_outcomes', 'settlement']
+        .some(key => Object.prototype.hasOwnProperty.call(part, key)))
+      errors.push('history_result_fields_invalid');
+  }
+  return [...new Set(errors)];
+}

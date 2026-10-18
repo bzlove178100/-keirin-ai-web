@@ -321,6 +321,7 @@
   function recordCandidate(record) {
     for (const part of [record, (record && record.metadata) || {}]) {
       if (!part || typeof part !== 'object' || Array.isArray(part) ||
+          [HELD_SCHEMA, 'ml-held-history-v1'].includes(part.schema_version) ||
           (Object.prototype.hasOwnProperty.call(part, 'result_status') && part.result_status !== 'normal') ||
           ['dead_heat','withdrawn_car_numbers','trifecta_outcomes','settlement'].some(key => Object.prototype.hasOwnProperty.call(part, key))) fail('nonstandard_result_requires_review');
     }

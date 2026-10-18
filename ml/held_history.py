@@ -91,6 +91,8 @@ def normal_result_declared(record: dict) -> bool:
     for part in (record, record.get("metadata") or {}):
         if not isinstance(part, dict):
             return False
+        if part.get("schema_version") in (HELD_SCHEMA, "ml-held-history-v1"):
+            return False
         if "result_status" in part and part["result_status"] != "normal":
             return False
         if any(key in part for key in ("dead_heat", "withdrawn_car_numbers", "trifecta_outcomes", "settlement")):

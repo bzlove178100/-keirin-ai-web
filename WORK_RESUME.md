@@ -1,5 +1,18 @@
 # Work resume handoff
 
+## Phase32 direct history guard — 2026-10-19
+
+#266 head `e5f561201fb3189ec1c4bd5c6d0257cebea6455d`から継続。mainは`d069ab9b6adcf9585954a5bae7be7df0546e473c`。
+前headのChrome保存・再読込・統合は成功。5 CI成功、runtime39176166395は回帰待ち、回帰39176166392はqueued（08:35 JST照合）。再実行なし。
+今回、非標準結果を注記した履歴が直接backtest APIで通常集計される問題を合成試験で再現し修正。
+root/metadataの非標準・未知status、結果補助項目、既知の2種類の保留schemaを拒否。混在要求は全体422、部分指標なし。
+状態省略の旧形式と明示normalは互換維持し、全指標一致を確認。保留schemaに通常ラベルを付けた入力はPython/browserも除外。
+7/9車の直接API＋pipeline、実Web script＋実handler、Python5試験（JS照合含む）が成功。新head CIはPR本文を正とする。
+契約と残件は`docs/KEIRIN_HELD_HISTORY_20261019.md`。次は新head CIとEdge保留生成/集計の接続。
+今回は拒否ガードまでで、Edge保留生成・集計・MLモデル履歴変換・解除処理は未実装。
+公開/配備は未承認。API predict20/history12/backtest11/history-pipeline7は未変更。
+KEIRIN.JP HOLD、実取得・実学習・DB書込・本番予想OFF。#265の承認を拡張しない。
+
 ## Phase32 offline held history — 2026-10-19
 
 main `d069ab9b6adcf9585954a5bae7be7df0546e473c`と#266旧head `7a4fa23bdb2e32d79a40b899d917160c553ee8c2`を照合。
