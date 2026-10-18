@@ -27,7 +27,7 @@ const upload=(name,value)=>({name,mimeType:'application/json',buffer:Buffer.from
      await page.locator('#result-status').selectOption(status);
      assert(await page.locator('#hold-note').isVisible());
      assert(!(await page.locator('#normal-result-fields').isVisible()));
-     await page.locator('#result-time').fill('2026-09-24T09:40:00');
+     await page.locator('#result-time').fill('2026-09-24T09:40');
      if(status==='withdrawn')await page.locator('#withdrawn').fill(String(count));
      await page.locator('#build-history').click();
      assert.match(await page.locator('#history-status').innerText(),/保留理由を記録/);
@@ -46,7 +46,7 @@ const upload=(name,value)=>({name,mimeType:'application/json',buffer:Buffer.from
      const bundle=JSON.parse(await fs.readFile(await (await bundlePending).path(),'utf8'));
      assert.equal(bundle.payload.records.length,2);assert.equal(core.collectionStatus(bundle.payload.records).held_unique_races,1);
      // A changed input invalidates the old downloadable result immediately.
-     await page.locator('#result-time').fill('2026-09-24T09:41:00');
+     await page.locator('#result-time').fill('2026-09-24T09:41');
      assert(await page.locator('#download-history').isDisabled());
     }
     await page.locator('#result-status').selectOption('withdrawn');
