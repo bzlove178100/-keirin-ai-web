@@ -16,7 +16,12 @@ on:
       - 'tests/test_category_selection.py'
       - 'tests/test_model_history.py'
       - 'tests/test_synthetic_workbench*'
+      - 'tests/test_keirin_dev_deployment_package.py'
+      - 'tests/test_web_dry_run.cjs'
       - 'supabase/functions/predict-engine-dev/**'
+      - 'supabase/functions/history-builder-dev/**'
+      - 'supabase/functions/backtest-engine-dev/**'
+      - 'supabase/functions/_shared/race_probability.ts'
       - 'tests/test_offline_evaluation.py'
       - 'tests/test_historical*.py'
       - 'tests/historical_training_smoke.py'
@@ -36,7 +41,12 @@ on:
       - 'tests/test_category_selection.py'
       - 'tests/test_model_history.py'
       - 'tests/test_synthetic_workbench*'
+      - 'tests/test_keirin_dev_deployment_package.py'
+      - 'tests/test_web_dry_run.cjs'
       - 'supabase/functions/predict-engine-dev/**'
+      - 'supabase/functions/history-builder-dev/**'
+      - 'supabase/functions/backtest-engine-dev/**'
+      - 'supabase/functions/_shared/race_probability.ts'
       - 'tests/test_offline_evaluation.py'
       - 'tests/test_historical*.py'
       - 'tests/historical_training_smoke.py'
@@ -66,6 +76,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Run synthetic Web prediction to history and evaluation checks
+        run: node tests/test_web_dry_run.cjs
       - name: Run offline preview validation and escaping checks
         run: python -m unittest discover -s tests -p 'test_offline_preview.py' -v
       - name: Run frozen ML snapshot, settlement and review contracts
@@ -74,6 +86,8 @@ jobs:
         env:
           OMP_NUM_THREADS: '2'
         run: python -m unittest discover -s tests -p 'test_synthetic_workbench*.py' -v
+      - name: Run deployment package and rollback integrity checks
+        run: python -m unittest tests.test_keirin_dev_deployment_package -v
       - name: Run position-model train and inference smoke
         env:
           OMP_NUM_THREADS: '2'
@@ -83,7 +97,11 @@ jobs:
         with:
           deno-version: v2.x
       - name: Check owner API module graph without credentials or deployment
-        run: deno check supabase/functions/predict-engine-dev/index.ts
+        run: >-
+          deno check
+          supabase/functions/predict-engine-dev/index.ts
+          supabase/functions/history-builder-dev/index.ts
+          supabase/functions/backtest-engine-dev/index.ts
       - name: Check model category selection against the existing TypeScript policy
         run: python -m unittest discover -s tests -p 'test_category_selection.py' -v
       - name: Check generated preview in Chrome at phone and desktop widths
