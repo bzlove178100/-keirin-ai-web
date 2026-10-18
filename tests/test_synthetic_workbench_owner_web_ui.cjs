@@ -37,13 +37,14 @@ global.fetch=async(url,options)=>{
   browser=await chromium.launch({headless:true,executablePath:process.env.KEIRIN_BROWSER_EXECUTABLE||undefined});
   for(const width of [390,1280]){
    const page=await browser.newPage({viewport:{width,height:900}}),errors=[],unexpected=[],posts=[];
-   let unavailable=false,corrupt=false,release=null,started=null,delay=false;
+   let unavailable=false,corrupt=false,release=null,started=null,delay=false,missingController=false;
    page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/*',async route=>{
     const request=route.request(),url=new URL(request.url());
     if(url.origin===origin){
      if(url.pathname==='/favicon.ico')return route.fulfill({status:204,body:''});
      const name=path.basename(url.pathname);
+     if(name==='model-owner-preview.js'&&missingController)return route.fulfill({status:404,body:''});
      if(['index.html','prospective-tools-core.js','model-web-response.js','model-owner-preview.js'].includes(name)){
       return route.fulfill({status:200,contentType:name.endsWith('.js')?'text/javascript':'text/html',body:await fs.readFile(path.join(output,name),'utf8')});
      }
@@ -107,7 +108,15 @@ global.fetch=async(url,options)=>{
    assert.equal(await page.locator('#owner-model-panel .pick-item').count(),0);
    assert(posts.every(b=>b.mode==='synthetic_model_view'&&Object.keys(b).sort().join(',')==='mode,snapshot_id'));
    assert.deepEqual(unexpected,[]);assert.deepEqual(errors,[]);
-   console.log(`${width}px: generated LightGBM package + full owner page login + actual synthetic handler + 7/9 display + failure/logout clearing PASS`);
+   missingController=true;
+   await page.reload();
+   await page.getByText('合成モデル画面を読み込めませんでした。ページを再読み込みしてください。',{exact:true}).waitFor();
+   assert.equal(await page.locator('#owner-model-panel').count(),0);
+   await page.locator('#email').fill(user.email);await page.locator('#password').fill('synthetic-password');await page.locator('#login').click();
+   await page.getByText('Web側でowner権限を確認しました。',{exact:true}).waitFor();
+   await page.locator('#logout').click();await page.locator('#logged-out').waitFor({state:'visible'});
+   assert.deepEqual(unexpected,[]);assert.deepEqual(errors,[]);
+   console.log(`${width}px: generated LightGBM package + full owner page login + actual synthetic handler + 7/9 display + failure/logout clearing + missing-asset login fallback PASS`);
    await page.close();
   }
  }finally{if(browser)await browser.close();await fs.rm(tmp,{recursive:true,force:true});}
