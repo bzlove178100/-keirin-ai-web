@@ -10,15 +10,16 @@ const upload=(name,value)=>({name,mimeType:'application/json',buffer:Buffer.from
   for(const width of [390,1280]){
    const context=await browser.newContext({viewport:{width,height:900},timezoneId:'Asia/Tokyo'});
    const page=await context.newPage(),errors=[];
-   page.on('pageerror',e=>errors.push(e.message));
+   page.on('pageerror',e=>{errors.push(e.message);console.error('page error:',e.message);});
+   page.on('console',message=>{if(['error','warning'].includes(message.type()))console.error('browser:',message.text());});
    await page.route('**/*',async route=>{
     const url=new URL(route.request().url());
-    assert.equal(url.origin,'http://held.test');
+    assert.equal(url.origin,'https://held.test');
     const name=url.pathname.slice(1);
     assert(['prospective-tools.html','prospective-tools-core.js','prospective-tools-ui.js','prospective-history-bundle.js'].includes(name));
     await route.fulfill({body:await fs.readFile(path.join(process.cwd(),name)),contentType:name.endsWith('.js')?'text/javascript':'text/html'});
    });
-   await page.goto('http://held.test/prospective-tools.html');
+   await page.goto('https://held.test/prospective-tools.html');
    for(const count of [7,9]){
     const snap=snapshot(0,'fixture',count);snap.race_data.race.venue='GENERATED';
     await page.locator('#snapshot-file').setInputFiles(upload('snapshot.json',snap));
