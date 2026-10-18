@@ -61,6 +61,9 @@ No external race data, real-data training or prediction database write occurred.
 - The new test fails on the previous main and passes with this correction.
   Existing capture/cutoff/probability/7-9 import checks also pass locally.
   CI status and exact candidate head are recorded in the PR, not assumed here.
+- First candidate CI caught an unsynchronized generated-UI template. Both
+  collection patch generators now emit the same roster-aware validation;
+  regeneration leaves index.html unchanged and collection UI checks pass.
 
 This isolated branch is based on the current main tree, not the owner-panel
 branch. PR261 is unchanged; its separate panel hunks must be composed and checked

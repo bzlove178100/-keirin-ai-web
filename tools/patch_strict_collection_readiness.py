@@ -32,7 +32,7 @@ function fallbackProspectiveCollectionStatus(records) {
       training?.schema_version === 'keirin-training-input-v1' &&
       training?.evaluation_scope === 'prospective' &&
       Array.isArray(training?.players) && training.players.length >= 4 &&
-      validOutcomeCombo(record?.outcome_combo);
+      validOutcomeCombo(record?.outcome_combo, raceCarNumbers(training.players));
     if (!eligible) continue;
     const raceId = String(record?.race_id || '').trim();
     if (!raceId) continue;
