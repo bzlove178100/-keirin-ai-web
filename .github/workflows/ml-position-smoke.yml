@@ -17,6 +17,7 @@ on:
       - 'tests/test_model_history.py'
       - 'tests/test_synthetic_workbench*'
       - 'tests/test_keirin_dev_deployment_package.py'
+      - 'tests/test_web_dry_run.cjs'
       - 'supabase/functions/predict-engine-dev/**'
       - 'supabase/functions/history-builder-dev/**'
       - 'supabase/functions/backtest-engine-dev/**'
@@ -41,6 +42,7 @@ on:
       - 'tests/test_model_history.py'
       - 'tests/test_synthetic_workbench*'
       - 'tests/test_keirin_dev_deployment_package.py'
+      - 'tests/test_web_dry_run.cjs'
       - 'supabase/functions/predict-engine-dev/**'
       - 'supabase/functions/history-builder-dev/**'
       - 'supabase/functions/backtest-engine-dev/**'
@@ -74,6 +76,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Run synthetic Web prediction to history and evaluation checks
+        run: node tests/test_web_dry_run.cjs
       - name: Run offline preview validation and escaping checks
         run: python -m unittest discover -s tests -p 'test_offline_preview.py' -v
       - name: Run frozen ML snapshot, settlement and review contracts
