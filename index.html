@@ -971,6 +971,12 @@ function saveHistoryJson() {
 
 function normalizeDatasetRecord(record) {
   if (!record || typeof record !== 'object' || Array.isArray(record)) return null;
+  if (record.schema_version === 'phase32-held-history-v1') {
+    try {
+      if (globalThis.ProspectiveTools?.validateHeldHistory(record) === true) return record;
+    } catch (_) {}
+    return null;
+  }
   if (raceConditionsIssue(record.training_input)) return null;
   const cars = record.training_input == null ? [1,2,3,4,5,6,7] : raceCarNumbers(record.training_input.players);
   if (!validOutcomeCombo(record.outcome_combo, cars)) return null;
@@ -987,11 +993,13 @@ function recordsFromHistoryJson(parsed) {
   if (parsed?.mode === 'dry_run' && Array.isArray(parsed?.payload?.records)) return parsed.payload.records;
   if (Array.isArray(parsed?.records)) return parsed.records;
   if (parsed?.history_record) return [parsed.history_record];
+  if (parsed?.schema_version === 'phase32-held-history-v1') return [parsed];
   if (parsed?.selected_predictions && Array.isArray(parsed?.trifecta_scores)) return [parsed];
   return [];
 }
 
 function datasetRecordKey(record) {
+  if (record?.schema_version === 'phase32-held-history-v1') return JSON.stringify(record);
   return [record?.race_id ?? '', record?.prediction_timestamp ?? '', record?.outcome_combo ?? ''].join('|');
 }
 
@@ -1004,6 +1012,7 @@ function timezoneAwarePredictionTimestamp(value) {
 }
 
 function fallbackProspectiveCollectionStatus(records) {
+  if ((records || []).some(record => record?.schema_version === 'phase32-held-history-v1')) records = [];
   const latestByRace = new Map();
   for (const record of Array.isArray(records) ? records : []) {
     const metadata = record?.metadata || {};
@@ -1078,10 +1087,12 @@ function refreshHistoryDatasetView(message = '') {
   show('dataset-collection-detail',readinessDetail,strictReady ? 'note ok' : timeMinimum ? 'note pending' : 'note');
   element('save-dataset').disabled = historyDatasetRecords.length === 0;
   const backtestReady = currentSession && element('backtest-engine-status').classList.contains('ok');
-  element('run-dataset-backtest').disabled = !(historyDatasetRecords.length && backtestReady);
+  const hasHeld = historyDatasetRecords.some(record => record.schema_version === 'phase32-held-history-v1');
+  element('run-dataset-backtest').disabled = hasHeld || !(historyDatasetRecords.length && backtestReady);
   const bytes = text ? new Blob([text]).size : 0;
   const size = bytes < 1024*1024 ? `${Math.ceil(bytes/1024)}KB` : `${(bytes/1024/1024).toFixed(2)}MB`;
   show('history-dataset-note', message || (historyDatasetRecords.length ? `統合済み：${historyDatasetRecords.length}レース / JSON ${size} / DB保存なし` : 'backtest-history-...json を複数選択してください。既存データセットJSONも追加できます。'), historyDatasetRecords.length ? 'note ok' : 'note');
+  if (hasHeld) show('history-dataset-note','保留記録を保持しています。APIバックテストは保留に未対応です。統合JSONを保存し、前向き検証ツールで確認してください。','note warn');
 }
 
 async function loadHistoryDatasetFiles(event) {
@@ -1094,6 +1105,15 @@ async function loadHistoryDatasetFiles(event) {
       if (file.size > 10_000_000) { invalid++; continue; }
       const parsed = JSON.parse(await file.text());
       const records = recordsFromHistoryJson(parsed);
+      if (records.some(record => record?.schema_version === 'phase32-held-history-v1') &&
+          typeof globalThis.ProspectiveTools?.validateHeldHistory !== 'function') {
+        historyDatasetRecords = [];
+        element('backtest-json').value = '';
+        resetBacktestResults('保留検査器不在・未実行');
+        refreshHistoryDatasetView('保留記録の検査器を読み込めません。通常履歴だけを取り込まず停止しました。');
+        event.target.value = '';
+        return;
+      }
       if (!records.length) { invalid++; continue; }
       for (const candidate of records) {
         const record = normalizeDatasetRecord(candidate);
@@ -1125,6 +1145,11 @@ function saveHistoryDataset() {
 
 async function runHistoryDatasetBacktest() {
   if (!historyDatasetRecords.length) return;
+  if (historyDatasetRecords.some(record => record.schema_version === 'phase32-held-history-v1')) {
+    resetBacktestResults('保留記録あり・未実行');
+    refreshHistoryDatasetView();
+    return;
+  }
   const payload = {mode:'dry_run',payload:{records:historyDatasetRecords}};
   element('backtest-json').value = JSON.stringify(payload,null,2);
   resetBacktestResults('未実行');

@@ -8,7 +8,7 @@
 <title>競輪AI 前向き検証ツール</title>
 <style>
 :root{color-scheme:dark;--bg:#0b1020;--card:#151c2f;--line:#2a3550;--muted:#b2bdd0;--ok:#86efac;--warn:#fcd34d;--err:#fda4af}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.65}.wrap{width:min(92%,760px);margin:auto;padding:28px 0 60px}header{text-align:center;margin-bottom:24px}h1{font-size:27px;margin:0 0 8px}h2{font-size:21px;margin:0 0 12px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:20px}label{display:block;margin-top:12px;margin-bottom:5px;color:var(--muted)}input,textarea{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:10px;background:#0f172a;color:#fff;font-size:16px}button{width:100%;margin-top:14px;padding:14px;border:0;border-radius:11px;background:#2f6df6;color:#fff;font-size:16px;font-weight:700}button.secondary{background:#354158}button:disabled{opacity:.55}.note{font-size:14px;color:var(--muted)}.ok{color:var(--ok)}.warn{color:var(--warn)}.error{color:var(--err)}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0f172a;border:1px solid var(--line);padding:14px;border-radius:10px;font-size:13px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#0f172a;border:1px solid var(--line);border-radius:10px;padding:12px}.metric b{display:block;font-size:22px}.metric span{color:var(--muted);font-size:13px}@media(max-width:520px){.grid{grid-template-columns:1fr}h1{font-size:24px}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.65}.wrap{width:min(92%,760px);margin:auto;padding:28px 0 60px}header{text-align:center;margin-bottom:24px}h1{font-size:27px;margin:0 0 8px}h2{font-size:21px;margin:0 0 12px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:20px}label{display:block;margin-top:12px;margin-bottom:5px;color:var(--muted)}input,textarea,select{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:10px;background:#0f172a;color:#fff;font-size:16px}button{width:100%;margin-top:14px;padding:14px;border:0;border-radius:11px;background:#2f6df6;color:#fff;font-size:16px;font-weight:700}button.secondary{background:#354158}button:disabled{opacity:.55}.note{font-size:14px;color:var(--muted)}.ok{color:var(--ok)}.warn{color:var(--warn)}.error{color:var(--err)}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0f172a;border:1px solid var(--line);padding:14px;border-radius:10px;font-size:13px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#0f172a;border:1px solid var(--line);border-radius:10px;padding:12px}.metric b{display:block;font-size:22px}.metric span{color:var(--muted);font-size:13px}@media(max-width:520px){.grid{grid-template-columns:1fr}h1{font-size:24px}}
 </style>
 </head>
 <body>
@@ -24,10 +24,16 @@
 <label for="snapshot-file">予測スナップショットJSON</label>
 <input id="snapshot-file" type="file" accept=".json,application/json">
 <p id="snapshot-status" class="note">未選択</p>
+<label for="result-status">結果の状態</label>
+<select id="result-status"><option value="normal">通常の着順</option><option value="dead_heat">同着・評価保留</option><option value="withdrawn">欠車・評価保留</option><option value="cancelled">中止・評価保留</option></select>
+<p id="hold-note" class="warn" hidden>保留理由を記録します。着順や配当は作らず、同じレースの通常履歴も評価対象から除外します。</p>
+<div id="withdrawn-field" hidden><label for="withdrawn">欠車の車番（複数はカンマ区切り）</label><input id="withdrawn" type="text" inputmode="numeric" placeholder="例：7,9"></div>
+<div id="normal-result-fields">
 <label for="outcome">確定3連単</label>
 <input id="outcome" type="text" inputmode="numeric" placeholder="例：3-4-7">
 <label for="settlement-odds">確定オッズ（倍）</label>
 <input id="settlement-odds" type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="例：39.3">
+</div>
 <label for="result-time">結果確認・記録時刻（端末現地時刻）</label>
 <input id="result-time" type="datetime-local" step="1">
 <button id="set-now" class="secondary" type="button">現在時刻を入力</button>
@@ -47,6 +53,7 @@
 <div class="metric"><b id="distinct-count">0</b><span>異なる予測時刻</span></div>
 <div class="metric"><b id="remaining-count">5</b><span>最低5時刻まで残り</span></div>
 <div class="metric"><b id="partition-ready">未達</b><span>時系列分割</span></div>
+<div class="metric"><b id="held-count">0</b><span>評価を保留したレース</span></div>
 </div>
 <p id="collection-status" class="note">履歴ファイルを選択してください。</p>
 <pre id="collection-summary">-</pre>

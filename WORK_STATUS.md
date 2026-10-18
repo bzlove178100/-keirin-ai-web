@@ -1,5 +1,15 @@
 # Work status
 
+## Phase32 offline held history — 2026-10-19
+
+main `d069ab9b6adcf9585954a5bae7be7df0546e473c`と#266旧head `7a4fa23bdb2e32d79a40b899d917160c553ee8c2`を照合。
+#266旧headは7 workflows成功、回帰39128022537は47/47成功。再実行なし。
+#266へ保留JSON、オフラインUI保存・再読込、Python/ブラウザ評価除外を追加する未公開候補。
+詳細・検証・限界は `docs/KEIRIN_HELD_HISTORY_20261019.md`。新headのCIはPR本文を正とする。
+公開・Function配備は未承認。API predict20/history12/backtest11/history-pipeline7は未変更。
+KEIRIN.JP HOLD、実取得・実学習・DB書込・本番予想OFF。次は新headの未完CIのみ確認。
+Edge保留応答・MLモデル履歴の相互変換・解除処理は未実装。全経路完成と扱わない。
+
 ## Phase32 result declaration guard — 2026-10-18
 
 基準main `d069ab9b6adcf9585954a5bae7be7df0546e473c`（#265公開済み）。

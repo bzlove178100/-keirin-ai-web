@@ -31,6 +31,8 @@ def collection_status(records: list[dict[str, Any]]) -> dict[str, Any]:
     prediction_times = sorted({item["prediction_time"] for item in selected})
     report = {
         "input_records": len(records),
+        "held_unique_races": quality["held_unique_races"],
+        "held_race_ids": quality["held_race_ids"],
         "eligible_unique_races": len(selected),
         "eligible_race_ids": [item["race_id"] for item in selected],
         "distinct_prediction_times": protocol["distinct_prediction_times"],

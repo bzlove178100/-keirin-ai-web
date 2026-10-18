@@ -112,6 +112,7 @@ jobs:
           export KEIRIN_PLAYWRIGHT_MODULE="$RUNNER_TEMP/keirin-preview-browser/node_modules/playwright"
           export KEIRIN_BROWSER_EXECUTABLE="$(command -v google-chrome || command -v chromium)"
           test -n "$KEIRIN_BROWSER_EXECUTABLE"
+          node tests/test_held_history_ui.cjs
           node tests/test_offline_preview_ui.cjs
           node tests/test_synthetic_workbench_ui.cjs
           node tests/test_synthetic_workbench_restart_ui.cjs

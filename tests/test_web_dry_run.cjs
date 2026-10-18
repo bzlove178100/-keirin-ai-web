@@ -82,6 +82,21 @@ for(const slug of ['history-builder-dev','backtest-engine-dev','history-pipeline
   assert.equal(record.trifecta_scores.length,count*(count-1)*(count-2));
   assert.deepEqual(record.training_input.race_conditions,race.race_conditions);
   context.record=record;assert(run('normalizeDatasetRecord(record)!==null'));assert.equal(run('trainingReadiness(record)'),null);
+  const held=context.ProspectiveTools.buildHeldHistory(captured,{result_status:'withdrawn',withdrawn_car_numbers:[count],result_timestamp:'2026-09-24T00:20:00Z'});
+  context.held=held;assert(run('normalizeDatasetRecord(held)!==null'));
+  context.event={target:{files:[{name:'mixed.json',size:1000,text:async()=>JSON.stringify({records:[record,held]})}]}};
+  run('historyDatasetRecords=[]');await run('loadHistoryDatasetFiles(event)');
+  assert.equal(run('historyDatasetRecords.length'),2);
+  assert.equal(run('prospectiveCollectionStatus(historyDatasetRecords).held_unique_races'),1);
+  assert.equal(node('run-dataset-backtest').disabled,true);
+  calls.length=0;await run('runHistoryDatasetBacktest()');assert.equal(calls.length,0);
+  assert.match(node('history-dataset-note').textContent,/保留記録を保持/);
+  const heldTools=context.ProspectiveTools;delete context.ProspectiveTools;
+  assert.equal(run('normalizeDatasetRecord(held)'),null);
+  assert.equal(run('prospectiveCollectionStatus(historyDatasetRecords).eligible_unique_races'),0);
+  await run('loadHistoryDatasetFiles(event)');assert.equal(run('historyDatasetRecords.length'),0);
+  assert.match(node('history-dataset-note').textContent,/検査器を読み込めません/);
+  context.ProspectiveTools=heldTools;run('historyDatasetRecords=[]');
   // A normalized complete table for the OTHER roster must still fail closed.
   const other=count===9?7:9;
   transform=data=>({...data,prediction:{...data.prediction,trifecta_scores:snapshot(0,'SYNTHETIC_GENERATED',other).engine_response.prediction.trifecta_scores}});

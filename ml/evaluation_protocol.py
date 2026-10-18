@@ -15,9 +15,11 @@ from typing import Any
 
 try:
     from .dataset import rider_rows, supervised_eligibility
+    from .held_history import partition_holds
     from .position_features import FEATURE_COLUMNS, row_to_features
 except ImportError:
     from dataset import rider_rows, supervised_eligibility
+    from held_history import partition_holds
     from position_features import FEATURE_COLUMNS, row_to_features
 
 BASELINE = "phase32-hit-priority-all210-v1"
@@ -52,9 +54,10 @@ def probability_table(rows: Any, cars: list[int]) -> dict[str, float]:
 
 
 def prepare(records: list[dict], *, synthetic: bool = False) -> tuple[list[dict], dict]:
-    excluded: Counter[str] = Counter()
+    ordinary, hold_exclusions, held_ids = partition_holds(records)
+    excluded: Counter[str] = Counter(hold_exclusions)
     candidates: dict[str, list[dict]] = {}
-    for record in records:
+    for record in ordinary:
         try:
             eligible, reason = supervised_eligibility(record)
             if not eligible:
@@ -124,6 +127,8 @@ def prepare(records: list[dict], *, synthetic: bool = False) -> tuple[list[dict]
     }
     return selected, {
         "input_records": len(records),
+        "held_unique_races": len(held_ids),
+        "held_race_ids": held_ids,
         "eligible_unique_races": len(selected),
         "excluded": dict(excluded),
         "duplicate_snapshots_removed": duplicates,

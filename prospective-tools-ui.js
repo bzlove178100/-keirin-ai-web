@@ -10,6 +10,8 @@
   const outcome = byId('outcome');
   const settlementOdds = byId('settlement-odds');
   const resultTime = byId('result-time');
+  const resultStatus = byId('result-status');
+  const withdrawn = byId('withdrawn');
   const setNow = byId('set-now');
   const buildHistoryButton = byId('build-history');
   const downloadHistoryButton = byId('download-history');
@@ -52,6 +54,25 @@
     buildHistoryButton.disabled = !loadedSnapshot;
   }
 
+  function invalidateGenerated() {
+    generatedEnvelope = null;
+    downloadHistoryButton.disabled = true;
+    historySummary.textContent = '-';
+    historyStatus.textContent = '未生成';
+  }
+
+  function resultFields() {
+    const held = resultStatus.value !== 'normal';
+    byId('normal-result-fields').hidden = held;
+    byId('hold-note').hidden = !held;
+    byId('withdrawn-field').hidden = resultStatus.value !== 'withdrawn';
+    buildHistoryButton.textContent = held ? '保留JSONを生成' : '履歴JSONを生成';
+    downloadHistoryButton.textContent = held ? '保留JSONを保存' : '履歴JSONを保存';
+    invalidateGenerated();
+  }
+  resultStatus.addEventListener('change', resultFields);
+  for (const input of [outcome, settlementOdds, resultTime, withdrawn]) input.addEventListener('input', invalidateGenerated);
+
   snapshotFile.addEventListener('change', async () => {
     loadedSnapshot = null;
     generatedEnvelope = null;
@@ -82,22 +103,31 @@
 
   setNow.addEventListener('click', () => {
     resultTime.value = localInputValue(new Date());
+    invalidateGenerated();
   });
 
   buildHistoryButton.addEventListener('click', () => {
     generatedEnvelope = null;
     downloadHistoryButton.disabled = true;
     try {
-      const record = core.buildHistory(loadedSnapshot, {
-        outcomeCombo: outcome.value.trim(),
-        settlementOdds: Number(settlementOdds.value),
-        resultTimestamp: localInputToAwareIso(resultTime.value),
+      const held = resultStatus.value !== 'normal';
+      const observed = localInputToAwareIso(resultTime.value);
+      const settlement = {result_status: resultStatus.value, result_timestamp: observed};
+      if (resultStatus.value === 'withdrawn') settlement.withdrawn_car_numbers = withdrawn.value.trim() ? withdrawn.value.split(',').map(v => v.trim() ? Number(v.trim()) : NaN) : [];
+      const record = held ? core.buildHeldHistory(loadedSnapshot, settlement) : core.buildHistory(loadedSnapshot, {
+        outcomeCombo: outcome.value.trim(), settlementOdds: Number(settlementOdds.value),
+        resultTimestamp: observed, result_status: 'normal',
       });
       generatedEnvelope = core.historyEnvelope(record);
       const oddsCount = Object.keys((((record.training_input || {}).odds || {}).trifecta) || {}).length;
-      historyStatus.textContent = '生成成功。DB保存・外部通信は行っていません。';
+      historyStatus.textContent = held ? '保留理由を記録しました。JSONを保存し、通常履歴と一緒に読み込んでください。' : '生成成功。DB保存・外部通信は行っていません。';
       setClass(historyStatus, 'note ok');
-      historySummary.textContent = JSON.stringify({
+      historySummary.textContent = JSON.stringify(held ? {
+        race_id: record.race_id, result_status: record.settlement.result_status,
+        result_observed_timestamp: record.settlement.result_timestamp,
+        withdrawn_car_numbers: record.settlement.withdrawn_car_numbers,
+        evaluation_eligible: false, supervised_training_eligible: false,
+      } : {
         race_id: record.race_id,
         prediction_timestamp: record.prediction_timestamp,
         result_observed_timestamp: record.metadata.result_timestamp,
@@ -119,8 +149,9 @@
   downloadHistoryButton.addEventListener('click', () => {
     if (!generatedEnvelope) return;
     const record = generatedEnvelope.payload.records[0];
-    const safeVenue = String((record.metadata || {}).venue || 'venue').replace(/[^0-9A-Za-z\u3040-\u30ff\u3400-\u9fff_-]+/g, '-');
-    const filename = `backtest-history-${record.metadata.date || 'date'}-${safeVenue}-${record.metadata.race_number || 'R'}R.json`;
+    const race = record.schema_version === core.HELD_SCHEMA ? record.snapshot.race_data.race : record.metadata;
+    const safeVenue = String(race.venue || 'venue').replace(/[^0-9A-Za-z\u3040-\u30ff\u3400-\u9fff_-]+/g, '-');
+    const filename = `${record.schema_version === core.HELD_SCHEMA ? 'held-history' : 'backtest-history'}-${race.date || 'date'}-${safeVenue}-${race.race_number || 'R'}R.json`;
     const blob = new Blob([JSON.stringify(generatedEnvelope, null, 2)], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -142,6 +173,7 @@
       const records = parsed.flatMap(core.recordsFromJson);
       const status = core.collectionStatus(records);
       eligibleCount.textContent = String(status.eligible_unique_races);
+      byId('held-count').textContent = String(status.held_unique_races);
       distinctCount.textContent = String(status.distinct_prediction_times);
       remainingCount.textContent = String(status.remaining_distinct_prediction_times);
       partitionReady.textContent = status.chronological_evaluation_may_run ? '準備可' : '未達';
