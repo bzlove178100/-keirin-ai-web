@@ -37,6 +37,9 @@ ML側の既存 `race_conditions` は欠車・中止を拒否するが、Phase32�
 - 変更に関係するWeb captureと既存静的回帰、diff検査成功。
 - offline evaluation試験はローカルにLightGBMがなくimport時点で停止。
   再インストール・反復はせず、既存ML CIで確認する。新head CIはPR本文を正とする。
+- 初回UI CI39097464326は生成器とindexの不一致で失敗。追加した収集件数の条件を
+  `tools/patch_strict_collection_readiness.py` の生成テンプレートにも反映し、
+  2つの既存UI生成器がindexを変更しないことと収集UI試験を再確認した。
 
 ## 限界と次回
 

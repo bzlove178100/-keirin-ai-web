@@ -29,6 +29,7 @@ function fallbackProspectiveCollectionStatus(records) {
       metadata?.temporal_order === 'prediction_before_result' &&
       eligibility?.supervised_training === true &&
       training && typeof training === 'object' && !Array.isArray(training) &&
+      !raceConditionsIssue(training) &&
       training?.schema_version === 'keirin-training-input-v1' &&
       training?.evaluation_scope === 'prospective' &&
       Array.isArray(training?.players) && training.players.length >= 4 &&
