@@ -530,8 +530,18 @@ function fullProbabilityTableValid(scores, cars = [1,2,3,4,5,6,7]) {
   return Math.abs(scores.reduce((sum,x) => sum+x.estimated_probability,0)-1) <= 1e-6;
 }
 
+function raceConditionsIssue(input) {
+  if (!input || !Object.prototype.hasOwnProperty.call(input, 'race_conditions')) return null;
+  const check = globalThis.ProspectiveTools?.requireStandardConditions;
+  if (typeof check !== 'function') return 'レース状態の確認機能を読み込めません。再読み込みしてください。';
+  try { check(input); return null; }
+  catch (_) { return '欠車・中止または不明なレース状態のため、通常レースとして処理できません。'; }
+}
+
 function trainingReadiness(record) {
   const training = record?.training_input;
+  const conditionIssue = raceConditionsIssue(training);
+  if (conditionIssue) return conditionIssue;
   const meta = record?.metadata;
   if (meta?.evaluation_scope !== 'prospective') return '再現・旧データのため学習対象外';
   if (training?.schema_version !== 'keirin-training-input-v1') return '学習用入力が含まれていません';
@@ -562,6 +572,12 @@ async function runRealDryRun() {
   }
 
   const raceData = parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.race_data ? parsed.race_data : parsed;
+  const conditionIssue = raceConditionsIssue(raceData);
+  if (conditionIssue) {
+    resetDryRunResults('未実行');
+    show('run-dry-note',conditionIssue,'note error');
+    return;
+  }
   const scheduledStart = element('scheduled-start').value;
   const confirmed = element('prestart-confirmed').checked;
   const inputAtRequest = element('race-json').value;
@@ -794,6 +810,7 @@ async function loadHistorySnapshotFile(event) {
 
     const snapshotSafe =
       parsed?.schema_version === 'prediction-snapshot-v1' &&
+      !raceConditionsIssue(parsed?.race_data) &&
       race &&
       Number.isFinite(captured) &&
       er?.success === true &&
@@ -954,6 +971,7 @@ function saveHistoryJson() {
 
 function normalizeDatasetRecord(record) {
   if (!record || typeof record !== 'object' || Array.isArray(record)) return null;
+  if (raceConditionsIssue(record.training_input)) return null;
   const cars = record.training_input == null ? [1,2,3,4,5,6,7] : raceCarNumbers(record.training_input.players);
   if (!validOutcomeCombo(record.outcome_combo, cars)) return null;
   if (!Number.isFinite(Number(record.settlement_odds)) || Number(record.settlement_odds) <= 0) return null;
@@ -995,6 +1013,7 @@ function fallbackProspectiveCollectionStatus(records) {
       metadata?.temporal_order === 'prediction_before_result' &&
       eligibility?.supervised_training === true &&
       training && typeof training === 'object' && !Array.isArray(training) &&
+      !raceConditionsIssue(training) &&
       training?.schema_version === 'keirin-training-input-v1' &&
       training?.evaluation_scope === 'prospective' &&
       Array.isArray(training?.players) && training.players.length >= 4 &&

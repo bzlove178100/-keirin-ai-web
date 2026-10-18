@@ -84,6 +84,16 @@
     return { captured, scheduled };
   }
 
+  function requireStandardConditions(input) {
+    if (!Object.prototype.hasOwnProperty.call(input, 'race_conditions')) return;
+    const c = input.race_conditions;
+    if (!c || typeof c !== 'object' || Array.isArray(c) ||
+        Object.keys(c).sort().join(',') !== 'race_status,withdrawn_car_numbers') fail('race_conditions_contract_invalid');
+    if (c.race_status !== 'scheduled') fail('nonstandard_race_requires_review');
+    if (!Array.isArray(c.withdrawn_car_numbers)) fail('race_conditions_contract_invalid');
+    if (c.withdrawn_car_numbers.length) fail('withdrawal_requires_review');
+  }
+
   function validateSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) fail('snapshot_required');
     if (snapshot.schema_version !== 'prediction-snapshot-v1') fail('snapshot_schema_mismatch');
@@ -93,6 +103,7 @@
     snapshotTimes(snapshot);
 
     const raceData = snapshot.race_data || {};
+    requireStandardConditions(raceData);
     const players = raceData.players;
     if (!Array.isArray(players) || ![7, 9].includes(players.length)) fail('seven_or_nine_riders_required');
     const cars = players.map((player) => player && player.car_number);
@@ -112,6 +123,7 @@
 
   function buildTrainingInput(snapshot) {
     const raceData = snapshot.race_data;
+    requireStandardConditions(raceData);
     const engine = snapshot.engine_response;
     const context = clone(raceData.prediction_context);
     const raw = clone(((raceData.odds || {}).trifecta) || {});
@@ -131,6 +143,8 @@
       captured_at: snapshot.captured_at,
       race: clone(raceData.race || {}),
       players: clone(raceData.players || []),
+      ...(Object.prototype.hasOwnProperty.call(raceData, 'race_conditions')
+        ? {race_conditions: clone(raceData.race_conditions)} : {}),
       odds: { trifecta: raw },
       prediction_context: context,
       odds_sanitization: {
@@ -245,6 +259,7 @@
     if (metadata.temporal_order !== 'prediction_before_result') fail('not_pre_result');
     if (eligibility.supervised_training !== true) fail('not_marked_training_eligible');
     if (!training || typeof training !== 'object') fail('training_input_missing');
+    requireStandardConditions(training);
     if (training.schema_version !== TRAINING_SCHEMA) fail('training_schema_mismatch');
     if (training.evaluation_scope !== 'prospective') fail('training_input_not_prospective');
     const source = String(((training.prediction_context || {}).source) || '');
@@ -386,6 +401,7 @@
   return {
     ENGINE_VERSION,
     TRAINING_SCHEMA,
+    requireStandardConditions,
     validateSnapshot,
     buildTrainingInput,
     buildHistory,

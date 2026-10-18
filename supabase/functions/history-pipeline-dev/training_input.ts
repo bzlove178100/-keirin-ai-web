@@ -1,6 +1,9 @@
+import { raceConditionErrors } from '../_shared/race_probability.ts';
 export const TRAINING_SCHEMA='keirin-training-input-v1';
 
 export function buildTrainingInput(s:any,er:any,evaluationScope:string){
+  const errors = raceConditionErrors(s?.race_data);
+  if (errors.length) throw new Error(errors[0]);
   const race=structuredClone(s?.race_data?.race??{});
   const players=structuredClone(s?.race_data?.players??[]);
   const context=structuredClone(s?.race_data?.prediction_context??null);
@@ -20,6 +23,8 @@ export function buildTrainingInput(s:any,er:any,evaluationScope:string){
     captured_at:s.captured_at,
     race,
     players,
+    ...(Object.prototype.hasOwnProperty.call(s.race_data, 'race_conditions')
+      ? {race_conditions: structuredClone(s.race_data.race_conditions)} : {}),
     odds:{trifecta:raw},
     prediction_context:context,
     odds_sanitization:{

@@ -5,8 +5,10 @@ from typing import Any, Iterable
 
 try:
     from .feature_extraction import extract_player_model_fields, num
+    from .race_conditions import require_standard_conditions
 except ImportError:  # Support `python ml/build_training_dataset.py ...`.
     from feature_extraction import extract_player_model_fields, num
+    from race_conditions import require_standard_conditions
 
 TRAINING_SCHEMA = "keirin-training-input-v1"
 
@@ -72,6 +74,11 @@ def supervised_eligibility(record: dict[str, Any]) -> tuple[bool, str]:
         return False, "not_marked_training_eligible"
     if not isinstance(training_input, dict):
         return False, "training_input_missing"
+    if "race_conditions" in training_input:
+        try:
+            require_standard_conditions(training_input["race_conditions"])
+        except ValueError as error:
+            return False, str(error)
     if training_input.get("schema_version") != TRAINING_SCHEMA:
         return False, "training_schema_mismatch"
     if training_input.get("evaluation_scope") != "prospective":

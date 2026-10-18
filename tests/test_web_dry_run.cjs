@@ -16,6 +16,7 @@ const nodes=new Map(),node=id=>{if(!nodes.has(id))nodes.set(id,new Element());re
 const fixed='2026-09-24T00:00:00.000Z';
 class Clock extends Date {constructor(...args){super(...(args.length?args:[fixed]));}static now(){return Date.parse(fixed);}}
 const context=vm.createContext({console,Date:Clock,Intl,URL,Blob,setTimeout,clearTimeout,
+ ProspectiveTools:require('../prospective-tools-core.js'),
  document:{getElementById:node,createElement:()=>new Element()}});
 const source=fs.readFileSync('index.html','utf8').match(/<script>([\s\S]*?)<\/script>/)[1]
  .replace('(async()=>{await restoreLogin();await checkStatus();})();','');
@@ -59,6 +60,7 @@ for(const slug of ['history-builder-dev','backtest-engine-dev','history-pipeline
   const race=snapshot(0,'SYNTHETIC_GENERATED',count).race_data;
   race.race.venue='SYNTHETIC';race.race.race_number=count;
   race.players.forEach(p=>p.name='SYNTHETIC RIDER '+p.car_number);
+  race.race_conditions={race_status:'scheduled',withdrawn_car_numbers:[]};
   await load(race);await run('runRealDryRun()');
   assert.match(node('run-dry-note').textContent,/dry-run完了/,`${count}-rider prediction must display`);
   assert.equal(node('save-snapshot').disabled,false);
@@ -78,6 +80,7 @@ for(const slug of ['history-builder-dev','backtest-engine-dev','history-pipeline
   const record=JSON.parse(node('history-json').value).payload.records[0];
   assert.equal(record.outcome_combo,`${count}-${count-1}-${count-2}`);
   assert.equal(record.trifecta_scores.length,count*(count-1)*(count-2));
+  assert.deepEqual(record.training_input.race_conditions,race.race_conditions);
   context.record=record;assert(run('normalizeDatasetRecord(record)!==null'));assert.equal(run('trainingReadiness(record)'),null);
   // A normalized complete table for the OTHER roster must still fail closed.
   const other=count===9?7:9;
@@ -86,6 +89,23 @@ for(const slug of ['history-builder-dev','backtest-engine-dev','history-pipeline
   assert.match(node('run-dry-note').textContent,/安全条件を確認できない/);
   assert.equal(run('lastDryRunSnapshot'),null);assert.equal(node('save-snapshot').disabled,true);
   assert(!node('cat-hit').textContent.includes('位'));transform=data=>data;
+  for(const conditions of [null,{race_status:'cancelled',withdrawn_car_numbers:[]},{race_status:'scheduled',withdrawn_car_numbers:[count]}]){
+   const bad=structuredClone(race);bad.race_conditions=conditions;
+   calls.length=0;await load(bad);await run('runRealDryRun()');
+   assert.match(node('run-dry-note').textContent,/通常レースとして処理できません/);
+   assert.equal(calls.length,0);assert.equal(run('lastDryRunSnapshot'),null);
+   assert.equal(node('save-snapshot').disabled,true);
+   context.record=structuredClone(record);context.record.training_input.race_conditions=conditions;
+   assert.equal(run('normalizeDatasetRecord(record)'),null);
+   assert.match(run('trainingReadiness(record)'),/通常レースとして処理できません/);
+   const badSnapshot=structuredClone(captured);badSnapshot.race_data.race_conditions=conditions;
+   context.event={target:{files:[{name:'invalid.json',size:1000,text:async()=>JSON.stringify(badSnapshot)}]}};
+   await run('loadHistorySnapshotFile(event)');assert.equal(run('loadedHistorySnapshot'),null);
+   assert.equal(node('run-history').disabled,true);
+  }
+  const tools=context.ProspectiveTools;delete context.ProspectiveTools;
+  context.race=race;assert.match(run('raceConditionsIssue(race)'),/読み込めません/);
+  context.ProspectiveTools=tools;
   console.log(`Web + actual dev handlers: ${count}-rider prediction -> snapshot -> history -> backtest and mismatched-roster rejection PASS`);
  }
  assert(calls.every(c=>c.method==='GET'||c.url.includes('/functions/v1/')));
