@@ -39,7 +39,7 @@ function prospectiveCollectionEligible(record) {
     training?.schema_version === 'keirin-training-input-v1' &&
     training?.evaluation_scope === 'prospective' &&
     Array.isArray(training?.players) && training.players.length >= 4 &&
-    validOutcomeCombo(record?.outcome_combo);
+    validOutcomeCombo(record?.outcome_combo, raceCarNumbers(training.players));
 }
 
 function prospectiveCollectionStatus(records) {
