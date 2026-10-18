@@ -10,6 +10,7 @@ const upload=(name,value)=>({name,mimeType:'application/json',buffer:Buffer.from
   for(const width of [390,1280]){
    const context=await browser.newContext({viewport:{width,height:900},timezoneId:'Asia/Tokyo'});
    const page=await context.newPage(),errors=[];
+   page.on('download',d=>console.log('download event:',d.suggestedFilename()));
    page.on('pageerror',e=>{errors.push(e.message);console.error('page error:',e.message);});
    page.on('console',message=>{if(['error','warning'].includes(message.type()))console.error('browser:',message.text());});
    await page.route('**/*',async route=>{
@@ -25,6 +26,7 @@ const upload=(name,value)=>({name,mimeType:'application/json',buffer:Buffer.from
     await page.locator('#snapshot-file').setInputFiles(upload('snapshot.json',snap));
     await page.locator('#snapshot-status').filter({hasText:'確認済み'}).waitFor();
     for(const status of ['dead_heat','withdrawn','cancelled']){
+     console.log('case',width,count,status);
      await page.locator('#result-status').selectOption(status);
      assert(await page.locator('#hold-note').isVisible());
      assert(!(await page.locator('#normal-result-fields').isVisible()));
@@ -32,7 +34,10 @@ const upload=(name,value)=>({name,mimeType:'application/json',buffer:Buffer.from
      if(status==='withdrawn')await page.locator('#withdrawn').fill(String(count));
      await page.locator('#build-history').click();
      assert.match(await page.locator('#history-status').innerText(),/保留理由を記録/);
+     assert.equal(await page.locator('#download-history').isDisabled(),false);
+     console.log('click held download',await page.locator('#history-summary').textContent());
      const pending=page.waitForEvent('download');await page.locator('#download-history').click();
+     console.log('held download click returned',await page.locator('#download-history').isDisabled(),await page.locator('#history-status').textContent());
      const download=await pending;
      assert.match(download.suggestedFilename(),/^held-history-/);
      const envelope=JSON.parse(await fs.readFile(await download.path(),'utf8'));
