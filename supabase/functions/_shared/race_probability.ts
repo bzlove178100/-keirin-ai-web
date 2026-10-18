@@ -47,3 +47,17 @@ export function fullProbabilityInput(record: any): boolean {
   }
   return seen.size === expected.size && Math.abs(mass - 1) <= 1e-6;
 }
+
+// A normal single-outcome history cannot represent a held settlement.
+// Missing legacy status remains unverified; never discard declared result fields.
+export function settlementDeclarationErrors(settlement: any): string[] {
+  if (!settlement || typeof settlement !== 'object' || Array.isArray(settlement))
+    return ['settlement_fields_invalid'];
+  const allowed = ['outcome_combo', 'settlement_odds', 'result_timestamp', 'result_time_unknown', 'result_status'];
+  if (Object.keys(settlement).some(key => !allowed.includes(key)))
+    return ['settlement_fields_invalid'];
+  if (!Object.prototype.hasOwnProperty.call(settlement, 'result_status')) return [];
+  if (['dead_heat', 'withdrawn', 'cancelled'].includes(settlement.result_status))
+    return ['nonstandard_result_requires_review'];
+  return settlement.result_status === 'normal' ? [] : ['result_status_invalid'];
+}

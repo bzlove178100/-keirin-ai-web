@@ -158,7 +158,13 @@
 
   function buildHistory(snapshot, settlement) {
     validateSnapshot(snapshot);
-    const outcomeCombo = settlement && settlement.outcomeCombo;
+    if (!settlement || typeof settlement !== 'object' || Array.isArray(settlement) ||
+        Object.keys(settlement).some(key => !['outcomeCombo','settlementOdds','resultTimestamp','result_status'].includes(key))) fail('settlement_fields_invalid');
+    if (Object.prototype.hasOwnProperty.call(settlement, 'result_status')) {
+      if (['dead_heat','withdrawn','cancelled'].includes(settlement.result_status)) fail('nonstandard_result_requires_review');
+      if (settlement.result_status !== 'normal') fail('result_status_invalid');
+    }
+    const outcomeCombo = settlement.outcomeCombo;
     if (!validCombo(outcomeCombo)) fail('outcome_combo_invalid');
     const settlementOdds = Number(settlement && settlement.settlementOdds);
     if (!Number.isFinite(settlementOdds) || settlementOdds <= 0) fail('settlement_odds_invalid');
@@ -204,6 +210,7 @@
       selected_predictions: clone(prediction.selected_predictions),
       training_input: trainingInput,
       metadata: {
+        ...(Object.prototype.hasOwnProperty.call(settlement, 'result_status') ? {result_status: settlement.result_status} : {}),
         date: race.date || null,
         venue: race.venue || null,
         race_number: race.race_number == null ? null : race.race_number,

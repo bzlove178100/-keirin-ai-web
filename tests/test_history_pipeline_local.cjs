@@ -44,6 +44,26 @@ for(const slug of ['history-builder-dev','backtest-engine-dev','history-pipeline
   assert.deepEqual(browserRecord.training_input.race_conditions,snap.race_data.race_conditions);
   assert.equal(validateRaceData(snap.race_data).length,0);
   assert(!JSON.stringify(data.history_record.training_input).includes('outcome_combo'));
+  const normalSettlement={outcome_combo:browserRecord.outcome_combo,settlement_odds:42,result_timestamp:'2026-09-24T00:40:00Z'};
+  for(const declaration of [{result_status:'normal'},{result_status:'dead_heat'},{result_status:'withdrawn',withdrawn_car_numbers:[count]},{result_status:'cancelled'},{result_status:null},{result_status:'unknown'},{dead_heat:true},{trifecta_outcomes:['1-2-3','2-1-3']},{unexpected:true}]){
+    const accepted=declaration.result_status==='normal';
+    const settlement={...normalSettlement,...declaration};
+    const browserSettlement={outcomeCombo:normalSettlement.outcome_combo,settlementOdds:42,resultTimestamp:normalSettlement.result_timestamp,...declaration};
+    if(accepted)assert.equal(browserCore.buildHistory(snap,browserSettlement).metadata.result_status,'normal');
+    else assert.throws(()=>browserCore.buildHistory(snap,browserSettlement),/settlement_fields_invalid|nonstandard_result_requires_review|result_status_invalid/);
+    const payloads={
+      'history-pipeline-dev':{mode:'dry_run',snapshot:snap,settlement},
+      'history-builder-dev':{mode:'dry_run',include_backtest:true,payload:{race:{race_id:browserRecord.race_id},prediction:{prediction_timestamp:browserRecord.prediction_timestamp,selected_predictions:browserRecord.selected_predictions,trifecta_scores:browserRecord.trifecta_scores,training_input:browserRecord.training_input},settlement}}
+    };
+    for(const [slug,body] of Object.entries(payloads)){
+      calls.length=0;
+      const res=await handlers[slug](new Request('https://synthetic.invalid/'+slug,{method:'POST',headers:{Authorization:'Bearer synthetic-only','Content-Type':'application/json'},body:JSON.stringify(body)}));
+      const result=await res.json();assert.equal(res.status,accepted?200:422,JSON.stringify(result));
+      assert.equal(result.saved,false);assert.equal(result.db_write_enabled,false);
+      if(accepted)assert.equal((result.history_record||result.record).metadata.result_status,'normal');
+      else assert(calls.every(([url])=>!url.includes('/functions/v1/')),'nonstandard settlement must not call a child function');
+    }
+  }
   const invalid=[null,{},[],false,'scheduled',
     {race_status:'cancelled',withdrawn_car_numbers:[]},
     {race_status:'scheduled',withdrawn_car_numbers:[count]},

@@ -1,5 +1,15 @@
 # Work resume handoff
 
+## Phase32 result declaration guard — 2026-10-18
+
+基準main `d069ab9b6adcf9585954a5bae7be7df0546e473c`（#265公開済み）。
+#265の公開後回帰39125663260は47/47成功、Pages39125662974も成功。
+APIはpredict20/history12/backtest11/history-pipeline7。公開済み試験は再実行しない。
+今回の未公開候補はPhase32の結果申告を通常履歴へ黙って落とさないガード。
+詳細・限界・次工程は `docs/KEIRIN_RESULT_DECLARATIONS_20261018.md`。
+新候補のマージ・配備は未承認。KEIRIN.JP HOLD、実取得・実学習・DB書込・本番予想OFF。
+ML保留記録との相互変換・集計・UI接続は未完で、このガードを全経路接続完了とは扱わない。
+
 ## Data duplicate-type correction / prepared Claude pilot — 2026-10-14
 
 Baseline main `703e2ed24a8d0c0df307b90776f2272478b96013` is unchanged since the
