@@ -22,6 +22,7 @@ from ml.model_web_response import model_web_response, render_model_web_preview
 from ml.synthetic_demo import make_record
 from ml.synthetic_session import SCHEMA, MAX_SNAPSHOTS, SessionStore, SessionSaveError
 from ml.settle_snapshot import _iso
+from ml.held_review_workspace import ReviewWorkspace, ReviewConflict, MAX_BYTES as REVIEW_MAX_BYTES
 
 
 class Workbench:
@@ -37,6 +38,7 @@ class Workbench:
         self.series = 0
         self.store = None
         self.restored = False
+        self.held_review = ReviewWorkspace()
         try:
             if state_dir is not None:
                 if Path(state_dir).resolve().is_relative_to(Path(__file__).resolve().parents[1]):
@@ -172,6 +174,9 @@ def make_server(app: Workbench, port: int = 0):
     page = (Path(__file__).parent / 'templates' / 'synthetic_workbench.html').read_text(encoding='utf-8')
     script = re.search(r'<script>(.*?)</script>', page, re.S).group(1)
     script_hash = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
+    review_page = (Path(__file__).parent / 'templates' / 'held_review_workbench.html').read_text(encoding='utf-8')
+    review_script = re.search(r'<script>(.*?)</script>', review_page, re.S).group(1)
+    review_hash = base64.b64encode(hashlib.sha256(review_script.encode()).digest()).decode()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
@@ -208,6 +213,14 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, page, 'text/html; charset=utf-8')
                 if self.path == '/api/state':
                     return self.send(200, app.state())
+                if self.path == '/held-review':
+                    return self.send(200, review_page, 'text/html; charset=utf-8', page_script_hash=review_hash)
+                if self.path == '/api/held-review':
+                    return self.send(200, app.held_review.state())
+                if self.path == '/export/held-review':
+                    return self.send(200, app.held_review.bundle(), filename='synthetic-held-review-bundle.json')
+                if self.path == '/export/held-review-report':
+                    return self.send(200, app.held_review.report, filename='synthetic-held-review-report.json')
                 match = re.fullmatch(r'/(api/model-view|web-view)/([0-9a-f]{32})', self.path)
                 if match and match[2] in app.snapshots:
                     try:
@@ -241,12 +254,17 @@ def make_server(app: Workbench, port: int = 0):
                 if self.headers.get('Transfer-Encoding') or len(self.headers.get_all('Content-Length', [])) != 1:
                     raise ValueError('invalid_body_length')
                 length = int(self.headers['Content-Length'])
-                if not 0 < length <= 4096 or self.headers.get('Content-Type','').split(';')[0] != 'application/json':
+                limit = REVIEW_MAX_BYTES + 1024 if self.path == '/api/held-review/import' else 4096
+                if not 0 < length <= limit or self.headers.get('Content-Type','').split(';')[0] != 'application/json':
                     raise ValueError('small_json_body_required')
                 payload = json.loads(self.rfile.read(length))
                 if not isinstance(payload, dict): raise ValueError('json_object_required')
                 with app.lock:
-                    if self.path == '/api/predict' and set(payload) == {'rider_count'}:
+                    if self.path == '/api/held-review/import' and set(payload) == {'value', 'revision'}:
+                        result = app.held_review.load(payload['value'], payload['revision'])
+                    elif self.path == '/api/held-review/decision' and set(payload) == {'source_sha256', 'evidence', 'decision', 'revision'}:
+                        result = app.held_review.review(payload['source_sha256'], payload['evidence'], payload['decision'], payload['revision'])
+                    elif self.path == '/api/predict' and set(payload) == {'rider_count'}:
                         result = app.predict(payload['rider_count'])
                     elif self.path == '/api/select' and set(payload) == {'snapshot_id'}:
                         result = app.select(payload['snapshot_id'])
@@ -260,6 +278,8 @@ def make_server(app: Workbench, port: int = 0):
                     else:
                         raise ValueError('unsupported_action_or_fields')
                 self.send(200, result)
+            except ReviewConflict as exc:
+                self.send(409, {'error':str(exc), 'state':app.held_review.state()})
             except SessionSaveError as exc:
                 self.send(503, {'error':str(exc), 'state':app.state()})
             except (ValueError, TypeError, KeyError) as exc:
