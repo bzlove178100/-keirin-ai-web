@@ -2,6 +2,10 @@
 
 ## Synthetic held-review UI and bundle — 2026-10-19
 
+修正head19df940のML39225660699/job117971190799はsuccess。新規Chrome12ケースとPython/API7試験成功。
+最終レビューで409競合応答の状態読取にも既存lockを適用し、同時更新中の不整合表示を防ぐ。
+この最終差分の候補head/CIはPR本文を正とする。前候補の成功を新headの証拠に代用しない。
+
 初回head956559aのML39224926950/job117968775119は新Chrome保留選択で停止。
 Python JSONをJavaScriptで再構成するとPhase32のfloat表記が変わりdigestが不一致になることを再現。
 製品UI/APIと試験fixtureで元JSON文字列を保持するよう修正。digest検査は緩和せず、転送試験を1件追加。

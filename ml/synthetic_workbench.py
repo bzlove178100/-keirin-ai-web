@@ -279,7 +279,8 @@ def make_server(app: Workbench, port: int = 0):
                         raise ValueError('unsupported_action_or_fields')
                 self.send(200, result)
             except ReviewConflict as exc:
-                self.send(409, {'error':str(exc), 'state':app.held_review.state()})
+                with app.lock:
+                    self.send(409, {'error':str(exc), 'state':app.held_review.state()})
             except SessionSaveError as exc:
                 self.send(503, {'error':str(exc), 'state':app.state()})
             except (ValueError, TypeError, KeyError) as exc:
