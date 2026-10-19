@@ -45,7 +45,7 @@ const upload=(name,value)=>({name,mimeType:'application/json',buffer:Buffer.from
      if(url.pathname==='/auth/v1/logout')return json({});
      if(url.pathname==='/rest/v1/user_profiles')return json([{role:'owner',plan:'owner'}]);
      if(url.pathname==='/functions/v1/predict-race')return json({success:true,authenticated:true,owner:true,role:'owner',plan:'owner'});
-     if(url.pathname==='/functions/v1/predict-status')return json({success:true,production_prediction_enabled:false,db_write_enabled:false,external_fetch_enabled:false});
+     if(url.pathname==='/functions/v1/predict-status')return json({success:true,service:'predict-status',production_prediction_enabled:false,db_write_enabled:false,external_fetch_enabled:false});
      if(url.pathname==='/functions/v1/predict-engine-dev')return json({success:false},503);
      const slug=url.pathname.split('/').pop();
      if(handlers[slug]){

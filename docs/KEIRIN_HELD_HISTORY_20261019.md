@@ -134,3 +134,8 @@ owner_web_integration_anchor_changedで停止（Chrome未開始）。clearSessio
 ownerModelPreview.reset()を元の位置へ戻し、保留状態の無効化をその直後に維持した。
 生成器/owner controller/失敗時receiptの3試験はローカル成功。完全package試験は
 ローカルのLightGBM不在で未完了のため、新head CIで確認する。検査の緩和・同一head再実行なし。
+
+Chrome診断：修正head aa146adのML39184712111/job117844583964は生成器・package検証を通過。
+新Chrome試験が対応更新待ちで停止。模擬predict-status応答に必須service名がなく、
+checkStatusがinvalid_statusで後続GET前に終了する契約不一致を確認した。
+試験の模擬応答へservice=predict-statusを追加。製品処理・待機上限・安全条件は変更しない。
