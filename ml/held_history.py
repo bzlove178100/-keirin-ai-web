@@ -17,6 +17,10 @@ HELD_STATUSES = ("dead_heat", "withdrawn", "cancelled")
 
 def build_held_history(snapshot: dict, settlement: dict) -> dict:
     validate_snapshot(snapshot)
+    engine = snapshot["engine_response"]
+    if any(value is not None and value != "phase32-hit-priority-all210-v1" for value in
+           (engine.get("engine_candidate"), (engine.get("architecture") or {}).get("engine"))):
+        raise ValueError("engine_version_mismatch")
     if not isinstance(settlement, dict) or settlement.get("result_status") not in HELD_STATUSES:
         raise ValueError("held_result_status_invalid")
     status = settlement["result_status"]

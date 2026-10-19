@@ -72,8 +72,49 @@ for(const slug of ['history-builder-dev','backtest-engine-dev','history-pipeline
     }
   }
   const held=browserCore.buildHeldHistory(snap,{result_status:'cancelled',result_timestamp:normalSettlement.result_timestamp});
-  await directBacktest([browserRecord,held],false);
+  const otherSnap=structuredClone(snap);otherSnap.race_data.race.race_number=2;
+  const other=browserCore.buildHistory(otherSnap,{outcomeCombo:normalSettlement.outcome_combo,settlementOdds:42,resultTimestamp:normalSettlement.result_timestamp});
+  const otherMetrics=await directBacktest([other],true);
+  for(const status of ['dead_heat','withdrawn','cancelled']){
+    const event={result_status:status,result_timestamp:normalSettlement.result_timestamp,...(status==='withdrawn'?{withdrawn_car_numbers:[count]}:{})};
+    const expected=browserCore.buildHeldHistory(snap,event);
+    calls.length=0;
+    const res=await handlers['history-pipeline-dev'](new Request('https://synthetic.invalid/pipeline',{method:'POST',headers:{Authorization:'Bearer synthetic-only','Content-Type':'application/json'},body:JSON.stringify({mode:'dry_run',require_prospective:true,snapshot:snap,settlement:event})}));
+    const result=await res.json();assert.equal(res.status,200,JSON.stringify(result));
+    assert.deepEqual(result.history_record,expected);assert.equal(result.held,true);
+    for(const flag of ['saved','db_write_enabled','external_fetch_enabled','production_prediction_enabled','monetary_ev_enabled','supervised_training_eligible','prospective_eligible'])assert.equal(result[flag],false);
+    assert.equal(result.backtest_result,null);assert.equal(result.history_record.outcome_combo,undefined);
+    assert(calls.every(([url,method])=>method==='GET'&&!url.includes('/functions/v1/')),'held generation must not call normal history/backtest children');
+    for(const records of [[expected,browserRecord],[browserRecord,expected],[expected,expected,browserRecord],[expected]]){
+      const empty=await directBacktest(records,true);
+      assert.equal(empty.records,0);assert.equal(empty.evaluation_performed,false);assert.equal(empty.held_unique_races,1);
+      for(const key of ['selection_performance','categories','probability_quality'])assert.equal(empty[key],null);
+      const mixed=await directBacktest([...records,other],true);
+      assert.equal(mixed.records,1);assert.equal(mixed.input_records,records.length+1);assert.equal(mixed.held_unique_races,1);
+      assert.equal(mixed.excluded.race_has_held_result,records.includes(browserRecord)?1:0);
+      for(const key of ['selection_performance','categories','probability_quality'])assert.deepEqual(mixed[key],otherMetrics[key]);
+    }
+    for(const body of [
+      {mode:'live',snapshot:snap,settlement:event},
+      {mode:'dry_run',snapshot:snap,settlement:event,race_id:'DIFFERENT'},
+      {mode:'dry_run',snapshot:snap,settlement:event,evaluation_scope:'replay_or_legacy'},
+      {mode:'dry_run',snapshot:snap,settlement:{...event,result_timestamp:'2026-09-23T00:00:00Z'}},
+      {mode:'dry_run',snapshot:{...snap,validation_mode:'replay'},settlement:event},
+    ]){
+      calls.length=0;
+      const rejected=await handlers['history-pipeline-dev'](new Request('https://synthetic.invalid/pipeline',{method:'POST',headers:{Authorization:'Bearer synthetic-only','Content-Type':'application/json'},body:JSON.stringify(body)}));
+      assert.equal(rejected.status,422);assert(calls.every(([url])=>!url.includes('/functions/v1/')));
+    }
+  }
+  for(const change of [{outcome_combo:'1-2-3'},{evaluation_eligible:true},{db_write_enabled:0},{race_id:'DIFFERENT'}])
+    await directBacktest([other,{...held,...change}],false);
+  for(const slug of ['history-pipeline-dev','backtest-engine-dev']){
+    calls.length=0;
+    const unauthenticated=await handlers[slug](new Request('https://synthetic.invalid/'+slug,{method:'POST',body:'{}'}));
+    assert.equal(unauthenticated.status,401);assert.equal(calls.length,0);
+  }
   for(const metadata of [[],false,0,'normal'])await directBacktest([{...browserRecord,metadata}],false);
+  console.log(`Synthetic ${count}-rider held API generation, whole-race exclusion and empty metrics: PASS`);
   console.log(`Synthetic ${count}-rider direct backtest result declarations: PASS`);
   for(const declaration of [{result_status:'normal'},{result_status:'dead_heat'},{result_status:'withdrawn',withdrawn_car_numbers:[count]},{result_status:'cancelled'},{result_status:null},{result_status:'unknown'},{dead_heat:true},{trifecta_outcomes:['1-2-3','2-1-3']},{unexpected:true}]){
     const accepted=declaration.result_status==='normal';

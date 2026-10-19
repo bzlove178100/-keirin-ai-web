@@ -33,7 +33,7 @@ withdrawnのみ `withdrawn_car_numbers` が必須で、空・重複・型違い�
   検査scriptが不在なら通常履歴だけを取込まず停止し、旧データセット/バックテスト入力を消去。
 - 既存の統合JSON形式で保留も保持。保存は明示的なJSONダウンロードで、DB保存ではない。
 
-Edge側は通常結果ガードと直接履歴入力の拒否を行う。保留の生成・集計は未実装。
+Edge側は通常結果注記ガードを維持し、有効な保留の生成・同一レース除外集計を未公開コードへ接続済み。
 ML model_historyの保留優先規則に合わせたが、MLモデルsnapshot/schemaとの相互変換は未実装。
 直接APIに非標準注記付き通常履歴を渡す経路の拒否ガードは下記の追加修正で接続した。
 Python通常settlement CLIに保留オプションは追加していない（Python関数とブラウザ入口あり）。
@@ -48,7 +48,7 @@ Python通常settlement CLIに保留オプションは追加していない（Pyt
 - Chromeがローカルにないため、390/1280幅の保存・再読込・統合保存の実ブラウザ試験を既存ML CIへ追加。
   新head CI成功まで画面受入完了と扱わない。配備済みAPIの実owner受入ではない。
 
-次は新headの未完CIを確認し、Edge保留応答/評価除外と全経路の受入を進める。
+次は新head CIと未解決QMP失敗を確認し、owner画面の保留API操作と全経路の受入を進める。
 現在APIはpredict20/history12/backtest11/history-pipeline7。今回未配備。
 公開・配備には別途明示承認と変更対象backendの受入が必要。#265承認の拡張なし。
 将来の配備前には現在の原本を保存し、段階受入失敗時はその版へ復元する。
@@ -56,7 +56,7 @@ Python通常settlement CLIに保留オプションは追加していない（Pyt
 KEIRIN.JP HOLD、実取得・実学習・DB書込・本番予想OFF。
 GitHubの他open PR #250/#257に対象コード重複なし。非公開Work/未push作業は未確認。
 
-## 2026-10-19 直接履歴入力の拒否ガード
+## 2026-10-19 直接履歴入力の拒否ガード（前段階。下記の有効保留受入を追加）
 
 backtest-engine-devがroot/metadataのresult_statusを捨てて通常指標を返す問題を、
 合成の同着申告で再現（修正前200、期待422）。修正後は混在要求全体を422で拒否し、
@@ -75,3 +75,28 @@ backtest-engine-devがroot/metadataのresult_statusを捨てて通常指標を�
 Python5試験にschema偽装とJS収集照合を追加して成功。実Web script＋実handlerも7/9車成功。
 前head e5f561のChrome（ML CI39176166356）は保存・再読込・統合成功。
 この追加修正のCI結果はPR本文でheadを区別して記録する。新規配備・実owner backend受入なし。
+
+## 2026-10-19 Edge保留生成・除外集計（現在の未公開候補）
+
+history-pipeline-devは既存の認証/owner照会後、3状態のsettlementを受ける。
+prospective-onlyの不変snapshotを再検査し、browser/Pythonと同一の保留JSONをhistory_recordとして返す。
+勝者・払戻・training_inputを作らず、通常builder/backtest子Functionも呼ばない。
+backtest_resultはnull、prospective_eligible/supervised_training_eligibleと各安全フラグはfalse。
+呼出し側のrace_id上書き、replay scope、通常結果との混合settlementは拒否する。
+
+backtest-engine-devは有効なphase32-held-history-v1を受け入れ、同じrace_idの通常履歴を
+新旧・入力順に関係なく全除外する。重複保留はheld_unique_racesを増やさない。
+input_records、held_race_ids、excludedを返し、残った通常レースだけ既存指標を計算する。
+通常レースが0件ならevaluation_performed=false、通常の3指標群はnullとする。
+不正保留が混ざるAPI要求は全体422で拒否し、部分指標を返さない（オフラインの除外集計とは異なる）。
+ml-held-history-v1の直接投入・非標準注記付き通常履歴は引き続き拒否。schema相互変換は未実装。
+両APIのGETはheld_history_schemaとheld_result_supportedを通知する。
+owner画面はまだ保留APIを無効にしており、この候補の配備や実owner受入は未実施。
+
+共通snapshot検査のエンジン識別子優先順の差により、矛盾した識別子をPythonだけ受け入れる例を
+追加試験で発見。保留入口で存在する両識別子を検査し、3経路とも拒否するよう修正。
+Python6試験で7/9車×3状態のJSON一致、発走前欠車/中止、15種類のsnapshot異常、
+時刻/名簿/注記不正、改変保留、除外規則を確認。実handlerでは保留生成、通常子Function不呼出し、
+全件保留の指標null、別レースの全指標不変、混在順、未認証拒否を確認した。
+Web結合7/9車とweb/safety回帰も成功。Deno module graph CIにhistory-pipelineを追加。
+QMP失敗の調査記録は`docs/CI_QMP_FIRST_FRAME_20261019.md`。全必須CI成功や恒久修正とは扱わない。

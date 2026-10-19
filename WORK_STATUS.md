@@ -1,5 +1,19 @@
 # Work status
 
+## Phase32 held API — 2026-10-19
+
+#266 head `daa9f9efb3eb59e2ced8338aeb4eaa4af9f79981`から継続。main `d069ab9b6adcf9585954a5bae7be7df0546e473c`は変更なし。
+前headの5 CI成功。回帰39177306812は46/47成功、QMP初回RESUME受信で1件失敗。
+runtime39177306779は20分の回帰待ちで停止。詳細は`docs/CI_QMP_FIRST_FRAME_20261019.md`。
+共通VM検査の厳格拒否を維持し、同一head再実行なし。根本原因・恒久修正は未確定。
+今回、history-pipelineの保留JSON生成、backtestの保留・同一race_id除外を未公開候補へ接続。
+全件保留時は通常指標null、学習/保存/本番OFF。不正な保留は要求全体422。通常結果注記ガードは維持。
+Python/browser/Edgeで同一JSONを確認し、エンジン識別子矛盾の拒否も統一。
+Python6試験、7/9車の実handler結合、既存Web結合、web/safety回帰が成功。新head CIはPR本文が正。
+詳細・限界は`docs/KEIRIN_HELD_HISTORY_20261019.md`。owner画面の保留API操作はまだ無効。
+MLモデル履歴変換・保留解除・配備済み実owner受入は未実施。
+公開/配備は未承認。API predict20/history12/backtest11/history-pipeline7、HOLD/OFFを維持。
+
 ## Phase32 direct history guard — 2026-10-19
 
 #266 head `e5f561201fb3189ec1c4bd5c6d0257cebea6455d`から継続。mainは`d069ab9b6adcf9585954a5bae7be7df0546e473c`。

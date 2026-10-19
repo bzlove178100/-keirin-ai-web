@@ -52,10 +52,15 @@ class HeldHistoryTest(unittest.TestCase):
                 cases.append({"snapshot": snap, "settlement": event, "held": held, "normal": self.normal(snap)})
         script = """
 const fs=require('fs'),assert=require('assert/strict'),core=require('./prospective-tools-core.js');
+const edge=require('./supabase/functions/_shared/race_probability.ts');
 for(const c of JSON.parse(fs.readFileSync(0,'utf8'))){
  const held=core.buildHeldHistory(c.snapshot,c.settlement);assert.deepEqual(held,c.held);
+ assert.deepEqual(edge.buildPhase32HeldHistory(c.snapshot,c.settlement),c.held);
+ assert.equal(edge.validatePhase32HeldHistory(c.held),true);
  assert.equal(core.validateHeldHistory(c.held),true);
  for(const records of [[held,c.normal],[c.normal,held],[held,held,c.normal]]){
+  const edgeResult=edge.partitionPhase32Holds(records);
+  assert.equal(edgeResult.records.length,0);assert.deepEqual(edgeResult.held_race_ids,[held.race_id]);
   const result=core.collectionStatus(core.recordsFromJson(core.historyEnvelope(records[0])).concat(records.slice(1)));
   assert.equal(result.eligible_unique_races,0);assert.equal(result.held_unique_races,1);
   assert.equal(result.excluded.race_has_held_result,1);
@@ -67,11 +72,13 @@ for(const c of JSON.parse(fs.readFileSync(0,'utf8'))){
 
     def test_timing_and_withdrawal_validation(self):
         early = "2026-09-24T02:00:00Z"  # after capture, before scheduled start
+        valid = []
         for status in ("withdrawn", "cancelled"):
             event = {"result_status": status, "result_timestamp": early}
             if status == "withdrawn":
                 event["withdrawn_car_numbers"] = [7]
             validate_held_history(build_held_history(self.snap, event))
+            valid.append({"event": event, "held": build_held_history(self.snap, event)})
         bad_events = [None, {}, {**self.settlement, "result_status": "normal"},
                       {**self.settlement, "outcome_combo": "1-2-3"},
                       {**self.settlement, "result_timestamp": early},
@@ -85,9 +92,45 @@ for(const c of JSON.parse(fs.readFileSync(0,'utf8'))){
         script = """
 const fs=require('fs'),assert=require('assert/strict'),core=require('./prospective-tools-core.js');
 const d=JSON.parse(fs.readFileSync(0,'utf8'));
-for(const s of d.events)assert.throws(()=>core.buildHeldHistory(d.snapshot,s));
+const edge=require('./supabase/functions/_shared/race_probability.ts');
+for(const s of d.events){assert.throws(()=>core.buildHeldHistory(d.snapshot,s));assert.throws(()=>edge.buildPhase32HeldHistory(d.snapshot,s));}
+for(const c of d.valid){assert.deepEqual(core.buildHeldHistory(d.snapshot,c.event),c.held);assert.deepEqual(edge.buildPhase32HeldHistory(d.snapshot,c.event),c.held);}
 """
-        subprocess.run(["node", "-e", script], cwd=ROOT, input=json.dumps({"snapshot": self.snap, "events": bad_events}), text=True, check=True)
+        subprocess.run(["node", "-e", script], cwd=ROOT, input=json.dumps({"snapshot": self.snap, "events": bad_events, "valid": valid}), text=True, check=True)
+
+    def test_edge_snapshot_rejections_match_browser_and_python(self):
+        invalid = []
+        for path, value in (
+            (("schema_version",), "other"), (("validation_mode",), "replay"),
+            (("snapshot_eligibility", "prestart_confirmed"), False),
+            (("captured_at",), "2026-09-24T08:00:00Z"),
+            (("race_data", "race", "scheduled_start_jst"), "2026-09-24T09:00:00+09:00"),
+            (("race_data", "race", "race_number"), 0),
+            (("race_data", "race", "venue"), " "),
+            (("race_data", "players", 0, "car_number"), 2),
+            (("engine_response", "saved"), True),
+            (("engine_response", "db_write_enabled"), True),
+            (("engine_response", "production_prediction_enabled"), True),
+            (("engine_response", "engine_candidate"), "other"),
+            (("engine_response", "architecture", "engine"), "other"),
+            (("engine_response", "prediction", "trifecta_scores"), []),
+            (("engine_response", "prediction", "selected_predictions", "categories"), {}),
+        ):
+            snap = deepcopy(self.snap)
+            target = snap
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+            with self.assertRaises(ValueError, msg=str(path)):
+                build_held_history(snap, self.settlement)
+            invalid.append(snap)
+        script = """
+const fs=require('fs'),assert=require('assert/strict'),core=require('./prospective-tools-core.js');
+const edge=require('./supabase/functions/_shared/race_probability.ts'),d=JSON.parse(fs.readFileSync(0,'utf8'));
+for(const snap of d.invalid){assert.throws(()=>core.buildHeldHistory(snap,d.event));assert.throws(()=>edge.buildPhase32HeldHistory(snap,d.event));}
+"""
+        subprocess.run(["node", "-e", script], cwd=ROOT,
+                       input=json.dumps({"invalid": invalid, "event": self.settlement}), text=True, check=True)
 
     def test_tampered_holds_never_suppress_unrelated_or_normal_records(self):
         held = build_held_history(self.snap, self.settlement)

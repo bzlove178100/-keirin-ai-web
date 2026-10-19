@@ -236,6 +236,9 @@
 
   function buildHeldHistory(snapshot, settlement) {
     validateSnapshot(snapshot);
+    const engine = snapshot.engine_response;
+    if ([engine.engine_candidate, (engine.architecture || {}).engine]
+        .some(value => value != null && value !== ENGINE_VERSION)) fail('engine_version_mismatch');
     const status = settlement && settlement.result_status;
     if (!['dead_heat', 'withdrawn', 'cancelled'].includes(status)) fail('held_result_status_invalid');
     const fields = ['result_status', 'result_timestamp'];
