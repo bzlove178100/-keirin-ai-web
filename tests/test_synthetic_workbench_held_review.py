@@ -5,7 +5,7 @@ from threading import Thread
 import unittest
 from unittest.mock import patch
 
-from ml.held_review_workspace import ReviewWorkspace, ReviewConflict
+from ml.held_review_workspace import ReviewWorkspace, ReviewConflict, parse_json_file
 from ml.held_history_review import evaluate_reviews
 from ml.model_history import _digest
 from ml.synthetic_workbench import Workbench, make_server
@@ -15,6 +15,18 @@ from test_held_history_review import pair, evidence, decision, review
 class ReviewWorkspaceTests(unittest.TestCase):
     def load(self, workspace, value):
         return workspace.load(value, workspace.state()['revision'])
+
+    def test_raw_json_transport_preserves_float_digests_and_rejects_bad_files(self):
+        source = pair()[0]
+        text = json.dumps(source)
+        self.assertIn('.0', text)
+        transported = json.loads(json.dumps({'json_text': text}))['json_text']
+        self.assertEqual(_digest(parse_json_file(transported)), _digest(source))
+        for value in (None, {}, 'broken JSON'):
+            with self.assertRaises(ValueError):
+                parse_json_file(value)
+        with self.assertRaises(ValueError):
+            parse_json_file('"競輪"', 4)
 
     def test_roundtrip_both_engines_all_nonstandard_states(self):
         for count in (7, 9):
@@ -132,11 +144,11 @@ class ReviewApiTests(unittest.TestCase):
     def test_http_decision_save_reload_and_stale_tab_without_training(self):
         records = list(pair(9, 'withdrawn'))
         state = self.app.held_review.state()
-        code, raw, _ = self.request('/api/held-review/import', {'value': records, 'revision': state['revision']})
+        code, raw, _ = self.request('/api/held-review/import', {'json_text': json.dumps(records), 'revision': state['revision']})
         self.assertEqual(code, 200, raw)
         state = json.loads(raw)
         for record in records:
-            body = {'source_sha256': _digest(record), 'evidence': evidence(record),
+            body = {'source_sha256': _digest(record), 'evidence_json': json.dumps(evidence(record)),
                     'decision': decision(), 'revision': state['revision']}
             code, raw, _ = self.request('/api/held-review/decision', body)
             self.assertEqual(code, 200, raw); state = json.loads(raw)
@@ -149,7 +161,7 @@ class ReviewApiTests(unittest.TestCase):
         bundle = json.loads(raw)
         self.app.held_review = ReviewWorkspace()  # A new server process starts empty.
         code, raw, _ = self.request('/api/held-review/import',
-                                   {'value': bundle, 'revision': self.app.held_review.state()['revision']})
+                                   {'json_text': json.dumps(bundle), 'revision': self.app.held_review.state()['revision']})
         self.assertEqual(code, 200, raw)
         self.assertEqual(json.loads(raw), state)
         exported = json.loads(self.request('/export/held-review-report')[1])
@@ -164,18 +176,19 @@ class ReviewApiTests(unittest.TestCase):
         self.assertIn("script-src 'sha256-", headers['Content-Security-Policy'])
         self.assertIn("connect-src 'self'", headers['Content-Security-Policy'])
         self.assertIn('/held-review', self.request('/')[1].decode())
-        body = {'value': list(pair()), 'revision': self.app.held_review.state()['revision']}
+        records = list(pair())
+        body = {'json_text': json.dumps(records), 'revision': self.app.held_review.state()['revision']}
         for headers in ({'Host': 'untrusted.invalid'}, {'Origin': 'https://untrusted.invalid'},
                         {'X-Keirin-Local': ''}, {'Sec-Fetch-Site': 'cross-site'}):
             self.assertEqual(self.request('/api/held-review/import', body, headers)[0], 403)
-        self.assertEqual(self.request('/api/held-review/import', body, {'Content-Length': str(33*1024*1024)})[0], 400)
-        self.assertEqual(self.request('/api/held-review/decision', body, {'Content-Length': '5000'})[0], 400)
+        self.assertEqual(self.request('/api/held-review/import', body, {'Content-Length': str(65*1024*1024)})[0], 400)
+        self.assertEqual(self.request('/api/held-review/decision', body, {'Content-Length': '9000'})[0], 400)
         self.assertEqual(self.request('/api/held-review/import', {**body, 'replace': True})[0], 400)
         self.assertEqual(self.app.held_review.state()['records'], [])
         self.assertEqual(self.request('/api/held-review/import', body)[0], 200)
         before = self.app.held_review.bundle()
-        self.assertEqual(self.request('/api/held-review/decision', {'source_sha256': _digest(body['value'][0]),
-            'evidence': {}, 'decision': {}, 'revision': before['sha256']})[0], 400)
+        self.assertEqual(self.request('/api/held-review/decision', {'source_sha256': _digest(records[0]),
+            'evidence_json': '{}', 'decision': {}, 'revision': before['sha256']})[0], 400)
         self.assertEqual(self.app.held_review.bundle(), before)
 
 

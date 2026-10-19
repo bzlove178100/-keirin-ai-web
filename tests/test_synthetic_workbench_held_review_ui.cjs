@@ -11,6 +11,7 @@ sys.path.insert(0,'tests')
 from test_held_history_review import pair,evidence,decision
 from ml.model_history import _digest
 print(json.dumps([{'count':count,'status':status,'records':list(pair(count,status)),
+ 'records_json':json.dumps(list(pair(count,status))), 'record_jsons':[json.dumps(r) for r in pair(count,status)],
  'reviews':[{'id':_digest(r),'evidence':evidence(r,normal=status!='cancelled'),
  'decision':decision(normal=status!='cancelled')} for r in pair(count,status)]}
  for count in (7,9) for status in ('dead_heat','withdrawn','cancelled')]))
@@ -24,7 +25,7 @@ async function start(){
  });return {url,child};
 }
 async function stop(server){if(server.child.exitCode!==null)return;const done=new Promise(resolve=>server.child.once('exit',resolve));server.child.kill('SIGINT');await done;}
-const file=value=>({name:'synthetic.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});
+const file=value=>({name:'synthetic.json',mimeType:'application/json',buffer:Buffer.from(typeof value==='string'?value:JSON.stringify(value))});
 async function importFile(page,value){await page.locator('#bundle-file').setInputFiles(file(value));await page.locator('#import').click();}
 const added=page=>page.getByText('検証して追加しました。終了前に確認一式を保存してください。',{exact:true}).waitFor();
 (async()=>{
@@ -35,7 +36,7 @@ const added=page=>page.getByText('検証して追加しました。終了前に�
    page=await browser.newPage({viewport:{width,height:900},acceptDownloads:true});const errors=[],requests=[];
    page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>requests.push(r.url()));
    await page.goto(server.url+'/held-review');await page.getByText('確認一式を読み込めます。',{exact:true}).waitFor();
-   await importFile(page,fixture.records);await added(page);
+   await importFile(page,fixture.records_json);await added(page);
    assert.equal(await page.locator('#counts').textContent(),'保留 2件 / 確認 0件');
    for(const [i,receipt] of fixture.reviews.entries()){
     await page.locator('#source').selectOption(receipt.id);
@@ -56,7 +57,7 @@ const added=page=>page.getByText('検証して追加しました。終了前に�
    assert.equal(await page.locator('#metrics .card').count(),2);
    if(fixture.status==='cancelled')assert.equal(await page.getByText(/—（評価対象なし）/).count(),2);
    let waiting=page.waitForEvent('download');await page.locator('#download').click();
-   const bundle=JSON.parse(await fs.readFile(await (await waiting).path(),'utf8'));
+   const bundleText=await fs.readFile(await (await waiting).path(),'utf8'),bundle=JSON.parse(bundleText);
    assert.equal(bundle.payload.schema_version,'synthetic-held-review-bundle-v1');
    assert.deepEqual(bundle.payload.held_records.slice().sort((a,b)=>a.schema_version.localeCompare(b.schema_version)),fixture.records.slice().sort((a,b)=>a.schema_version.localeCompare(b.schema_version)));
    assert(bundle.payload.reviews.every(r=>r.hold_released===false&&r.supervised_training_enabled===false));
@@ -68,16 +69,16 @@ const added=page=>page.getByText('検証して追加しました。終了前に�
    const bad=structuredClone(bundle);bad.sha256='0'.repeat(64);
    await importFile(page,bad);await page.getByText(/review_bundle_digest_mismatch/).waitFor();
    assert.equal(await page.locator('#counts').textContent(),'保留 2件 / 確認 2件');
-   await importFile(page,[fixture.records[0]]);await added(page);
+   await importFile(page,fixture.record_jsons[0]);await added(page);
    assert.equal(await page.locator('#counts').textContent(),'保留 2件 / 確認 2件');
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
    if(process.env.KEIRIN_SMOKE_ARTIFACT_DIR)await page.screenshot({path:path.join(process.env.KEIRIN_SMOKE_ARTIFACT_DIR,`held-review-${fixture.count}-${fixture.status}-${width}.png`),fullPage:true});
    assert.deepEqual(errors,[]);assert(requests.every(u=>u.startsWith(server.url+'/')));
    if(fixture.count===7&&fixture.status==='dead_heat'){
     // A second tab/import adds an unreviewed hold. The first tab cannot overwrite it.
-    const extra=fixtures.find(f=>f.count===7&&f.status==='cancelled').records[0];
-    const code=await page.evaluate(async extra=>{const state=await (await fetch('/api/held-review')).json();return (await fetch('/api/held-review/import',{method:'POST',headers:{'Content-Type':'application/json','X-Keirin-Local':'synthetic-only'},body:JSON.stringify({revision:state.revision,value:extra})})).status;},extra);
-    assert.equal(code,200);await importFile(page,bundle);
+    const extra=fixtures.find(f=>f.count===7&&f.status==='cancelled').record_jsons[0];
+    const code=await page.evaluate(async extra=>{const state=await (await fetch('/api/held-review')).json();return (await fetch('/api/held-review/import',{method:'POST',headers:{'Content-Type':'application/json','X-Keirin-Local':'synthetic-only'},body:JSON.stringify({revision:state.revision,json_text:extra})})).status;},extra);
+    assert.equal(code,200);await importFile(page,bundleText);
     await page.getByText('別の画面で記録が更新されました。最新状態を表示したので、対象と根拠を選び直してください。',{exact:true}).waitFor();
     assert.equal(await page.locator('#counts').textContent(),'保留 3件 / 確認 2件');
     assert((await page.locator('#summary').textContent()).includes('未解決 1レース'));
@@ -85,7 +86,7 @@ const added=page=>page.getByText('検証して追加しました。終了前に�
     page=await browser.newPage({viewport:{width,height:900}});await page.goto(server.url+'/held-review');
     await page.getByText('確認一式を読み込めます。',{exact:true}).waitFor();
     assert.equal(await page.locator('#counts').textContent(),'保留 0件 / 確認 0件');
-    await importFile(page,bundle);await added(page);assert.equal(await page.locator('#summary').textContent(),summary);
+    await importFile(page,bundleText);await added(page);assert.equal(await page.locator('#summary').textContent(),summary);
    }
    console.log(`${width}px ${fixture.count} cars ${fixture.status}: evidence/decision, missing hold, export/reload, bad file atomicity, immutable inputs PASS`);
   }finally{if(page)await page.close();await stop(server);}

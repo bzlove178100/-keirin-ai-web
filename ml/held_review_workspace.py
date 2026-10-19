@@ -4,6 +4,7 @@ Export/import preserves all supplied holds and decisions. This is not a global
 ledger, a session checkpoint, a provenance verifier, or an ordinary history.
 """
 from copy import deepcopy
+import json
 
 from ml.held_history_review import create_review, evaluate_reviews, REPORT_SCHEMA
 from ml.model_history import _canonical, _digest
@@ -12,6 +13,14 @@ SCHEMA = 'synthetic-held-review-bundle-v1'
 MAX_BYTES = 32 * 1024 * 1024
 MAX_HOLDS = 20
 MAX_REVIEWS = 40
+
+
+def parse_json_file(value, limit=MAX_BYTES):
+    # Preserve Python JSON numeric types/digests through the browser transport.
+    # JavaScript parse/stringify would turn 40.0 into 40 and invalidate bundles.
+    if not isinstance(value, str) or len(value.encode('utf-8')) > limit:
+        raise ValueError('review_json_file_too_large')
+    return json.loads(value)
 
 
 class ReviewConflict(ValueError):

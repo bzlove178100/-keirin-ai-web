@@ -67,7 +67,7 @@ function render(value){
  $('metrics').replaceChildren();for(const [engine,m] of Object.entries(report.metrics_by_engine)){const card=document.createElement('div');card.className='card';card.textContent=`${engine==='ml'?'ML':'Phase32'}：${m.evaluated_races}件 / 上位3的中率 ${m.metrics?(m.metrics.top3*100).toFixed(1)+'%':'—（評価対象なし）'}`;$('metrics').append(card);}
  sourceDetails();
 }
-async function readJSON(file,max){if(!file||file.size>max)throw new Error('file_size');return JSON.parse(await file.text());}
+async function readJSON(file,max){if(!file||file.size>max)throw new Error('file_size');const text=await file.text();JSON.parse(text);return text;}
 async function action(path,payload){
  busy=true;controls();message('検証中…');
  try{const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Keirin-Local':'synthetic-only'},body:JSON.stringify({...payload,revision:state.revision})});const value=await response.json();
@@ -79,14 +79,14 @@ async function action(path,payload){
 $('bundle-file').onchange=controls;
 $('source').onchange=sourceDetails;
 $('evidence-file').onchange=async()=>{busy=true;controls();evidence=null;
- try{const value=await readJSON($('evidence-file').files[0],3072);$('evidence-detail').textContent=JSON.stringify(value,null,2);evidence=value;message('根拠を読み込みました。対象・結果・時刻を確認して判断を追加してください。');}
+ try{const value=await readJSON($('evidence-file').files[0],3072);$('evidence-detail').textContent=value;evidence=value;message('根拠を読み込みました。対象・結果・時刻を確認して判断を追加してください。');}
  catch{ $('evidence-detail').textContent='根拠を読み込めません。3 KiB以内のJSONを指定してください。';}
  finally{busy=false;controls();}
 };
-$('import').onclick=async()=>{busy=true;controls();try{const value=await readJSON($('bundle-file').files[0],32*1024*1024);await action('/api/held-review/import',{value});}
+$('import').onclick=async()=>{busy=true;controls();try{const json_text=await readJSON($('bundle-file').files[0],32*1024*1024);await action('/api/held-review/import',{json_text});}
  catch{message('読込できませんでした。32 MiB以内のJSONを指定してください。現在の記録は保持しています。');}
  finally{busy=false;controls();}
 };
-$('record').onclick=()=>action('/api/held-review/decision',{source_sha256:$('source').value,evidence,decision:{decision:$('decision').value,reviewer_id:$('reviewer').value,reviewed_at:$('reviewed-at').value,reason:$('reason').value}});
+$('record').onclick=()=>action('/api/held-review/decision',{source_sha256:$('source').value,evidence_json:evidence,decision:{decision:$('decision').value,reviewer_id:$('reviewer').value,reviewed_at:$('reviewed-at').value,reason:$('reason').value}});
 fetch('/api/held-review').then(r=>{if(!r.ok)throw new Error();return r.json();}).then(value=>{render(value);busy=false;controls();message('確認一式を読み込めます。');}).catch(()=>message('状態を取得できません。サーバーを確認して画面を再読込してください。'));
 </script></body></html>

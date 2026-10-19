@@ -22,7 +22,7 @@ from ml.model_web_response import model_web_response, render_model_web_preview
 from ml.synthetic_demo import make_record
 from ml.synthetic_session import SCHEMA, MAX_SNAPSHOTS, SessionStore, SessionSaveError
 from ml.settle_snapshot import _iso
-from ml.held_review_workspace import ReviewWorkspace, ReviewConflict, MAX_BYTES as REVIEW_MAX_BYTES
+from ml.held_review_workspace import ReviewWorkspace, ReviewConflict, parse_json_file, MAX_BYTES as REVIEW_MAX_BYTES
 
 
 class Workbench:
@@ -254,16 +254,16 @@ def make_server(app: Workbench, port: int = 0):
                 if self.headers.get('Transfer-Encoding') or len(self.headers.get_all('Content-Length', [])) != 1:
                     raise ValueError('invalid_body_length')
                 length = int(self.headers['Content-Length'])
-                limit = REVIEW_MAX_BYTES + 1024 if self.path == '/api/held-review/import' else 4096
+                limit = 2 * REVIEW_MAX_BYTES + 1024 if self.path == '/api/held-review/import' else 8192 if self.path == '/api/held-review/decision' else 4096
                 if not 0 < length <= limit or self.headers.get('Content-Type','').split(';')[0] != 'application/json':
                     raise ValueError('small_json_body_required')
                 payload = json.loads(self.rfile.read(length))
                 if not isinstance(payload, dict): raise ValueError('json_object_required')
                 with app.lock:
-                    if self.path == '/api/held-review/import' and set(payload) == {'value', 'revision'}:
-                        result = app.held_review.load(payload['value'], payload['revision'])
-                    elif self.path == '/api/held-review/decision' and set(payload) == {'source_sha256', 'evidence', 'decision', 'revision'}:
-                        result = app.held_review.review(payload['source_sha256'], payload['evidence'], payload['decision'], payload['revision'])
+                    if self.path == '/api/held-review/import' and set(payload) == {'json_text', 'revision'}:
+                        result = app.held_review.load(parse_json_file(payload['json_text']), payload['revision'])
+                    elif self.path == '/api/held-review/decision' and set(payload) == {'source_sha256', 'evidence_json', 'decision', 'revision'}:
+                        result = app.held_review.review(payload['source_sha256'], parse_json_file(payload['evidence_json'], 3072), payload['decision'], payload['revision'])
                     elif self.path == '/api/predict' and set(payload) == {'rider_count'}:
                         result = app.predict(payload['rider_count'])
                     elif self.path == '/api/select' and set(payload) == {'snapshot_id'}:

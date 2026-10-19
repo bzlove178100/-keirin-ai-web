@@ -2,6 +2,11 @@
 
 ## Synthetic held-review UI and bundle — 2026-10-19
 
+初回head956559aのML39224926950/job117968775119は新Chrome保留選択で停止。
+Python JSONをJavaScriptで再構成するとPhase32のfloat表記が変わりdigestが不一致になることを再現。
+製品UI/APIと試験fixtureで元JSON文字列を保持するよう修正。digest検査は緩和せず、転送試験を1件追加。
+修正後headのCIはPR本文で確認。既存成功CIの手動再実行や未完CIの取消しはしない。
+
 main d069ab9b6adcf9585954a5bae7be7df0546e473c、Draft #266前head f3eb9877c3d6798e69016a89debd027086a4b543から継続。
 前候補の7系統CI成功、回帰39205905562は47/47。新規11試験もML39205905481で成功済み。
 以前のCI待ちは解消。成功済み試験の手動再実行なし。新コードに対するCI結果はPR本文の最新記録が正。
@@ -10,7 +15,7 @@ main d069ab9b6adcf9585954a5bae7be7df0546e473c、Draft #266前head f3eb9877c3d679
 確認一式をダウンロード/再読込でき、CLIレポートも再計算して再利用する。元履歴は変更しない。
 読込は追加のみ。部分一式で未確認保留/競合判断を消さず、改変・孤立確認・上限超過は全体拒否。
 revision不一致では別タブの古い操作を409で停止。合成予測画面の保存とは別のメモリ保持であることを明示。
-Python/API新規6試験成功。390/1280幅のChrome保存/復元/入力試験を既存ML CIへ追加。
+Python/API新規7試験を実施。390/1280幅のChrome保存/復元/入力試験を既存ML CIへ追加。
 ローカルにChromeなし。新候補の画面成功・全CIはPR本文の最終結果で確認する。
 契約・上限・1〜12R制約・保存の限界：docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md。
 
