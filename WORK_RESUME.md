@@ -1,5 +1,26 @@
 # Work resume handoff
 
+## Phase32 / ML held-event transfer — 2026-10-19 12:54 JST
+
+main `d069ab9b6adcf9585954a5bae7be7df0546e473c`、Draft #266の前head `6777d6ad1e092ec9a69167cd92e04d5910081723`から継続。
+前headは7系統CI成功、回帰39184944241は47/47。runtime39184944242は初回の依存待ち期限切れ後、
+同一headの依存成功を確認して失敗1ジョブだけ再実行しattempt2成功。詳細はPR本文12:44 JST記録。
+以前の「新head CI待ち」「Chrome未確認」はこの成功確認より古い。過去QMP失敗の根本原因は未確定。
+
+今回、ml.held_history_transferに合成入力専用の双方向保留イベント連携を追加。
+別々の保存済みPhase32/ML snapshotを検査し、日付/会場/番号・予定発走・車番構成一致を要求する。
+元予測/モデル/時刻を保持し、source/target両履歴とdigestを連携記録へ保存。予測の変換・モデル捏造なし。
+CLIは連携記録の作成と検証後のtarget出力。既存ファイル上書き・通常結果化・保留解除はなし。
+新規8試験成功。7/9車×3状態×双方向、評価除外、別レース指標不変、改変/時刻/識別不一致、CLIを検証。
+変更対象の試験だけ実行し、既存ML CIへ新試験を追加。新head/CI結果はPR本文の最新記録を正とする。
+契約と限界：docs/KEIRIN_HELD_HISTORY_TRANSFER_20261019.md。本人の選手IDや情報源真正性は検証していない。
+次は新head CI確認、保留解除の監査・競合・訂正契約。Web/EdgeのML連携と実owner backend受入は残件。
+
+他open PR #250=0659657 / #257=99aeacaは変更なし。非公開Work/未push作業は未確認。
+公開・Function配備は未承認。API predict20/history12/backtest11/history-pipeline7は変更なし。
+KEIRIN.JP HOLD、実取得・実学習・予想DB書込・本番予想OFF。
+将来の公開/配備は別途承認、現行20/12/11/7原本保存・段階受入・失敗時復元が必要。#265承認/旧版ZIPは流用しない。
+
 ## Phase32 owner held API UI — 2026-10-19
 
 Chrome診断：修正head aa146adのML39184712111/job117844583964は生成器・package検証を通過。
