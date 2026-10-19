@@ -32,7 +32,7 @@
 <p class="muted">全保留の訂正が一致したレースだけ固定予測を評価します。確率は未校正です。Phase32とMLの指標を混ぜません。</p>
 </section>
 <section><h2>4. 確認一式を保存する</h2>
-<p class="note">この確認作業はサーバーのメモリ内にあります。画面の再読込では維持されますが、サーバー終了で失われます。終了前に一式をダウンロードし、再起動後に追加読込してください。合成予測画面の自動保存とは別です。</p>
+<p id="storage-note" class="note">保存状態を確認しています。</p>
 <a id="download" class="download" href="/export/held-review" download>確認一式をダウンロード</a>
 <a id="report-download" class="download" href="/export/held-review-report" download>確認レポートをダウンロード</a>
 <p class="muted">保存完了はブラウザのダウンロード一覧で確認してください。SHA-256は内容の照合用であり、署名や真正性の証明ではありません。</p>
@@ -45,9 +45,11 @@ const statuses={dead_heat:'同着',withdrawn:'欠車',cancelled:'中止',normal:
 const reasons={unreviewed_held_history:'未確認の保留があります',conflicting_reviews:'同じ保留に異なる確認があります',conflicting_review_decisions:'訂正と除外維持が混在しています',conflicting_corrected_results:'訂正結果が一致していません',conflicting_race_context:'予定発走または車番構成が一致していません',conflicting_latest_snapshots:'同時刻の最新予測が競合しています',confirmed_nonstandard:'非標準結果の確認完了・除外維持',all_supplied_holds_corrected:'全件訂正一致・合成レビュー内で評価'};
 function message(text){$('message').textContent=text;}
 function controls(){
- for(const id of ['bundle-file','source','evidence-file','decision','reviewer','reviewed-at','reason'])$(id).disabled=busy||!state;
- $('import').disabled=busy||!state||!$('bundle-file').files.length;
- $('record').disabled=busy||!state||!$('source').value||!evidence;
+ const blocked=!!state?.storage.write_blocked;
+ for(const id of ['bundle-file','evidence-file','decision','reviewer','reviewed-at','reason'])$(id).disabled=busy||!state||blocked;
+ $('source').disabled=busy||!state;
+ $('import').disabled=busy||!state||blocked||!$('bundle-file').files.length;
+ $('record').disabled=busy||!state||blocked||!$('source').value||!evidence;
 }
 function clearEvidence(){evidence=null;$('evidence-file').value='';$('evidence-detail').textContent='根拠は未読込です。';}
 function sourceDetails(){
@@ -59,6 +61,8 @@ function sourceDetails(){
 }
 function render(value){
  const selected=$('source').value;state=value;$('source').replaceChildren();
+ const storage=value.storage;
+ $('storage-note').textContent=storage.write_blocked?'保存を確認できないため追加操作を停止しています。画面とダウンロードは直前に確認できた状態です。サーバーを再起動し、保存済み記録を照合してください。':storage.mode==='local_file'?`確認一式は操作ごとに自動保存されます。${storage.restored?'保存済み記録を検証して復元しました。':storage.checkpoint_saved?'保存済みです。':'まだ記録は保存されていません。'}同じ保存先で再起動すると続きから再開できます。ダウンロードは別途バックアップとして利用できます。`:'一時保存です。画面の再読込では維持されますが、サーバー終了で失われます。終了前に確認一式をダウンロードし、再起動後に追加読込してください。';
  for(const row of value.records){const r=row.race_identity,option=document.createElement('option');option.value=row.sha256;option.textContent=`${r.date} ${r.venue} ${r.race_number}R / ${row.schema_version.startsWith('ml-')?'ML':'Phase32'} / ${statuses[row.settlement.result_status]} / 確認${row.decisions.length}件`;$('source').append(option);}
  if(value.records.some(r=>r.sha256===selected))$('source').value=selected;
  $('counts').textContent=`保留 ${value.records.length}件 / 確認 ${value.report.unique_reviews}件`;
@@ -72,7 +76,8 @@ async function action(path,payload){
  busy=true;controls();message('検証中…');
  try{const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Keirin-Local':'synthetic-only'},body:JSON.stringify({...payload,revision:state.revision})});const value=await response.json();
   if(response.status===409){render(value.state);message('別の画面で記録が更新されました。最新状態を表示したので、対象と根拠を選び直してください。');return;}
-  if(!response.ok)throw new Error(value.error||'request_failed');render(value);message('検証して追加しました。終了前に確認一式を保存してください。');
+  if(response.status===503){render(value.state);message('保存を確認できないため、追加操作を停止しました。サーバーを再起動して保存済み記録を照合してください。');return;}
+  if(!response.ok)throw new Error(value.error||'request_failed');render(value);message(value.storage.mode==='local_file'?'検証して追加し、自動保存しました。':'検証して追加しました。終了前に確認一式を保存してください。');
  }catch(error){message('追加できませんでした。現在の記録は保持しています。入力内容を確認してください。（'+error.message+'）');}
  finally{busy=false;controls();}
 }

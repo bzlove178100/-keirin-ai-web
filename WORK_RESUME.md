@@ -1,5 +1,28 @@
 # Work resume handoff
 
+## Synthetic held-review automatic save/recovery — 2026-10-20
+
+main d069ab9b6adcf9585954a5bae7be7df0546e473c、Draft #266前head03b1ad279738f9310c506467600e93d51479b392から継続。
+前候補は7系統success、回帰39226822818=47/47、runtime39226822743 success。ML39226822632も新規7試験/Chrome12ケース成功。
+最新remote・他open PR #250=0659657 / #257=99aeacaに変化なし。成功済みCIの手動再実行なし。
+
+--state-dir指定時に、保留確認一式をheld-review/held-review.jsonへ自動保存する候補を追加。
+既存予測セッションとは独立。検証済みSessionStoreの固定ファイル/協調ロック/atomic replace/fsyncを共有。
+保存完了後にメモリへ反映して成功応答。失敗や外部書換えは503とwrite_blockedで停止し、再起動時に検証する。
+破損時に空で上書きせず、孤立partialを昇格しない。予測/モデル不変、実学習・通常履歴化なし。
+画面で一時保存/自動保存/復元/保存失敗を表示。未送信フォームは保存対象外。
+復元試験で監査配列順序の差を検出し、保存一式とレポートの順序を揃えて修正。
+
+ローカル：新規保存/復旧9＋既存確認API7＋共有保存処理7の計23試験成功。既存の実モデル学習試験はCIへ委ねる。
+実SIGKILL・置換前後・同期失敗・途中/完了復元・二重起動・破損/外部変更・503を検証。
+新Chrome4ケース（390/1280×7/9車）を既存ML CIへ追加。新head/CIはPR本文の最新記録が正。
+契約：docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md。電源断・任意ホスト耐久性・署名/グローバル台帳の保証はない。
+次は新候補CI確認。その後の許可済み合成開発は、予測から保留確認までのファイル受渡し削減を検討。
+
+公開/配備未承認、API20/12/11/7、KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF。
+実owner/実データ審査・権限・公開Web/Edge・通常収集への解除反映は未接続。非公開Work/未push作業は未確認。
+将来の配備には別途承認、現行原本保存・段階backend受入・復元が必要。#265承認/旧版ZIPは流用しない。
+
 ## Synthetic held-review UI and bundle — 2026-10-19
 
 修正head19df940のML39225660699/job117971190799はsuccess。新規Chrome12ケースとPython/API7試験成功。

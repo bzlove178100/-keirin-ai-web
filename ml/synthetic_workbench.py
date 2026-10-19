@@ -47,11 +47,13 @@ class Workbench:
                 if self.store.loaded is not None:
                     self._apply(self.store.loaded)
                     self.restored = True
+                self.held_review = ReviewWorkspace(Path(state_dir) / 'held-review')
         except BaseException:
             self.close()
             raise
 
     def close(self):
+        self.held_review.close()
         if self.store is not None:
             self.store.close()
         self._temporary.cleanup()
@@ -282,7 +284,9 @@ def make_server(app: Workbench, port: int = 0):
                 with app.lock:
                     self.send(409, {'error':str(exc), 'state':app.held_review.state()})
             except SessionSaveError as exc:
-                self.send(503, {'error':str(exc), 'state':app.state()})
+                with app.lock:
+                    state = app.held_review.state() if self.path.startswith('/api/held-review/') else app.state()
+                    self.send(503, {'error':str(exc), 'state':state})
             except (ValueError, TypeError, KeyError) as exc:
                 self.send(400, {'error':str(exc)})
             except Exception:
@@ -296,7 +300,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--synthetic', action='store_true', required=True)
     parser.add_argument('--port', type=int, default=8765)
-    parser.add_argument('--state-dir', type=Path, help='Optional local POSIX directory outside the checkout for synthetic records only.')
+    parser.add_argument('--state-dir', type=Path, help='Optional local POSIX directory outside the checkout for synthetic predictions and held-review checkpoints.')
     args = parser.parse_args()
     app = Workbench(args.state_dir)
     server = None

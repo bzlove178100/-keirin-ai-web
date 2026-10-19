@@ -61,6 +61,11 @@ class SessionStore:
     Locks are cooperative; hashes detect accidental changes, not provenance.
     Filesystems/hosts are not thereby qualified for production durability.
     """
+    filename = FILENAME
+    lock_filename = 'session.lock'
+    temporary_prefix = 'session-'
+    validate = staticmethod(validate_session)
+
     def __init__(self, directory: Path):
         import fcntl
         self.directory_fd = self.lock_fd = None
@@ -71,7 +76,7 @@ class SessionStore:
             directory = Path(directory)
             directory.mkdir(mode=0o700, parents=True, exist_ok=True)
             self.directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-            self.lock_fd = os.open('session.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+            self.lock_fd = os.open(self.lock_filename, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
                                    0o600, dir_fd=self.directory_fd)
             if not stat.S_ISREG(os.fstat(self.lock_fd).st_mode) or os.fstat(self.lock_fd).st_nlink != 1:
                 raise ValueError('session_lock_not_regular')
@@ -86,7 +91,7 @@ class SessionStore:
                     raise ValueError('session_envelope_invalid')
                 if envelope['sha256'] != _digest(envelope['payload']):
                     raise ValueError('session_digest_mismatch')
-                validate_session(envelope['payload'])
+                self.validate(envelope['payload'])
                 self.loaded = envelope['payload']
         except BaseException:
             self.close()
@@ -101,7 +106,7 @@ class SessionStore:
 
     def _read(self):
         try:
-            fd = os.open(FILENAME, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.directory_fd)
+            fd = os.open(self.filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.directory_fd)
         except FileNotFoundError:
             return None
         with os.fdopen(fd, 'rb') as handle:
@@ -116,11 +121,11 @@ class SessionStore:
     def save(self, payload):
         if self.failed:
             raise SessionSaveError('session_restart_required')
-        validate_session(payload)
+        self.validate(payload)
         data = (_canonical({'payload': payload, 'sha256': _digest(payload)}) + '\n').encode('utf-8')
         if len(data) > MAX_BYTES:
             raise ValueError('session_too_large')
-        temporary = 'session-' + uuid4().hex + '.partial'
+        temporary = self.temporary_prefix + uuid4().hex + '.partial'
         replaced = False
         created = False
         try:
@@ -133,7 +138,7 @@ class SessionStore:
                 handle.write(data)
                 handle.flush()
                 os.fsync(handle.fileno())
-            os.replace(temporary, FILENAME, src_dir_fd=self.directory_fd, dst_dir_fd=self.directory_fd)
+            os.replace(temporary, self.filename, src_dir_fd=self.directory_fd, dst_dir_fd=self.directory_fd)
             replaced = True
             os.fsync(self.directory_fd)
             self.expected = data
