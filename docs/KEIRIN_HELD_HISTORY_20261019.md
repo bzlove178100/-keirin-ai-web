@@ -126,3 +126,11 @@ QMP失敗の調査記録は`docs/CI_QMP_FIRST_FRAME_20261019.md`。全必須CI�
 Chromeは390/1280幅で状態選択→生成→JSON保存→再読込→混在除外とログアウトを検査する。
 ローカルChromeは利用できないためCIの新head結果を別途記録。配備済み実owner受入の代用ではない。
 公開/配備未承認、現行API・HOLD/OFF維持。ML相互変換・保留解除は未実装。
+
+### owner Web生成器との整合修正
+
+追加診断：head875b677のML CI39184498691/job117843944540は、レビュー生成器の
+owner_web_integration_anchor_changedで停止（Chrome未開始）。clearSession先頭の
+ownerModelPreview.reset()を元の位置へ戻し、保留状態の無効化をその直後に維持した。
+生成器/owner controller/失敗時receiptの3試験はローカル成功。完全package試験は
+ローカルのLightGBM不在で未完了のため、新head CIで確認する。検査の緩和・同一head再実行なし。

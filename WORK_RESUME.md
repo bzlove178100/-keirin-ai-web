@@ -2,6 +2,12 @@
 
 ## Phase32 owner held API UI — 2026-10-19
 
+追加診断：head875b677のML CI39184498691/job117843944540は、レビュー生成器の
+owner_web_integration_anchor_changedで停止（Chrome未開始）。clearSession先頭の
+ownerModelPreview.reset()を元の位置へ戻し、保留状態の無効化をその直後に維持した。
+生成器/owner controller/失敗時receiptの3試験はローカル成功。完全package試験は
+ローカルのLightGBM不在で未完了のため、新head CIで確認する。検査の緩和・同一head再実行なし。
+
 基準main `d069ab9b6adcf9585954a5bae7be7df0546e473c`は変更なし。Draft #266を継続。
 前head `482857c2ffde32506deb345a0798dad460fb9964`は7系統CI成功、回帰39181274460も47/47成功。
 ML39181274341 / API39181274307 / collection39181274296 / AWS39181274448 /

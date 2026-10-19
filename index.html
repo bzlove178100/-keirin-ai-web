@@ -252,11 +252,11 @@ function saveSession(data) {
 }
 
 function clearSession() {
+  ownerModelPreview.reset();
   ownerSessionRevision++;
   historyPipelineReady = historyHeldReady = backtestEngineReady = backtestHeldReady = false;
   invalidateHistoryResult();
   invalidateBacktestResult();
-  ownerModelPreview.reset();
   currentSession = null;
   currentProfile = null;
   sessionStorage.removeItem(SESSION_KEY);
