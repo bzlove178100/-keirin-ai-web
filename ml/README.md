@@ -317,7 +317,11 @@ excludes **all** records for that race, including later ordinary records. Evalua
 returns `held_races` and `held_cases`; `excluded` counts excluded records. Held races
 do not enter hit-rate/log-loss/Brier denominators. Unrelated ordinary races retain
 their metrics. If all races are held, metrics are empty and evaluation is blocked
-(the CLI writes the report and exits 2). No hold-resolution/override is provided.
+(the CLI writes the report and exits 2). This original history evaluator does not
+release holds. For audited decisions and frozen scoring of corrected generated
+fixtures, see [the synthetic held review contract](../docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md).
+That separate review keeps the original holds, exports no training/ordinary
+records, and requires all supplied holds of the race to have consistent reviews.
 
 The workbench result-state selector records these same events, hides ordinary
 finish/odds fields, and retains the held reason on reload/export. This is explicit

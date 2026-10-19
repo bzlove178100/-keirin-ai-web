@@ -1,5 +1,23 @@
 # Work status
 
+## Synthetic held-event review — 2026-10-19
+
+main d069ab9b6adcf9585954a5bae7be7df0546e473c、Draft #266の前head78488e85c14b3431de3e5c5df623ba6b87b20321から継続。
+前候補は7系統CI成功。回帰39197013687は47/47、runtime39197013668、PostgreSQL39197013600もsuccess。
+ML39197013605/API39197013613/collection39197013761/AWS39197013752成功。integrated39197013675はskipped。
+前記録の未完CIは解消済み。合格済み試験の手動再実行なし。過去QMP失敗の根本原因は未確定。
+
+ml.held_history_reviewを追加。保留確認と誤申告訂正の根拠/判断/元履歴を別記録として保存する。
+入力内の同じレース・両エンジンの保留をすべて確認し、訂正結果も一致した場合だけ合成レビュー内で再評価。
+確認漏れ、新規保留、訂正競合、予定発走/車番構成/最新snapshot競合は対象レースを未解決にする。
+非標準確認は評価対象外のまま確定。元予測/モデル不変、通常履歴/学習データexportなし。
+新規11試験成功。既存ML workflowへ新試験追加。契約：docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md。
+新head/CI結果はPR本文の最新記録が正。次は新候補CIと、合成レビューの操作画面・保存/再読込連携。
+Web/Edge・実owner・通常収集経路への解除反映と、実データ審査/権限/永続記録は未接続。
+GitHub他open PR #250=0659657 / #257=99aeacaは変更なし。非公開Work/未push作業は未確認。
+公開/配備未承認、API20/12/11/7、KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF維持。
+将来の配備は別途承認、現行原本保存・段階backend受入・失敗時復元が必要。#265承認/旧版ZIPを流用しない。
+
 ## Phase32 / ML held-event transfer — 2026-10-19 12:54 JST
 
 main `d069ab9b6adcf9585954a5bae7be7df0546e473c`、Draft #266の前head `6777d6ad1e092ec9a69167cd92e04d5910081723`から継続。

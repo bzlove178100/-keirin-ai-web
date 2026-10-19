@@ -1,5 +1,8 @@
 # Phase32 / ML 保留イベント連携（合成入力専用・未公開候補）
 
+追加：合成レビュー内の保留確認・誤申告訂正は `KEIRIN_HELD_HISTORY_REVIEW_20261019.md` を参照。
+この転送機能自体は保留解除を行わない。Web/Edgeや通常収集経路への解除反映は未接続。
+
 Draft #266、基準main `d069ab9b6adcf9585954a5bae7be7df0546e473c`。
 `ml.held_history_transfer` は、保存済みの保留イベントを別エンジンの保存済みsnapshotへ適用する。
 予測の相互変換・再推論ではない。Phase32の予測をMLと改称せず、モデル成果物や予測を捏造しない。
