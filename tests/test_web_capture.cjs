@@ -11,6 +11,7 @@ function node(id) {
 const sandbox = {console, Date, Intl, URL, Blob, setTimeout, clearTimeout, document:{getElementById:node}, localStorage:{getItem(){return null},setItem(){},removeItem(){}}};
 vm.createContext(sandbox);
 vm.runInContext(source,sandbox);
+node('result-status').value='normal'; // HTML select's initial option in the synthetic DOM.
 function run(code){return vm.runInContext(code,sandbox)}
 run(`var race={race:{date:'2026-09-24'}}; var now=new Date('2026-09-24T03:00:00Z');`);
 assert.equal(run("prospectiveEligibility(race,'2026-09-24T12:01',true,now).prospective"),true);

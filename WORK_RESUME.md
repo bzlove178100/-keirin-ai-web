@@ -1,5 +1,29 @@
 # Work resume handoff
 
+## Phase32 owner held API UI — 2026-10-19
+
+基準main `d069ab9b6adcf9585954a5bae7be7df0546e473c`は変更なし。Draft #266を継続。
+前head `482857c2ffde32506deb345a0798dad460fb9964`は7系統CI成功、回帰39181274460も47/47成功。
+ML39181274341 / API39181274307 / collection39181274296 / AWS39181274448 /
+PostgreSQL39181274574 / runtime39181274508成功。integrated39181274348はskippedで成功数に含めない。
+過去のQMP初回RESUME失敗は今回再発しなかったが、原因確定・恒久修正とは扱わない。
+
+今回、owner画面へ同着・欠車・中止の保留生成、保存、混在バックテストを接続した未公開候補。
+GETのowner・安全状態・正確な保留schema対応を確認できるAPIだけ保留操作を有効にする。
+未対応API・不正保留・改変応答は停止。生成応答を送信snapshot/settlementと照合し、
+集計応答の入力数・保留ID・除外数をローカルの保留規則と照合する。
+全件保留は「評価対象なし」で通常指標を表示しない。入力変更・ログアウト後の古い応答を無効化。
+実Web script＋実handlerの7/9車合成試験、通常capture試験、web/safety回帰は成功。
+390/1280幅のChrome owner保存/再読込/除外試験を追加。新headのCI結果はPR本文を正とする。
+この記録時点で新Chrome試験の成功・配備済みbackendの実owner受入とは扱わない。
+
+他open PR #250/#257は記録済みheadと一致。非公開Work/未push作業は未確認。
+公開・Function配備は未承認。API predict20/history12/backtest11/history-pipeline7は未変更。
+KEIRIN.JP HOLD、実取得・実学習・予想DB書込・本番予想OFF。
+MLモデル履歴の相互変換・保留解除・配備済みbackend受入は未完。詳細はdocs/KEIRIN_HELD_HISTORY_20261019.md。
+将来の配備には別途承認、現行20/12/11/7原本保存、段階受入・失敗時復元が必要。
+#265承認や旧版19/11/10/6の保存ZIPを今回へ流用しない。
+
 ## Phase32 held API — 2026-10-19
 
 #266 head `daa9f9efb3eb59e2ced8338aeb4eaa4af9f79981`から継続。main `d069ab9b6adcf9585954a5bae7be7df0546e473c`は変更なし。

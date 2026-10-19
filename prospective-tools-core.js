@@ -487,6 +487,7 @@
     HELD_SCHEMA,
     buildHeldHistory,
     validateHeldHistory,
+    partitionHolds,
     historyEnvelope,
     recordsFromJson,
     collectionStatus,

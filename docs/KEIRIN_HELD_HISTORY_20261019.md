@@ -29,7 +29,7 @@ withdrawnのみ `withdrawn_car_numbers` が必須で、空・重複・型違い�
 - browser coreとPython `ml.held_history.build_held_history` は同じJSON契約。
 - collection status / evaluation_protocol / dataset build_rows は同じレースの通常履歴を除外。
   明示非標準状態を持つ通常レコードも学習対象外。合成試験でクロス言語照合。
-- owner indexの履歴取込は保留を保持する。APIバックテストは未対応なので混在時は実行しない。
+- owner indexの履歴取込は保留を保持する。保留対応を確認できたAPIのみ混在バックテストを許可する。
   検査scriptが不在なら通常履歴だけを取込まず停止し、旧データセット/バックテスト入力を消去。
 - 既存の統合JSON形式で保留も保持。保存は明示的なJSONダウンロードで、DB保存ではない。
 
@@ -48,7 +48,7 @@ Python通常settlement CLIに保留オプションは追加していない（Pyt
 - Chromeがローカルにないため、390/1280幅の保存・再読込・統合保存の実ブラウザ試験を既存ML CIへ追加。
   新head CI成功まで画面受入完了と扱わない。配備済みAPIの実owner受入ではない。
 
-次は新head CIと未解決QMP失敗を確認し、owner画面の保留API操作と全経路の受入を進める。
+次は新head CIのowner画面受入結果を確認する。過去QMP失敗の根本原因は未確定。
 現在APIはpredict20/history12/backtest11/history-pipeline7。今回未配備。
 公開・配備には別途明示承認と変更対象backendの受入が必要。#265承認の拡張なし。
 将来の配備前には現在の原本を保存し、段階受入失敗時はその版へ復元する。
@@ -91,7 +91,7 @@ input_records、held_race_ids、excludedを返し、残った通常レースだ�
 不正保留が混ざるAPI要求は全体422で拒否し、部分指標を返さない（オフラインの除外集計とは異なる）。
 ml-held-history-v1の直接投入・非標準注記付き通常履歴は引き続き拒否。schema相互変換は未実装。
 両APIのGETはheld_history_schemaとheld_result_supportedを通知する。
-owner画面はまだ保留APIを無効にしており、この候補の配備や実owner受入は未実施。
+owner画面は下記の対応確認付き接続を追加。この候補の配備や実owner受入は未実施。
 
 共通snapshot検査のエンジン識別子優先順の差により、矛盾した識別子をPythonだけ受け入れる例を
 追加試験で発見。保留入口で存在する両識別子を検査し、3経路とも拒否するよう修正。
@@ -100,3 +100,29 @@ Python6試験で7/9車×3状態のJSON一致、発走前欠車/中止、15種類
 全件保留の指標null、別レースの全指標不変、混在順、未認証拒否を確認した。
 Web結合7/9車とweb/safety回帰も成功。Deno module graph CIにhistory-pipelineを追加。
 QMP失敗の調査記録は`docs/CI_QMP_FIRST_FRAME_20261019.md`。全必須CI成功や恒久修正とは扱わない。
+
+## 2026-10-19 owner画面の保留API接続（現在の未公開候補）
+
+前head482857cは7系統CI成功。回帰39181274460は47/47成功。合格済み試験の手動再実行なし。
+今回の画面変更に関係する結合試験を実施し、新しいChrome試験を既存ML CIへ追加する。
+
+- 通常確定/同着/欠車/中止を選択。保留時は勝者/オッズ欄を無効化し、欠車だけ車番入力を表示。
+- history-pipelineとbacktestの対応確認は別々に保持する。既存owner・安全条件に加え、
+  authenticated=true / held_result_supported=true / held_history_schema=phase32-held-history-v1が必要。
+  対応情報の省略・型違い・未知schema・状態照会失敗・ログアウトで保留操作を無効化。
+  通常結果の旧API互換は維持。APIのCSS表示だけで準備済みと判定しない。
+- 保留生成は送信前にbrowser coreで検査。応答のsnapshot/settlement/全保留項目・backtest要求を
+  ローカル生成JSONと比較し、owner・保存OFF・学習OFF・金銭EV OFF・通常指標nullも要求する。
+- 一括評価と直接貼付けの両方で保留対応を検査。不正保留を送らず停止し、返却された
+  入力数・通常レース数・保留ID・除外数をローカル規則と照合する。
+- 全件保留は「評価対象なし」。ROIや的中率の0埋め表示はしない。
+  通常レースが残る場合は別レースだけの既存指標と保留/除外件数を表示する。
+- 入力変更時に前の履歴保存対象を無効化。送信中の入力変更・ログアウト後の古い応答も採用しない。
+  JSONは端末ダウンロードのみ。未対応APIへ保留を送る代替経路は作らない。
+
+ローカル：実Web script＋実handler、合成ownerの7/9車×3状態、未対応/未知schema/安全状態不一致、
+改変応答、入力変更・ログアウト後応答、全件保留・同一レース・別レース混在、除外応答不一致を確認。
+通常capture・7/9車結合・web/safety回帰も成功。生成器はalready applied、diff check成功。
+Chromeは390/1280幅で状態選択→生成→JSON保存→再読込→混在除外とログアウトを検査する。
+ローカルChromeは利用できないためCIの新head結果を別途記録。配備済み実owner受入の代用ではない。
+公開/配備未承認、現行API・HOLD/OFF維持。ML相互変換・保留解除は未実装。
