@@ -1,5 +1,15 @@
 # Work resume handoff
 
+## Packet VM Python startup compatibility — 2026-10-20
+
+根拠貼付け候補a3dabd0のML39413293532/job118596105067はsuccess。390/1280×7/9車の拡張Chrome4ケース成功。
+回帰39413293240/job118596105543はkernel7.0の512M packet VMでPython encodings不在→PID1終了。
+前候補45abeb0の同試験はkernel6.17で成功。UI変更との直接関連なし、正確な欠落原因は未確定。
+packet VMを固定1024Mにし、payloadサイズとcodec存在/hashを記録する。initramfs展開失敗の即時拒否も追加。
+ローカルVM10/packet15試験成功。全期限・画像上限・隔離・認証/expiry/S3検査は維持。実VMは新候補CIで判定。
+詳細docs/CI_VM_INITRAMFS_20261020.md。最新head/CI確定結果はPR本文を正とする。旧失敗の無条件再試行なし。
+公開/マージ/配備未承認、API20/12/11/7・HOLD/OFF・将来の現行原本保存/段階受入/復元条件を維持。
+
 ## Synthetic review evidence text input — 2026-10-20
 
 前head45abeb0352f3efbd1dafa5d4f037549806c9d8f1は全7系統CI成功、回帰39410059644は47/47、runtime39410059690 verified=true。

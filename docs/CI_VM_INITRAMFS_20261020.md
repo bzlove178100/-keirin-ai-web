@@ -32,3 +32,23 @@ host実行がcapacity読取前にexit2/VM_GUEST_PID1_REQUIREDとなることを�
 新環境で起動・全安全性判定が通らなければ未解決。同一失敗の無条件再実行や検査の緩和はしない。
 本修正は試験環境の互換対応候補であり、任意kernel/ホストの動作保証や本番受入ではない。
 最新head、CI結果、残件はPR本文を正とする。公開/配備未承認、HOLD/OFFを維持。
+
+## Python/SSHを含むpacket VM（2026-10-20追記）
+
+前候補45abeb0は全7系統/回帰47件成功。同じsystemd設定は維持する。
+次のUI候補a3dabd0のML39413293532/job118596105067では、拡張Chrome4ケースが成功した。
+回帰39413293240/job118596105543（custody-suspend-packets）はkernel7.0.0-1017-azureで、
+認証SSH用ゲストのPython起動時に`No module named 'encodings'`、PID1終了によるkernel panic。
+前候補の同job118585338726はkernel6.17.0-1022-azureでawake/S3とも成功していた。
+このUI候補ではpacket VM実装は変更しておらず、従来の固定512Mのままだった。
+
+コード上、Python標準ライブラリの.py/.soを固定パスからarchiveへ含める。
+ただし旧ログには展開前のサイズ/codec個別hashも、VM bootレコード以前のinitramfs警告もない。
+systemdで観測した容量不足と整合する仮説であり、同じ根因やencodingsの欠落箇所を断定しない。
+
+packet VMも固定1024Mとし、圧縮/ファイル合計bytes、encodings/__init__.pyとutf_8.pyの
+存在/非空確認・hashを記録する。共通VM boot読取はinitramfs展開失敗を見落とさず即時拒否する。
+最小VM256M、160MiB image上限、全期限、無外部NIC/無host mount、認証拒否/expiry/S3判定は維持。
+ローカルVM10（新規展開失敗拒否1を含む）/packet15試験成功。QEMU未設置のため実VMは新head CIで確認する。
+成功条件はkernel7環境でPython起動と認証/expiry/復旧が通り、全必須CIが成功すること。
+旧失敗jobの無条件再実行なし。失敗再発時は新manifestと起動ログで再診断する。
