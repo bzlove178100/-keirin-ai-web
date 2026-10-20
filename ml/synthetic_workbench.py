@@ -20,7 +20,7 @@ from ml.model_history import capture_prediction, settle_snapshot, evaluate_histo
 from ml.offline_preview import render_preview
 from ml.model_web_response import model_web_response, render_model_web_preview
 from ml.synthetic_demo import make_record
-from ml.synthetic_session import SCHEMA, MAX_SNAPSHOTS, SessionStore, SessionSaveError, validate_session
+from ml.synthetic_session import SCHEMA, LEGACY_SCHEMA, JST, MAX_SNAPSHOTS, SessionStore, SessionSaveError, validate_session
 from ml.settle_snapshot import _iso
 from ml.held_review_workspace import ReviewWorkspace, ReviewConflict, parse_json_file, MAX_BYTES as REVIEW_MAX_BYTES
 from ml.held_history_review import evaluate_reviews
@@ -37,6 +37,8 @@ class Workbench:
         self.lock = RLock()
         self.scheduled = datetime.now(timezone.utc) + timedelta(hours=1)
         self.series = 0
+        self.schema = SCHEMA
+        self.legacy = None
         self.store = None
         self.restored = False
         self.held_review = ReviewWorkspace()
@@ -60,13 +62,16 @@ class Workbench:
         self._temporary.cleanup()
 
     def _payload(self, **changes):
-        return {'schema_version':SCHEMA, 'synthetic_only':True,
-                'scheduled':self.scheduled.isoformat(), 'series':self.series,
+        metadata = {'series': self.series} if self.schema == LEGACY_SCHEMA else {'legacy': self.legacy}
+        return {'schema_version':self.schema, 'synthetic_only':True,
+                'scheduled':self.scheduled.isoformat(), **metadata,
                 'snapshots':self.snapshots, 'histories':self.histories, 'current':self.current, **changes}
 
     def _apply(self, payload):
+        self.schema = payload['schema_version']
+        self.legacy = payload.get('legacy')
         self.scheduled = _iso(payload['scheduled'], 'session_scheduled')
-        self.series = payload['series']
+        self.series = payload.get('series', 0)
         self.snapshots = payload['snapshots']
         self.histories = payload['histories']
         self.current = payload['current']
@@ -74,6 +79,8 @@ class Workbench:
     def _commit(self, payload):
         if self.store is not None:
             self.store.save(payload)
+        else:
+            validate_session(payload)
         self._apply(payload)
         return self.state()
 
@@ -107,15 +114,26 @@ class Workbench:
             raise SessionSaveError('session_restart_required')
         if len(self.snapshots) >= MAX_SNAPSHOTS:
             raise ValueError('session_limit_export_and_restart')
+        payload = self._payload()
+        validate_session(payload)
         self._train()
         from ml.predict_position_models import predict_race
-        scheduled, series = self.scheduled, self.series
+        scheduled = self.scheduled
         now = datetime.now(timezone.utc)
-        if now >= scheduled:
-            scheduled, series = now + timedelta(hours=1), series + 1
+        upgrading = self.schema == LEGACY_SCHEMA
+        if now >= scheduled or upgrading:
+            # Advancing by at least a day keeps 7R/9R identities distinct even
+            # when the old schedule expired earlier on the same JST day.
+            previous = [scheduled, *(_iso(s['scheduled_start'], 'scheduled_start')
+                                     for s in self.snapshots.values())]
+            scheduled = max(now + timedelta(hours=1), max(previous) + timedelta(days=1))
+        if upgrading:
+            payload['schema_version'] = SCHEMA
+            payload['legacy'] = {'series': payload.pop('series'), 'scheduled': payload['scheduled'],
+                                 'snapshot_hashes': {key: s['snapshot_sha256'] for key, s in self.snapshots.items()}}
         race_data = make_record(16, count)['training_input']
-        race_data['race'].update(date=scheduled.astimezone(timezone(timedelta(hours=9))).date().isoformat(),
-                                 venue='SYNTHETIC', race_number=series*10+count, scheduled_start_jst=scheduled.isoformat())
+        race_data['race'].update(date=scheduled.astimezone(JST).date().isoformat(),
+                                 venue='SYNTHETIC', race_number=count, scheduled_start_jst=scheduled.isoformat())
         race_data['odds']['trifecta'] = {'1-2-3':25.4, '2-3-4':72.0}
         if count == 9:
             race_data['odds']['trifecta'] = {'-'.join(map(str,c)): [25.4,72.0,200.0,600.0][i % 4]
@@ -123,8 +141,8 @@ class Workbench:
         prediction = predict_race(race_data, self.root / 'models')
         snapshot = capture_prediction(prediction, synthetic=True)
         key = uuid4().hex
-        return self._commit(self._payload(snapshots={**self.snapshots, key:snapshot}, current=key,
-                                         scheduled=scheduled.isoformat(), series=series))
+        payload.update(snapshots={**self.snapshots, key:snapshot}, current=key, scheduled=scheduled.isoformat())
+        return self._commit(payload)
 
     def settle(self, key, outcome, odds):
         return self._record(key, {'outcome_combo':outcome, 'settlement_odds':odds})

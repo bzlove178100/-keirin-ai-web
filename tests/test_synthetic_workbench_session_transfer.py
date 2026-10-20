@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from ml.model_history import _digest, capture_prediction
-from ml.synthetic_session import SessionStore, FILENAME
+from ml.synthetic_session import LEGACY_SCHEMA, SessionStore, FILENAME
 from ml.synthetic_workbench import Workbench, make_server
 from test_model_history import snapshot, prediction
 from test_held_history_review import pair, evidence, decision
@@ -92,8 +92,10 @@ class SessionTransferTests(unittest.TestCase):
             with patch('ml.model_history.datetime', wraps=datetime) as clock:
                 clock.now.return_value = datetime.fromisoformat('2026-10-17T01:00:00+00:00')
                 snap = capture_prediction(p, synthetic=True)
-            app._commit(app._payload(series=1, scheduled=snap['scheduled_start'],
-                                     snapshots={'a'*32: snap}, current='a'*32))
+            legacy = app._payload(schema_version=LEGACY_SCHEMA, series=1, scheduled=snap['scheduled_start'],
+                                  snapshots={'a'*32: snap}, current='a'*32)
+            legacy.pop('legacy')
+            app._commit(legacy)
             app.hold('a'*32, 'cancelled')
             frozen = deepcopy(app._payload())
             with self.assertRaisesRegex(ValueError, 'race_number_invalid'): transfer(app)
