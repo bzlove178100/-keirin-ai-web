@@ -24,6 +24,9 @@
 <pre id="source-detail"></pre><ul id="decisions"></ul>
 <p>別途作成した合成結果の根拠JSONを指定し、内容と対象を確認してください。根拠の識別子や確認者名は本人認証を意味しません。</p>
 <label>合成結果の根拠JSON<input id="evidence-file" type="file" accept=".json,application/json"></label>
+<label>または根拠JSONを貼り付ける<textarea id="evidence-text" rows="6" spellcheck="false" autocomplete="off" aria-describedby="evidence-help"></textarea></label>
+<p id="evidence-help" class="muted">3 KiB以内。貼り付け後に下のボタンで内容を表示してください。対象や結果の照合は「判断を追加」で行います。未送信の入力は保存されません。</p>
+<button id="evidence-use" disabled>貼り付けた根拠を読み込む</button>
 <pre id="evidence-detail">根拠は未読込です。</pre>
 <label>判断<select id="decision"><option value="confirm_nonstandard">同着・欠車・中止を確認し、除外を維持</option><option value="correct_declaration">状態の誤申告を通常結果へ訂正</option></select></label>
 <div class="grid"><label>確認者ID（synthetic-で始まる値）<input id="reviewer" placeholder="synthetic-reviewer" maxlength="90"></label>
@@ -50,7 +53,8 @@ const reasons={unreviewed_held_history:'未確認の保留があります',confl
 function message(text){$('message').textContent=text;}
 function controls(){
  const blocked=!!state?.storage.write_blocked;
- for(const id of ['bundle-file','evidence-file','decision','reviewer','reviewed-at','reason'])$(id).disabled=busy||!state||blocked;
+ for(const id of ['bundle-file','evidence-file','evidence-text','decision','reviewer','reviewed-at','reason'])$(id).disabled=busy||!state||blocked;
+ $('evidence-use').disabled=busy||!state||blocked||!$('source').value||!$('evidence-text').value.trim();
  $('source').disabled=busy||!state;
  $('import').disabled=busy||!state||blocked||!$('bundle-file').files.length;
  $('record').disabled=busy||!state||blocked||!$('source').value||!evidence;
@@ -66,7 +70,7 @@ async function refreshSessionSource(){
  }catch(error){$('session-summary').textContent='予測画面の保留を追加できません。保存状態とレース番号（1〜12R）を確認してください。元の記録は変更していません。（'+error.message+'）';}
  controls();
 }
-function clearEvidence(){evidence=null;$('evidence-file').value='';$('evidence-detail').textContent='根拠は未読込です。';}
+function clearEvidence(){evidence=null;$('evidence-file').value='';$('evidence-text').value='';$('evidence-detail').textContent='根拠は未読込です。';}
 function sourceDetails(){
  clearEvidence();$('reason').value='';$('reviewed-at').value='';$('decision').value='confirm_nonstandard';
  const row=state?.records.find(r=>r.sha256===$('source').value);$('decisions').replaceChildren();
@@ -86,7 +90,8 @@ function render(value){
  $('metrics').replaceChildren();for(const [engine,m] of Object.entries(report.metrics_by_engine)){const card=document.createElement('div');card.className='card';card.textContent=`${engine==='ml'?'ML':'Phase32'}：${m.evaluated_races}件 / 上位3的中率 ${m.metrics?(m.metrics.top3*100).toFixed(1)+'%':'—（評価対象なし）'}`;$('metrics').append(card);}
  sourceDetails();
 }
-async function readJSON(file,max){if(!file||file.size>max)throw new Error('file_size');const text=await file.text();JSON.parse(text);return text;}
+function jsonText(text,max){if(new TextEncoder().encode(text).length>max)throw new Error('json_size');JSON.parse(text);return text;}
+async function readJSON(file,max){if(!file||file.size>max)throw new Error('file_size');return jsonText(await file.text(),max);}
 async function action(path,payload){
  busy=true;controls();message('検証中…');
  try{const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Keirin-Local':'synthetic-only'},body:JSON.stringify({...payload,revision:state.revision})});const value=await response.json();
@@ -100,7 +105,13 @@ $('session-refresh').onclick=async()=>{busy=true;controls();try{await refreshSes
 $('session-import').onclick=()=>action('/api/held-review/import-session',{source_revision:sessionSource.source_revision});
 $('bundle-file').onchange=controls;
 $('source').onchange=sourceDetails;
-$('evidence-file').onchange=async()=>{busy=true;controls();evidence=null;
+$('evidence-text').oninput=()=>{evidence=null;$('evidence-file').value='';$('evidence-detail').textContent='入力を変更しました。貼り付けた根拠を読み込んでください。';controls();};
+$('evidence-use').onclick=()=>{evidence=null;
+ try{evidence=jsonText($('evidence-text').value,3072);$('evidence-file').value='';$('evidence-detail').textContent=evidence;message('根拠を読み込みました。対象・結果・時刻を確認して判断を追加してください。');}
+ catch{$('evidence-detail').textContent='根拠を読み込めません。3 KiB以内のJSONを指定してください。';}
+ controls();
+};
+$('evidence-file').onchange=async()=>{busy=true;controls();evidence=null;$('evidence-text').value='';
  try{const value=await readJSON($('evidence-file').files[0],3072);$('evidence-detail').textContent=value;evidence=value;message('根拠を読み込みました。対象・結果・時刻を確認して判断を追加してください。');}
  catch{ $('evidence-detail').textContent='根拠を読み込めません。3 KiB以内のJSONを指定してください。';}
  finally{busy=false;controls();}

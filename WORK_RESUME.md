@@ -1,5 +1,18 @@
 # Work resume handoff
 
+## Synthetic review evidence text input — 2026-10-20
+
+前head45abeb0352f3efbd1dafa5d4f037549806c9d8f1は全7系統CI成功、回帰39410059644は47/47、runtime39410059690 verified=true。
+main/他open PR #250/#257は変更なし。旧取消しとVM起動失敗は前候補の確定記録を再利用し、再試行しない。
+
+合成確認の根拠JSONを画面へ貼り付け、明示読込できる候補を追加。ファイル受渡しをさらに減らす。
+UTF-8 3 KiB上限/JSON構文を画面で確認し、元文字列を既存判断APIへ送る。完全な根拠照合はサーバーで維持。
+編集/対象変更時に前の根拠を解除し、再読込前の判断を停止。ファイル選択と貼付けは同時に有効にしない。
+根拠/判断の自動生成なし。未送信入力は保存せず、成功判断だけ既存保存・復元経路を使う。
+ローカルJS構文/diff check成功。既存Chrome4ケースを貼付け・拒否・保存復旧まで拡張。新head CI結果はPR本文を正とする。
+契約はdocs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md「根拠JSONの貼り付け」。
+公開/マージ/Function配備未承認、API20/12/11/7・HOLD/OFFを維持。将来は別途承認・現行原本保存・段階受入・復元が必要。
+
 ## Synthetic VM startup compatibility diagnosis — 2026-10-20
 
 合成保留直接追加候補81b7164のML39408953490は成功。新規Python6/Chrome4、workbench計41試験成功。
