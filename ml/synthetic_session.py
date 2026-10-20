@@ -1,6 +1,7 @@
 """Bounded, local-only synthetic workbench checkpoints; never a training source."""
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import timedelta, timezone
 import os
@@ -158,6 +159,47 @@ class SessionStore:
             if sync:
                 os.fsync(handle.fileno())
             return data
+
+    def inspect_legacy_backup(self):
+        """Read only: correlate a bounded v1 original with the last saved session.
+
+        Return bytes only for a valid, related original. The raw-byte digest
+        binds a subsequent download to this observation, not to provenance.
+        """
+        try:
+            if self._read() != self.expected:
+                return {'status': 'current_changed'}, None
+            raw = self._read(LEGACY_BACKUP_FILENAME)
+            if raw is None:
+                return {'status': 'missing'}, None
+            envelope = json.loads(raw)
+            if (not isinstance(envelope, dict) or set(envelope) != {'payload', 'sha256'} or
+                    envelope['sha256'] != _digest(envelope['payload'])):
+                raise ValueError('backup_envelope_invalid')
+            old = envelope['payload']
+            validate_session(old)
+            if old['schema_version'] != LEGACY_SCHEMA:
+                raise ValueError('backup_v1_required')
+            current = json.loads(self.expected)['payload'] if self.expected else None
+            if current is None:
+                related = False
+            elif current['schema_version'] == LEGACY_SCHEMA:
+                related = raw == self.expected
+            else:
+                legacy = {'series': old['series'], 'scheduled': old['scheduled'],
+                          'snapshot_hashes': {key: s['snapshot_sha256'] for key, s in old['snapshots'].items()}}
+                related = (current['legacy'] == legacy and
+                           all(_canonical(current['snapshots'].get(key)) == _canonical(value)
+                               for key, value in old['snapshots'].items()) and
+                           all(_canonical(current['histories'].get(key)) == _canonical(value)
+                               for key, value in old['histories'].items()))
+            if not related:
+                return {'status': 'unrelated'}, None
+            return {'status': 'available', 'sha256': hashlib.sha256(raw).hexdigest(),
+                    'bytes': len(raw), 'snapshots': len(old['snapshots']),
+                    'histories': len(old['histories'])}, raw
+        except (OSError, ValueError, TypeError, KeyError, RecursionError):
+            return {'status': 'invalid'}, None
 
     def _preserve_legacy(self, payload):
         if (self.filename != FILENAME or payload.get('schema_version') != SCHEMA or

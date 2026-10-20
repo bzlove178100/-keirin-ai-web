@@ -1,5 +1,25 @@
 # Work resume handoff
 
+## Read-only migration-original inspection and download — 2026-10-20
+
+前head a7ccad6adfc4c5f29fa7b6c5e7916a27a04b26b1は全7系統success、回帰39420958802は47/47。
+runtime39420959298/job118621474201 verified=true、ML39420958797/job118621471632はPython54と実Chrome成功。
+main d069ab9b6adcf9585954a5bae7be7df0546e473c、他open PR #250/#257は変更なし。成功済み試験を手動反復しない。
+
+自動保存した移行前原本を画面から照合し、原本バイト列のまま取得する入口を追加。
+件数/サイズ/hashと、欠落/不正/別原本/現行外部変更/一時モードを区別。固定名だけを読取専用で検証する。
+v1は完全バイト一致、v2はlegacy/旧snapshot/原本に含まれる履歴との整合を確認。
+取得時も再照合し、画面確認時のraw SHA-256と違えば409で取得停止。原本・現行記録・確認一式の書込なし。
+署名/来歴証明ではなく、有効な古い保存物の差戻しや同内容の再整形検出は別保証。端末保存完了は未確認。
+旧版再開は現行v2と確認一式を保全して別保存先で行う。自動復元/削除/修復・過去原本の推測生成なし。
+
+新規Python7試験がローカル成功。原本完全取得/保存不変、追加履歴、破損/リンク/FIFO/上限/別原本、
+外部変更/古い取得リンク409/同一origin/固定path/一時モードを確認。JS構文/diff check成功。
+新Chrome2ケース（390/1280）を既存ML CIへ追加。新head全CIと実Chrome結果はPR本文で確定する。
+契約docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md「移行前原本の確認と取得」。結果記録のみでcommit/CI再起動しない。
+通常開発は工程ごとの確認待ちを挟まず進める。公開/マージ/Function配備未承認、API20/12/11/7記録値を維持。
+KEIRIN.JP HOLD・実取得/実学習/予想DB書込/本番予想OFF。将来の現行原本保存・段階backend受入・復元条件を維持。
+
 ## Preserve original v1 bytes before session migration — 2026-10-20
 
 前head d9eff3e33435af2b65a465c3c063d72506b33dc4は全7系統success、回帰39417795189は47/47、runtime39417795250 verified=true。

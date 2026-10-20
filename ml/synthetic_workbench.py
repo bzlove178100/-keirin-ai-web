@@ -220,6 +220,9 @@ class Workbench:
                                  for key,s in sorted(self.snapshots.items(),key=lambda item:(item[1]['captured_at'],item[0]))],
                 'saved_snapshots':len(self.snapshots), 'saved_histories':len(self.histories), 'report':self.report()}
 
+    def migration_backup(self):
+        return self.store.inspect_legacy_backup() if self.store else ({'status': 'temporary'}, None)
+
 
 def make_server(app: Workbench, port: int = 0):
     page = (Path(__file__).parent / 'templates' / 'synthetic_workbench.html').read_text(encoding='utf-8')
@@ -234,7 +237,7 @@ def make_server(app: Workbench, port: int = 0):
             pass
 
         def send(self, status, payload, content_type='application/json; charset=utf-8', filename=None, page_script_hash=None):
-            data = (json.dumps(payload, ensure_ascii=False, allow_nan=False) if content_type.startswith('application/json') else payload).encode()
+            data = payload if isinstance(payload, bytes) else (json.dumps(payload, ensure_ascii=False, allow_nan=False) if content_type.startswith('application/json') else payload).encode()
             self.send_response(status)
             self.send_header('Content-Type', content_type)
             self.send_header('Content-Length', str(len(data)))
@@ -264,6 +267,14 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, page, 'text/html; charset=utf-8')
                 if self.path == '/api/state':
                     return self.send(200, app.state())
+                if self.path == '/api/session-v1-backup':
+                    return self.send(200, app.migration_backup()[0])
+                match = re.fullmatch(r'/export/session-v1/([0-9a-f]{64})', self.path)
+                if match:
+                    info, raw = app.migration_backup()
+                    if info['status'] != 'available' or info['sha256'] != match[1]:
+                        return self.send(409, {'error': 'migration_backup_changed_or_unavailable'})
+                    return self.send(200, raw, filename='synthetic-session-v1-before-migration.json')
                 if self.path == '/held-review':
                     return self.send(200, review_page, 'text/html; charset=utf-8', page_script_hash=review_hash)
                 if self.path == '/api/held-review':
