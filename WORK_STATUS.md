@@ -1,5 +1,16 @@
 # Work status
 
+## Synthetic VM startup compatibility diagnosis — 2026-10-20
+
+合成保留直接追加候補81b7164のML39408953490は成功。新規Python6/Chrome4、workbench計41試験成功。
+一方、回帰39408953553の既存VMでkernel7.0上のinitramfs書込失敗→systemd実行不可を確認。
+kernel6.17の同種成功ログと照合。前候補のtimeoutやQMP問題とは別。詳細はdocs/CI_VM_INITRAMFS_20261020.md。
+容量不足を仮説として、systemd合成VMだけ512M→1024M、archive/ゲスト容量診断を追加。
+安全条件、期限、画像上限、packet-only VM、本番/ホスト設定は変更なし。
+ローカル既存19試験＋C static/Werrorコンパイル/host実行拒否を確認。実VMは新head CIで検証する。
+新head/最終結果はPR本文を正とする。kernel7環境での改善と全CI成功が確認できるまでは未解決。
+公開/配備未承認、API20/12/11/7、KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF。
+
 ## Synthetic session to held-review direct transfer — 2026-10-20
 
 基準main d069ab9b6adcf9585954a5bae7be7df0546e473c、前head bd654a9e79a0e5ce1345c9ae081339e5f1353f58。
