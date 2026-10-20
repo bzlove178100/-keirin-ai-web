@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -145,10 +146,10 @@ class RolloverTests(unittest.TestCase):
                 directory = Path(tmp); old = saved_session()
                 store = SessionStore(directory); store.save(old); store.close()
                 path = directory/FILENAME; original = path.read_bytes(); app = Workbench(directory)
-                real_fsync = os.fsync; calls = []
+                real_fsync = os.fsync
                 def fail(fd):
-                    calls.append(fd)
-                    if len(calls) == (2 if after_replace else 1): raise OSError('injected migration sync failure')
+                    replaced = json.loads(path.read_bytes())['payload']['schema_version'] == SCHEMA
+                    if replaced == after_replace: raise OSError('injected migration sync failure')
                     real_fsync(fd)
                 try:
                     with generated_at(app, NOW), patch('ml.synthetic_session.os.fsync', side_effect=fail):

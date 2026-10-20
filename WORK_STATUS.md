@@ -1,5 +1,24 @@
 # Work status
 
+## Preserve original v1 bytes before session migration — 2026-10-20
+
+前head d9eff3e33435af2b65a465c3c063d72506b33dc4は全7系統success、回帰39417795189は47/47、runtime39417795250 verified=true。
+ML39417795204/job118610955051でworkbench Python47試験と実Chrome操作/保存復旧成功。main/他open PR #250/#257は変更なし。
+
+v1からv2への移行前原本が手動バックアップに依存していたため、保存先指定時の移行直前に原本を自動保存する。
+synthetic-session-v1-before-migration.jsonへ元ファイルのバイト列をそのまま保存し、fsync/排他公開/dir fsync/一致確認後に移行。
+既存原本は上書きしない。同一原本は再同期して利用し、異なる原本/リンク/非通常ファイル/上限/保存失敗は503と書込停止。
+旧ファイル/メモリは保持。v2保存に失敗しても移行前原本を保持する。新規v2/旧記録操作/一時モードでは新設しない。
+既にv2移行済みで原本がない場合は推測生成しない。旧版復帰は別保存先で原本を使用し、現行v2/別確認一式を巻き戻さない。
+link→一時名unlink間の強制終了は2リンクが残るため、旧v1復元後も次の移行を拒否。原本を保全し明示修復するまで再開しない。
+
+新規7＋影響する既存14＝21試験がローカル成功。完全バイト一致/別保存先復元/既存非上書き/同名競合、I/O障害、
+実SIGKILL3境界、HTTP503/メモリ保持、リンク/FIFO/上限を検証。JS構文/diff check成功。新head CIは既存設定の自動実行で判定する。
+契約docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md「保存形式の移行前原本を自動保存」。確定head/CIはPR本文が最新。
+PR本文は上限に近いため最新節を更新し、以前の確定CIと重要契約を保持する。結果記録だけでcommit/CIを再起動しない。
+通常開発は工程ごとの確認待ちを挟まず検証・保存まで進める。公開/マージ/配備は引き続き未承認。
+API20/12/11/7・KEIRIN.JP HOLD・実取得/実学習/予想DB書込/本番予想OFF、将来の原本保存/段階backend受入/復元条件を維持。
+
 ## Synthetic session expiration and v1 compatibility — 2026-10-20
 
 前head d192cbd7bd8af48022ca5fd2bd8e880b32760381は全7系統success、回帰39413810530は47/47、runtime39413810736 verified=true。

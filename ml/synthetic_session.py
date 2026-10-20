@@ -16,6 +16,7 @@ LEGACY_SCHEMA = 'synthetic-workbench-session-v1'
 SCHEMA = 'synthetic-workbench-session-v2'
 JST = timezone(timedelta(hours=9))
 FILENAME = 'synthetic-session.json'
+LEGACY_BACKUP_FILENAME = 'synthetic-session-v1-before-migration.json'
 MAX_BYTES = 32 * 1024 * 1024
 MAX_SNAPSHOTS = 20
 
@@ -141,9 +142,10 @@ class SessionStore:
                 os.close(fd)
                 setattr(self, name, None)
 
-    def _read(self):
+    def _read(self, filename=None, *, sync=False):
         try:
-            fd = os.open(self.filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.directory_fd)
+            fd = os.open(self.filename if filename is None else filename,
+                         os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.directory_fd)
         except FileNotFoundError:
             return None
         with os.fdopen(fd, 'rb') as handle:
@@ -153,7 +155,51 @@ class SessionStore:
             data = handle.read(MAX_BYTES + 1)
             if len(data) > MAX_BYTES:
                 raise ValueError('session_too_large')
+            if sync:
+                os.fsync(handle.fileno())
             return data
+
+    def _preserve_legacy(self, payload):
+        if (self.filename != FILENAME or payload.get('schema_version') != SCHEMA or
+                self.expected is None or
+                json.loads(self.expected)['payload']['schema_version'] != LEGACY_SCHEMA):
+            return
+        temporary = 'session-v1-backup-' + uuid4().hex + '.partial'
+        created = False
+        try:
+            previous = self._read(LEGACY_BACKUP_FILENAME, sync=True)
+            if previous is not None:
+                if previous != self.expected:
+                    raise ValueError('migration_backup_already_contains_different_record')
+                # A prior process may have completed the file but not the
+                # directory sync. Confirm both before replacing the v1 source.
+            else:
+                fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                             0o600, dir_fd=self.directory_fd)
+                created = True
+                with os.fdopen(fd, 'wb') as handle:
+                    handle.write(self.expected)  # Preserve exact original bytes, not a reserialization.
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                # Exclusive publication: never replace an existing backup,
+                # even if it appears after the earlier read.
+                os.link(temporary, LEGACY_BACKUP_FILENAME,
+                        src_dir_fd=self.directory_fd, dst_dir_fd=self.directory_fd,
+                        follow_symlinks=False)
+                os.unlink(temporary, dir_fd=self.directory_fd)
+                created = False
+            os.fsync(self.directory_fd)
+            if self._read(LEGACY_BACKUP_FILENAME) != self.expected:
+                raise ValueError('migration_backup_verification_failed')
+        except (OSError, ValueError) as exc:
+            self.failed = True
+            raise SessionSaveError('session_migration_backup_failed_restart_required') from exc
+        finally:
+            if created:
+                try:
+                    os.unlink(temporary, dir_fd=self.directory_fd)
+                except OSError:
+                    pass
 
     def save(self, payload):
         if self.failed:
@@ -168,6 +214,7 @@ class SessionStore:
         try:
             if self._read() != self.expected:
                 raise ValueError('session_changed_outside_workbench')
+            self._preserve_legacy(payload)
             fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                          0o600, dir_fd=self.directory_fd)
             created = True
