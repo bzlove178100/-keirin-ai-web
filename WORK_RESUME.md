@@ -1,5 +1,28 @@
 # Work resume handoff
 
+## Synthetic category disclosure candidate — 2026-10-21
+
+再開main d069ab9b6adcf9585954a5bae7be7df0546e473c、Draft #266 ae2658f7acadb597bf67217c165afe722a651587。
+#266は全7系統success、回帰39438773118は47/47、runtime39438773171/job118682760535 verified=true。
+ML39438773194/job118682753442のPython61/原本取得Chrome2/既存画面成功を再利用。他open PR #250/#257は変更なし。
+
+完成条件に残る商品表示を進める。過去会話検索で5カテゴリ＋FINAL 5＋DREAM TICKETの採用方針を確認。
+個別プランの割当/価格/期間/失効は原文で明示採用を確認できず、推測で実装しない。
+指定カテゴリだけを返す読取専用処理と合成確認画面を別ブランチcodex/synthetic-product-disclosureへ追加。
+この候補は#266検証済みheadに依存し、mainへのPR差分には未マージの#266も含む。どちらも公開/マージ未承認。
+新規差分はae2658fから比較する。#266のコード/head/成功CIは変更しない。
+
+指定なし/対象外/開始前/期限切れは候補0。未知カテゴリ/認証主張/不正指定は拒否。表示対象だけ既存snapshot検証を通す。
+ブラウザへ全候補を送らず、指定カテゴリだけ返す。画面切替で旧候補を消し、遅い旧応答を破棄、失敗時も消去する。
+誰でも全ケースを選べる合成画面であり、本人認証/実会員権/課金の実装ではない。FINAL 5/DREAM TICKET出力なし。
+既存owner/認証設定・Function・配備・予測/履歴/確認一式は変更しない。予測の再生成/再学習なし。
+
+ローカル新規Python6、JS構文/diff check成功。Chrome4ケース（390/1280×7/9車）をML CIへ追加。
+新headの全CI/実Chromeは候補PRで確定する。結果だけでcommit/CI再起動なし。
+詳細docs/KEIRIN_CATEGORY_DISCLOSURE_20261021.md。商品開示/利用権供給/実会員接続・FINAL5/DREAM・課金/実データ評価は残る。
+API20/12/11/7記録値、KEIRIN.JP HOLD・実取得/実学習/予想DB書込/本番予想OFF。
+#266の将来の現行原本保存・段階backend受入・復元条件を維持。#265承認/旧ZIPを流用しない。
+
 ## Read-only migration-original inspection and download — 2026-10-20
 
 前head a7ccad6adfc4c5f29fa7b6c5e7916a27a04b26b1は全7系統success、回帰39420958802は47/47。

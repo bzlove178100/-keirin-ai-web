@@ -1,0 +1,43 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>カテゴリ別の表示確認</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f6f8;color:#172d43;font:16px/1.6 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:24px 16px}h1{font-size:26px}h2{font-size:19px}a{color:#156b63}.notice{padding:14px;background:#fff4d9;border-left:4px solid #c7972c}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:20px 0}.card{padding:18px;background:white;border:1px solid #dbe3e9;border-radius:12px}.locked{color:#53697d}.pick{overflow-wrap:anywhere}.muted{font-size:13px;color:#53697d}p{overflow-wrap:anywhere}label{display:block;margin-top:20px}select,button{font:inherit;max-width:100%;padding:10px;border:1px solid #8092aa;border-radius:7px;background:white}button{margin:10px 0;cursor:pointer}#status{min-height:2em}@media(max-width:650px){.grid{grid-template-columns:1fr}h1{font-size:24px}}
+</style></head><body><main>
+<a href="/">合成予測の画面へ戻る</a><h1>カテゴリ別の表示確認</h1>
+<div class="notice"><strong>合成データ専用の確認画面</strong><p>表示範囲を切り替えて、返されるカテゴリを確認します。誰でも全ケースを選べる開発用画面です。実際の会員プラン・利用権・料金を示すものではありません。</p></div>
+<p class="muted">実データ取得 OFF · 実データ学習 OFF · DB書込 OFF · 本番予想 OFF · 課金 OFF</p>
+<label for="scenario">確認用の表示範囲</label><select id="scenario"><option value="none">カテゴリ指定なし</option><option value="hit">的中率優先のみ</option><option value="two">的中率優先＋バランス</option><option value="three">的中率優先＋バランス＋中穴</option><option value="all">全5カテゴリ</option><option value="expired">期限切れのケース</option><option value="future">開始時刻前のケース</option><option value="other-snapshot">別の保存予測が対象のケース</option></select>
+<button id="refresh">選択中のケースを再確認</button>
+<p id="status" role="status" aria-live="polite">確認しています。</p><p id="race"></p><div id="categories" class="grid"></div>
+<p class="muted">保存済み予測の候補を使い、再学習・予測の作り直しは行いません。確率は未校正で、実レースの的中率・利益ではありません。</p>
+<p class="muted">FINAL 5とDREAM TICKETはこの画面の対象外です。表示範囲の選択は購入・プラン変更・利用権の付与を行いません。</p>
+<script>
+'use strict';
+const snapshot=/* SNAPSHOT_ID */,$=id=>document.getElementById(id);
+const names={hit_priority:'的中率優先',balance:'穴＋バランス',middle:'中穴',longshot:'大穴',super_longshot:'超大穴'};
+const reasons={no_categories:'表示するカテゴリの指定がありません。',expired:'期限切れのため候補を表示しません。',not_started:'開始時刻前のため候補を表示しません。',different_snapshot:'この保存予測は対象外のため候補を表示しません。'};
+let generation=0;
+function clear(){ $('categories').replaceChildren();$('race').textContent=''; }
+function render(value){
+ if(value.schema_version!=='synthetic-category-view-v1'||value.synthetic_only!==true||value.authentication_status!=='not_asserted'||value.entitlement_status!=='not_asserted'||value.billing_enabled!==false)throw new Error('invalid_response');
+ const keys=Object.keys(value.categories||{});
+ if(keys.some(k=>!Object.hasOwn(names,k))||!['visible','locked'].includes(value.status)||(value.status==='locked'&&keys.length))throw new Error('invalid_response');
+ $('status').textContent=value.status==='visible'?`合成ケース：${keys.length}カテゴリ・${value.total_picks}候補を表示しています。`:reasons[value.reason]||'候補を表示できません。';
+ if(value.status==='visible')$('race').textContent=`${value.race.date} ${value.race.venue} ${value.race.race_number}R · ${value.rider_count}車`;
+ for(const [key,name] of Object.entries(names)){
+  const card=document.createElement('section');card.className='card';card.dataset.category=key;
+  const title=document.createElement('h2');title.textContent=name;card.append(title);
+  const category=value.categories[key];
+  if(!category){const p=document.createElement('p');p.className='locked';p.textContent='このケースでは対象外';card.append(p);}
+  else{for(const pick of category.picks){const p=document.createElement('p');p.className='pick';p.textContent=`${pick.combo_key} · ${(pick.estimated_probability*100).toFixed(3)}% · ${pick.odds===null?'オッズ未確認':pick.odds.toFixed(1)+'倍'}`;card.append(p);}
+   if(category.category_note){const p=document.createElement('p');p.className='muted';p.textContent=category.category_note;card.append(p);}
+  }
+  $('categories').append(card);
+ }
+}
+async function load(){
+ const request=++generation,scenario=$('scenario').value;clear();$('status').textContent='確認しています。';
+ try{const response=await fetch('/api/category-view/'+snapshot+'/'+scenario);if(!response.ok)throw new Error('request_failed');const value=await response.json();if(request!==generation)return;render(value);}
+ catch{if(request!==generation)return;clear();$('status').textContent='表示を確認できませんでした。接続を確認して再確認してください。';}
+}
+$('scenario').onchange=load;$('refresh').onclick=load;load();
+</script></main></body></html>

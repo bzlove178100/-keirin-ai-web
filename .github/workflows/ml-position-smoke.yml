@@ -132,6 +132,7 @@ jobs:
           node tests/test_synthetic_workbench_held_review_restart_ui.cjs
           node tests/test_synthetic_workbench_session_transfer_ui.cjs
           node tests/test_synthetic_workbench_backup_export_ui.cjs
+          node tests/test_synthetic_workbench_category_preview_ui.cjs
           node tests/test_synthetic_workbench_owner_web_ui.cjs
       - name: Run paired holdout and leakage checks
         run: python tests/test_offline_evaluation.py

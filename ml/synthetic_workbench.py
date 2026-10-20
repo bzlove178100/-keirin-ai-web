@@ -19,6 +19,7 @@ from ml.dataset import build_rows
 from ml.model_history import capture_prediction, settle_snapshot, evaluate_histories, _digest
 from ml.offline_preview import render_preview
 from ml.model_web_response import model_web_response, render_model_web_preview
+from ml.product_category_preview import fixture_view, render_category_preview
 from ml.synthetic_demo import make_record
 from ml.synthetic_session import SCHEMA, LEGACY_SCHEMA, JST, MAX_SNAPSHOTS, SessionStore, SessionSaveError, validate_session
 from ml.settle_snapshot import _iso
@@ -267,6 +268,17 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, page, 'text/html; charset=utf-8')
                 if self.path == '/api/state':
                     return self.send(200, app.state())
+                match = re.fullmatch(r'/api/category-view/([0-9a-f]{32})/([a-z-]+)', self.path)
+                if match and match[1] in app.snapshots:
+                    try:
+                        result = fixture_view(app.snapshots[match[1]], match[1], match[2], now=datetime.now(timezone.utc))
+                        return self.send(200, result)
+                    except (ValueError, KeyError, TypeError):
+                        return self.send(409, {'error': 'category_display_contract_invalid'})
+                match = re.fullmatch(r'/category-view/([0-9a-f]{32})', self.path)
+                if match and match[1] in app.snapshots:
+                    html, digest = render_category_preview(match[1])
+                    return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
                 if self.path == '/api/session-v1-backup':
                     return self.send(200, app.migration_backup()[0])
                 match = re.fullmatch(r'/export/session-v1/([0-9a-f]{64})', self.path)
