@@ -20,9 +20,10 @@ from ml.model_history import capture_prediction, settle_snapshot, evaluate_histo
 from ml.offline_preview import render_preview
 from ml.model_web_response import model_web_response, render_model_web_preview
 from ml.synthetic_demo import make_record
-from ml.synthetic_session import SCHEMA, MAX_SNAPSHOTS, SessionStore, SessionSaveError
+from ml.synthetic_session import SCHEMA, MAX_SNAPSHOTS, SessionStore, SessionSaveError, validate_session
 from ml.settle_snapshot import _iso
 from ml.held_review_workspace import ReviewWorkspace, ReviewConflict, parse_json_file, MAX_BYTES as REVIEW_MAX_BYTES
+from ml.held_history_review import evaluate_reviews
 
 
 class Workbench:
@@ -153,6 +154,36 @@ class Workbench:
     def report(self):
         return evaluate_histories(list(self.histories.values()), synthetic=True)
 
+    def _review_session_holds(self):
+        if self.store is not None and self.store.failed:
+            raise ValueError('prediction_session_restart_required')
+        # The source must still be a valid generated session, including the
+        # correspondence between each saved prediction and its result.
+        validate_session(self._payload())
+        holds = [record for _, record in sorted(self.histories.items())
+                 if record['schema_version'] == 'ml-held-history-v1']
+        evaluate_reviews(holds, [], synthetic=True)
+        return holds
+
+    def review_session_source(self):
+        holds = self._review_session_holds()
+        existing = {_digest(record) for record in self.held_review.holds}
+        return {'source_revision': _digest(holds), 'held_count': len(holds),
+                'already_added': sum(_digest(record) in existing for record in holds),
+                'records': [{'race': record['snapshot']['prediction']['race'],
+                             'result_status': record['settlement']['result_status']}
+                            for record in holds]}
+
+    def import_review_session(self, source_revision, revision):
+        holds = self._review_session_holds()
+        if source_revision != _digest(holds):
+            raise ReviewConflict('review_session_source_changed')
+        if not holds:
+            raise ValueError('review_session_has_no_holds')
+        # Append through the existing validator/checkpoint transaction. Never
+        # change the prediction session or manufacture evidence/decisions.
+        return self.held_review.load(holds, revision)
+
     def state(self):
         current = None
         if self.current:
@@ -219,6 +250,11 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, review_page, 'text/html; charset=utf-8', page_script_hash=review_hash)
                 if self.path == '/api/held-review':
                     return self.send(200, app.held_review.state())
+                if self.path == '/api/held-review/session-source':
+                    try:
+                        return self.send(200, app.review_session_source())
+                    except (ValueError, TypeError, KeyError) as exc:
+                        return self.send(400, {'error': str(exc)})
                 if self.path == '/export/held-review':
                     return self.send(200, app.held_review.bundle(), filename='synthetic-held-review-bundle.json')
                 if self.path == '/export/held-review-report':
@@ -264,6 +300,8 @@ def make_server(app: Workbench, port: int = 0):
                 with app.lock:
                     if self.path == '/api/held-review/import' and set(payload) == {'json_text', 'revision'}:
                         result = app.held_review.load(parse_json_file(payload['json_text']), payload['revision'])
+                    elif self.path == '/api/held-review/import-session' and set(payload) == {'source_revision', 'revision'}:
+                        result = app.import_review_session(payload['source_revision'], payload['revision'])
                     elif self.path == '/api/held-review/decision' and set(payload) == {'source_sha256', 'evidence_json', 'decision', 'revision'}:
                         result = app.held_review.review(payload['source_sha256'], parse_json_file(payload['evidence_json'], 3072), payload['decision'], payload['revision'])
                     elif self.path == '/api/predict' and set(payload) == {'rider_count'}:

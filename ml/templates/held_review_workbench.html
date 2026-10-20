@@ -9,6 +9,10 @@
 <p class="note">生成した合成データ専用です。確認・訂正はこの画面に読み込んだ一式だけに適用します。実結果の証明、通常履歴への解除、学習・本番予想には使えません。</p>
 <p id="message" role="status" aria-live="polite">読込中…</p>
 <section><h2>1. 保留・確認記録を読み込む</h2>
+<p>同じサーバーの合成予測画面で作った保留は、ファイルを保存せずに追加できます。追加後の根拠と判断は、引き続き明示して記録してください。</p>
+<p id="session-summary">合成予測の保留を確認中…</p><ul id="session-records"></ul>
+<button id="session-refresh" disabled>予測画面の保留を再確認</button>
+<button id="session-import" disabled>表示した保留を一括追加</button>
 <p>保留JSON（1件または配列）、保存済み確認一式、CLIの確認レポートを追加できます。同じ記録は重複せず、既存の記録は消えません。</p>
 <label>追加するJSON<input id="bundle-file" type="file" accept=".json,application/json"></label>
 <button id="import" disabled>検証して追加</button>
@@ -40,7 +44,7 @@
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
-let state=null,evidence=null,busy=true;
+let state=null,evidence=null,busy=true,sessionSource=null;
 const statuses={dead_heat:'同着',withdrawn:'欠車',cancelled:'中止',normal:'通常結果'};
 const reasons={unreviewed_held_history:'未確認の保留があります',conflicting_reviews:'同じ保留に異なる確認があります',conflicting_review_decisions:'訂正と除外維持が混在しています',conflicting_corrected_results:'訂正結果が一致していません',conflicting_race_context:'予定発走または車番構成が一致していません',conflicting_latest_snapshots:'同時刻の最新予測が競合しています',confirmed_nonstandard:'非標準結果の確認完了・除外維持',all_supplied_holds_corrected:'全件訂正一致・合成レビュー内で評価'};
 function message(text){$('message').textContent=text;}
@@ -50,6 +54,17 @@ function controls(){
  $('source').disabled=busy||!state;
  $('import').disabled=busy||!state||blocked||!$('bundle-file').files.length;
  $('record').disabled=busy||!state||blocked||!$('source').value||!evidence;
+ $('session-refresh').disabled=busy||!state;
+ $('session-import').disabled=busy||!state||blocked||!sessionSource||sessionSource.held_count===sessionSource.already_added;
+}
+async function refreshSessionSource(){
+ sessionSource=null;$('session-records').replaceChildren();
+ try{const response=await fetch('/api/held-review/session-source');const value=await response.json();
+  if(!response.ok)throw new Error(value.error||'request_failed');sessionSource=value;
+  $('session-summary').textContent=`予測画面の保留 ${value.held_count}件 / 追加済み ${value.already_added}件`;
+  for(const row of value.records){const li=document.createElement('li'),r=row.race;li.textContent=`${r.date} ${r.venue} ${r.race_number}R / ${statuses[row.result_status]}`;$('session-records').append(li);}
+ }catch(error){$('session-summary').textContent='予測画面の保留を追加できません。保存状態とレース番号（1〜12R）を確認してください。元の記録は変更していません。（'+error.message+'）';}
+ controls();
 }
 function clearEvidence(){evidence=null;$('evidence-file').value='';$('evidence-detail').textContent='根拠は未読込です。';}
 function sourceDetails(){
@@ -79,8 +94,10 @@ async function action(path,payload){
   if(response.status===503){render(value.state);message('保存を確認できないため、追加操作を停止しました。サーバーを再起動して保存済み記録を照合してください。');return;}
   if(!response.ok)throw new Error(value.error||'request_failed');render(value);message(value.storage.mode==='local_file'?'検証して追加し、自動保存しました。':'検証して追加しました。終了前に確認一式を保存してください。');
  }catch(error){message('追加できませんでした。現在の記録は保持しています。入力内容を確認してください。（'+error.message+'）');}
- finally{busy=false;controls();}
+ finally{await refreshSessionSource();busy=false;controls();}
 }
+$('session-refresh').onclick=async()=>{busy=true;controls();try{await refreshSessionSource();}finally{busy=false;controls();}};
+$('session-import').onclick=()=>action('/api/held-review/import-session',{source_revision:sessionSource.source_revision});
 $('bundle-file').onchange=controls;
 $('source').onchange=sourceDetails;
 $('evidence-file').onchange=async()=>{busy=true;controls();evidence=null;
@@ -93,5 +110,5 @@ $('import').onclick=async()=>{busy=true;controls();try{const json_text=await rea
  finally{busy=false;controls();}
 };
 $('record').onclick=()=>action('/api/held-review/decision',{source_sha256:$('source').value,evidence_json:evidence,decision:{decision:$('decision').value,reviewer_id:$('reviewer').value,reviewed_at:$('reviewed-at').value,reason:$('reason').value}});
-fetch('/api/held-review').then(r=>{if(!r.ok)throw new Error();return r.json();}).then(value=>{render(value);busy=false;controls();message('確認一式を読み込めます。');}).catch(()=>message('状態を取得できません。サーバーを確認して画面を再読込してください。'));
+fetch('/api/held-review').then(r=>{if(!r.ok)throw new Error();return r.json();}).then(async value=>{render(value);await refreshSessionSource();busy=false;controls();message('確認一式を読み込めます。');}).catch(()=>message('状態を取得できません。サーバーを確認して画面を再読込してください。'));
 </script></body></html>

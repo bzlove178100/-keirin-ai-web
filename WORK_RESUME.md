@@ -1,5 +1,25 @@
 # Work resume handoff
 
+## Synthetic session to held-review direct transfer — 2026-10-20
+
+基準main d069ab9b6adcf9585954a5bae7be7df0546e473c、前head bd654a9e79a0e5ce1345c9ae081339e5f1353f58。
+引き継いだ未成功CIは解消。取消し7件のannotationsは全てjob timeout、全stepと試験ログは成功済みだった。
+取消し回帰6件/API1件だけ再実行して成功後、依存未成功で停止したruntime1件を再実行して成功。
+回帰39279107744 attempt2は47/47、history39279107755/runtime39279107742 attempt2 success。
+成功済み41件は初回の実行時刻を保持して再利用。検査/timeout変更なし。終了処理遅延の根本原因は未確定。
+main/他open PR #250/#257に差分なし。非公開Work/未push作業は未確認。
+
+同じ合成予測セッションのML保留を、確認画面からファイル操作なしで明示追加する候補を実装。
+元保留一覧と確認一式の両revisionを同一lock内で照合。不一致409、全体検証、追加のみ、保存失敗503。
+通常履歴は追加せず、予測/モデル不変、根拠/判断の自動生成なし。新規保留の自動同期はしない。
+既存読込/保存を再利用。旧17R/19R等は全体拒否し番号を補正しない。合成入力限定。
+ローカル新規6＋影響する既存7試験成功。新Chrome4ケースをCI追加、構文/diff check成功。
+新head CIはPR本文の最新記録を正とする。前headの成功を新候補の証拠へ代用しない。
+詳細：docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md「同じ合成セッションから直接追加」。
+次は本候補のCI/Chrome結果確認。実owner/実データ審査・公開Web/Edgeの訂正・通常収集への解除は未接続。
+公開/配備未承認、API20/12/11/7、KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF。
+将来の配備は別途承認、現行原本保存・段階backend受入・復元が必要。#265承認/旧版ZIPは流用しない。
+
 ## Synthetic held-review automatic save/recovery — 2026-10-20
 
 main d069ab9b6adcf9585954a5bae7be7df0546e473c、Draft #266前head03b1ad279738f9310c506467600e93d51479b392から継続。
