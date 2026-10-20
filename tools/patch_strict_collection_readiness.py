@@ -20,6 +20,7 @@ function timezoneAwarePredictionTimestamp(value) {
 }
 
 function fallbackProspectiveCollectionStatus(records) {
+  if ((records || []).some(record => record?.schema_version === 'phase32-held-history-v1')) records = [];
   const latestByRace = new Map();
   for (const record of Array.isArray(records) ? records : []) {
     const metadata = record?.metadata || {};

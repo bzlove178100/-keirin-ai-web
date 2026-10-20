@@ -20,8 +20,10 @@ from ml.model_history import capture_prediction, settle_snapshot, evaluate_histo
 from ml.offline_preview import render_preview
 from ml.model_web_response import model_web_response, render_model_web_preview
 from ml.synthetic_demo import make_record
-from ml.synthetic_session import SCHEMA, MAX_SNAPSHOTS, SessionStore, SessionSaveError
+from ml.synthetic_session import SCHEMA, LEGACY_SCHEMA, JST, MAX_SNAPSHOTS, SessionStore, SessionSaveError, validate_session
 from ml.settle_snapshot import _iso
+from ml.held_review_workspace import ReviewWorkspace, ReviewConflict, parse_json_file, MAX_BYTES as REVIEW_MAX_BYTES
+from ml.held_history_review import evaluate_reviews
 
 
 class Workbench:
@@ -35,8 +37,11 @@ class Workbench:
         self.lock = RLock()
         self.scheduled = datetime.now(timezone.utc) + timedelta(hours=1)
         self.series = 0
+        self.schema = SCHEMA
+        self.legacy = None
         self.store = None
         self.restored = False
+        self.held_review = ReviewWorkspace()
         try:
             if state_dir is not None:
                 if Path(state_dir).resolve().is_relative_to(Path(__file__).resolve().parents[1]):
@@ -45,23 +50,28 @@ class Workbench:
                 if self.store.loaded is not None:
                     self._apply(self.store.loaded)
                     self.restored = True
+                self.held_review = ReviewWorkspace(Path(state_dir) / 'held-review')
         except BaseException:
             self.close()
             raise
 
     def close(self):
+        self.held_review.close()
         if self.store is not None:
             self.store.close()
         self._temporary.cleanup()
 
     def _payload(self, **changes):
-        return {'schema_version':SCHEMA, 'synthetic_only':True,
-                'scheduled':self.scheduled.isoformat(), 'series':self.series,
+        metadata = {'series': self.series} if self.schema == LEGACY_SCHEMA else {'legacy': self.legacy}
+        return {'schema_version':self.schema, 'synthetic_only':True,
+                'scheduled':self.scheduled.isoformat(), **metadata,
                 'snapshots':self.snapshots, 'histories':self.histories, 'current':self.current, **changes}
 
     def _apply(self, payload):
+        self.schema = payload['schema_version']
+        self.legacy = payload.get('legacy')
         self.scheduled = _iso(payload['scheduled'], 'session_scheduled')
-        self.series = payload['series']
+        self.series = payload.get('series', 0)
         self.snapshots = payload['snapshots']
         self.histories = payload['histories']
         self.current = payload['current']
@@ -69,6 +79,8 @@ class Workbench:
     def _commit(self, payload):
         if self.store is not None:
             self.store.save(payload)
+        else:
+            validate_session(payload)
         self._apply(payload)
         return self.state()
 
@@ -102,15 +114,26 @@ class Workbench:
             raise SessionSaveError('session_restart_required')
         if len(self.snapshots) >= MAX_SNAPSHOTS:
             raise ValueError('session_limit_export_and_restart')
+        payload = self._payload()
+        validate_session(payload)
         self._train()
         from ml.predict_position_models import predict_race
-        scheduled, series = self.scheduled, self.series
+        scheduled = self.scheduled
         now = datetime.now(timezone.utc)
-        if now >= scheduled:
-            scheduled, series = now + timedelta(hours=1), series + 1
+        upgrading = self.schema == LEGACY_SCHEMA
+        if now >= scheduled or upgrading:
+            # Advancing by at least a day keeps 7R/9R identities distinct even
+            # when the old schedule expired earlier on the same JST day.
+            previous = [scheduled, *(_iso(s['scheduled_start'], 'scheduled_start')
+                                     for s in self.snapshots.values())]
+            scheduled = max(now + timedelta(hours=1), max(previous) + timedelta(days=1))
+        if upgrading:
+            payload['schema_version'] = SCHEMA
+            payload['legacy'] = {'series': payload.pop('series'), 'scheduled': payload['scheduled'],
+                                 'snapshot_hashes': {key: s['snapshot_sha256'] for key, s in self.snapshots.items()}}
         race_data = make_record(16, count)['training_input']
-        race_data['race'].update(date=scheduled.astimezone(timezone(timedelta(hours=9))).date().isoformat(),
-                                 venue='SYNTHETIC', race_number=series*10+count, scheduled_start_jst=scheduled.isoformat())
+        race_data['race'].update(date=scheduled.astimezone(JST).date().isoformat(),
+                                 venue='SYNTHETIC', race_number=count, scheduled_start_jst=scheduled.isoformat())
         race_data['odds']['trifecta'] = {'1-2-3':25.4, '2-3-4':72.0}
         if count == 9:
             race_data['odds']['trifecta'] = {'-'.join(map(str,c)): [25.4,72.0,200.0,600.0][i % 4]
@@ -118,8 +141,8 @@ class Workbench:
         prediction = predict_race(race_data, self.root / 'models')
         snapshot = capture_prediction(prediction, synthetic=True)
         key = uuid4().hex
-        return self._commit(self._payload(snapshots={**self.snapshots, key:snapshot}, current=key,
-                                         scheduled=scheduled.isoformat(), series=series))
+        payload.update(snapshots={**self.snapshots, key:snapshot}, current=key, scheduled=scheduled.isoformat())
+        return self._commit(payload)
 
     def settle(self, key, outcome, odds):
         return self._record(key, {'outcome_combo':outcome, 'settlement_odds':odds})
@@ -149,6 +172,36 @@ class Workbench:
     def report(self):
         return evaluate_histories(list(self.histories.values()), synthetic=True)
 
+    def _review_session_holds(self):
+        if self.store is not None and self.store.failed:
+            raise ValueError('prediction_session_restart_required')
+        # The source must still be a valid generated session, including the
+        # correspondence between each saved prediction and its result.
+        validate_session(self._payload())
+        holds = [record for _, record in sorted(self.histories.items())
+                 if record['schema_version'] == 'ml-held-history-v1']
+        evaluate_reviews(holds, [], synthetic=True)
+        return holds
+
+    def review_session_source(self):
+        holds = self._review_session_holds()
+        existing = {_digest(record) for record in self.held_review.holds}
+        return {'source_revision': _digest(holds), 'held_count': len(holds),
+                'already_added': sum(_digest(record) in existing for record in holds),
+                'records': [{'race': record['snapshot']['prediction']['race'],
+                             'result_status': record['settlement']['result_status']}
+                            for record in holds]}
+
+    def import_review_session(self, source_revision, revision):
+        holds = self._review_session_holds()
+        if source_revision != _digest(holds):
+            raise ReviewConflict('review_session_source_changed')
+        if not holds:
+            raise ValueError('review_session_has_no_holds')
+        # Append through the existing validator/checkpoint transaction. Never
+        # change the prediction session or manufacture evidence/decisions.
+        return self.held_review.load(holds, revision)
+
     def state(self):
         current = None
         if self.current:
@@ -167,18 +220,24 @@ class Workbench:
                                  for key,s in sorted(self.snapshots.items(),key=lambda item:(item[1]['captured_at'],item[0]))],
                 'saved_snapshots':len(self.snapshots), 'saved_histories':len(self.histories), 'report':self.report()}
 
+    def migration_backup(self):
+        return self.store.inspect_legacy_backup() if self.store else ({'status': 'temporary'}, None)
+
 
 def make_server(app: Workbench, port: int = 0):
     page = (Path(__file__).parent / 'templates' / 'synthetic_workbench.html').read_text(encoding='utf-8')
     script = re.search(r'<script>(.*?)</script>', page, re.S).group(1)
     script_hash = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
+    review_page = (Path(__file__).parent / 'templates' / 'held_review_workbench.html').read_text(encoding='utf-8')
+    review_script = re.search(r'<script>(.*?)</script>', review_page, re.S).group(1)
+    review_hash = base64.b64encode(hashlib.sha256(review_script.encode()).digest()).decode()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
             pass
 
         def send(self, status, payload, content_type='application/json; charset=utf-8', filename=None, page_script_hash=None):
-            data = (json.dumps(payload, ensure_ascii=False, allow_nan=False) if content_type.startswith('application/json') else payload).encode()
+            data = payload if isinstance(payload, bytes) else (json.dumps(payload, ensure_ascii=False, allow_nan=False) if content_type.startswith('application/json') else payload).encode()
             self.send_response(status)
             self.send_header('Content-Type', content_type)
             self.send_header('Content-Length', str(len(data)))
@@ -208,6 +267,27 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, page, 'text/html; charset=utf-8')
                 if self.path == '/api/state':
                     return self.send(200, app.state())
+                if self.path == '/api/session-v1-backup':
+                    return self.send(200, app.migration_backup()[0])
+                match = re.fullmatch(r'/export/session-v1/([0-9a-f]{64})', self.path)
+                if match:
+                    info, raw = app.migration_backup()
+                    if info['status'] != 'available' or info['sha256'] != match[1]:
+                        return self.send(409, {'error': 'migration_backup_changed_or_unavailable'})
+                    return self.send(200, raw, filename='synthetic-session-v1-before-migration.json')
+                if self.path == '/held-review':
+                    return self.send(200, review_page, 'text/html; charset=utf-8', page_script_hash=review_hash)
+                if self.path == '/api/held-review':
+                    return self.send(200, app.held_review.state())
+                if self.path == '/api/held-review/session-source':
+                    try:
+                        return self.send(200, app.review_session_source())
+                    except (ValueError, TypeError, KeyError) as exc:
+                        return self.send(400, {'error': str(exc)})
+                if self.path == '/export/held-review':
+                    return self.send(200, app.held_review.bundle(), filename='synthetic-held-review-bundle.json')
+                if self.path == '/export/held-review-report':
+                    return self.send(200, app.held_review.report, filename='synthetic-held-review-report.json')
                 match = re.fullmatch(r'/(api/model-view|web-view)/([0-9a-f]{32})', self.path)
                 if match and match[2] in app.snapshots:
                     try:
@@ -241,12 +321,19 @@ def make_server(app: Workbench, port: int = 0):
                 if self.headers.get('Transfer-Encoding') or len(self.headers.get_all('Content-Length', [])) != 1:
                     raise ValueError('invalid_body_length')
                 length = int(self.headers['Content-Length'])
-                if not 0 < length <= 4096 or self.headers.get('Content-Type','').split(';')[0] != 'application/json':
+                limit = 2 * REVIEW_MAX_BYTES + 1024 if self.path == '/api/held-review/import' else 8192 if self.path == '/api/held-review/decision' else 4096
+                if not 0 < length <= limit or self.headers.get('Content-Type','').split(';')[0] != 'application/json':
                     raise ValueError('small_json_body_required')
                 payload = json.loads(self.rfile.read(length))
                 if not isinstance(payload, dict): raise ValueError('json_object_required')
                 with app.lock:
-                    if self.path == '/api/predict' and set(payload) == {'rider_count'}:
+                    if self.path == '/api/held-review/import' and set(payload) == {'json_text', 'revision'}:
+                        result = app.held_review.load(parse_json_file(payload['json_text']), payload['revision'])
+                    elif self.path == '/api/held-review/import-session' and set(payload) == {'source_revision', 'revision'}:
+                        result = app.import_review_session(payload['source_revision'], payload['revision'])
+                    elif self.path == '/api/held-review/decision' and set(payload) == {'source_sha256', 'evidence_json', 'decision', 'revision'}:
+                        result = app.held_review.review(payload['source_sha256'], parse_json_file(payload['evidence_json'], 3072), payload['decision'], payload['revision'])
+                    elif self.path == '/api/predict' and set(payload) == {'rider_count'}:
                         result = app.predict(payload['rider_count'])
                     elif self.path == '/api/select' and set(payload) == {'snapshot_id'}:
                         result = app.select(payload['snapshot_id'])
@@ -260,8 +347,13 @@ def make_server(app: Workbench, port: int = 0):
                     else:
                         raise ValueError('unsupported_action_or_fields')
                 self.send(200, result)
+            except ReviewConflict as exc:
+                with app.lock:
+                    self.send(409, {'error':str(exc), 'state':app.held_review.state()})
             except SessionSaveError as exc:
-                self.send(503, {'error':str(exc), 'state':app.state()})
+                with app.lock:
+                    state = app.held_review.state() if self.path.startswith('/api/held-review/') else app.state()
+                    self.send(503, {'error':str(exc), 'state':state})
             except (ValueError, TypeError, KeyError) as exc:
                 self.send(400, {'error':str(exc)})
             except Exception:
@@ -275,7 +367,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--synthetic', action='store_true', required=True)
     parser.add_argument('--port', type=int, default=8765)
-    parser.add_argument('--state-dir', type=Path, help='Optional local POSIX directory outside the checkout for synthetic records only.')
+    parser.add_argument('--state-dir', type=Path, help='Optional local POSIX directory outside the checkout for synthetic predictions and held-review checkpoints.')
     args = parser.parse_args()
     app = Workbench(args.state_dir)
     server = None

@@ -15,11 +15,14 @@ on:
       - 'tests/test_offline_preview_ui.cjs'
       - 'tests/test_category_selection.py'
       - 'tests/test_model_history.py'
+      - 'tests/test_held_history*'
+      - 'prospective-tools*'
       - 'tests/test_synthetic_workbench*'
       - 'tests/test_keirin_dev_deployment_package.py'
       - 'tests/test_web_dry_run.cjs'
       - 'supabase/functions/predict-engine-dev/**'
       - 'supabase/functions/history-builder-dev/**'
+      - 'supabase/functions/history-pipeline-dev/**'
       - 'supabase/functions/backtest-engine-dev/**'
       - 'supabase/functions/_shared/race_probability.ts'
       - 'tests/test_offline_evaluation.py'
@@ -40,11 +43,14 @@ on:
       - 'tests/test_offline_preview_ui.cjs'
       - 'tests/test_category_selection.py'
       - 'tests/test_model_history.py'
+      - 'tests/test_held_history*'
+      - 'prospective-tools*'
       - 'tests/test_synthetic_workbench*'
       - 'tests/test_keirin_dev_deployment_package.py'
       - 'tests/test_web_dry_run.cjs'
       - 'supabase/functions/predict-engine-dev/**'
       - 'supabase/functions/history-builder-dev/**'
+      - 'supabase/functions/history-pipeline-dev/**'
       - 'supabase/functions/backtest-engine-dev/**'
       - 'supabase/functions/_shared/race_probability.ts'
       - 'tests/test_offline_evaluation.py'
@@ -82,6 +88,10 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_offline_preview.py' -v
       - name: Run frozen ML snapshot, settlement and review contracts
         run: python -m unittest discover -s tests -p 'test_model_history.py' -v
+      - name: Run synthetic cross-engine held event transfer contracts
+        run: python -m unittest discover -s tests -p 'test_held_history_transfer.py' -v
+      - name: Run synthetic held-event review and conflict checks
+        run: python -m unittest discover -s tests -p 'test_held_history_review.py' -v
       - name: Run local synthetic workbench API and boundary checks
         env:
           OMP_NUM_THREADS: '2'
@@ -101,6 +111,7 @@ jobs:
           deno check
           supabase/functions/predict-engine-dev/index.ts
           supabase/functions/history-builder-dev/index.ts
+          supabase/functions/history-pipeline-dev/index.ts
           supabase/functions/backtest-engine-dev/index.ts
       - name: Check model category selection against the existing TypeScript policy
         run: python -m unittest discover -s tests -p 'test_category_selection.py' -v
@@ -112,9 +123,15 @@ jobs:
           export KEIRIN_PLAYWRIGHT_MODULE="$RUNNER_TEMP/keirin-preview-browser/node_modules/playwright"
           export KEIRIN_BROWSER_EXECUTABLE="$(command -v google-chrome || command -v chromium)"
           test -n "$KEIRIN_BROWSER_EXECUTABLE"
+          node tests/test_held_history_ui.cjs
+          node tests/test_held_history_owner_ui.cjs
           node tests/test_offline_preview_ui.cjs
           node tests/test_synthetic_workbench_ui.cjs
           node tests/test_synthetic_workbench_restart_ui.cjs
+          node tests/test_synthetic_workbench_held_review_ui.cjs
+          node tests/test_synthetic_workbench_held_review_restart_ui.cjs
+          node tests/test_synthetic_workbench_session_transfer_ui.cjs
+          node tests/test_synthetic_workbench_backup_export_ui.cjs
           node tests/test_synthetic_workbench_owner_web_ui.cjs
       - name: Run paired holdout and leakage checks
         run: python tests/test_offline_evaluation.py

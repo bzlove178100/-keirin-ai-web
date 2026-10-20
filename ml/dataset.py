@@ -6,9 +6,11 @@ from typing import Any, Iterable
 try:
     from .feature_extraction import extract_player_model_fields, num
     from .race_conditions import require_standard_conditions
+    from .held_history import partition_holds, normal_result_declared
 except ImportError:  # Support `python ml/build_training_dataset.py ...`.
     from feature_extraction import extract_player_model_fields, num
     from race_conditions import require_standard_conditions
+    from held_history import partition_holds, normal_result_declared
 
 TRAINING_SCHEMA = "keirin-training-input-v1"
 
@@ -62,6 +64,8 @@ def _schedule_order(record: dict[str, Any], training_input: dict[str, Any]) -> t
 
 
 def supervised_eligibility(record: dict[str, Any]) -> tuple[bool, str]:
+    if not isinstance(record, dict) or not normal_result_declared(record):
+        return False, "nonstandard_result_requires_review"
     metadata = record.get("metadata") or {}
     eligibility = metadata.get("training_eligibility") or {}
     training_input = record.get("training_input")
@@ -97,7 +101,7 @@ def supervised_eligibility(record: dict[str, Any]) -> tuple[bool, str]:
 
 def select_latest_eligible_per_race(records: Iterable[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, int]]:
     selected: dict[str, dict[str, Any]] = {}
-    excluded: dict[str, int] = {}
+    records, excluded, _ = partition_holds(list(records))
     for record in records:
         ok, reason = supervised_eligibility(record)
         if not ok:

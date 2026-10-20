@@ -1,5 +1,290 @@
 # Work status
 
+## Read-only migration-original inspection and download — 2026-10-20
+
+前head a7ccad6adfc4c5f29fa7b6c5e7916a27a04b26b1は全7系統success、回帰39420958802は47/47。
+runtime39420959298/job118621474201 verified=true、ML39420958797/job118621471632はPython54と実Chrome成功。
+main d069ab9b6adcf9585954a5bae7be7df0546e473c、他open PR #250/#257は変更なし。成功済み試験を手動反復しない。
+
+自動保存した移行前原本を画面から照合し、原本バイト列のまま取得する入口を追加。
+件数/サイズ/hashと、欠落/不正/別原本/現行外部変更/一時モードを区別。固定名だけを読取専用で検証する。
+v1は完全バイト一致、v2はlegacy/旧snapshot/原本に含まれる履歴との整合を確認。
+取得時も再照合し、画面確認時のraw SHA-256と違えば409で取得停止。原本・現行記録・確認一式の書込なし。
+署名/来歴証明ではなく、有効な古い保存物の差戻しや同内容の再整形検出は別保証。端末保存完了は未確認。
+旧版再開は現行v2と確認一式を保全して別保存先で行う。自動復元/削除/修復・過去原本の推測生成なし。
+
+新規Python7試験がローカル成功。原本完全取得/保存不変、追加履歴、破損/リンク/FIFO/上限/別原本、
+外部変更/古い取得リンク409/同一origin/固定path/一時モードを確認。JS構文/diff check成功。
+新Chrome2ケース（390/1280）を既存ML CIへ追加。新head全CIと実Chrome結果はPR本文で確定する。
+契約docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md「移行前原本の確認と取得」。結果記録のみでcommit/CI再起動しない。
+通常開発は工程ごとの確認待ちを挟まず進める。公開/マージ/Function配備未承認、API20/12/11/7記録値を維持。
+KEIRIN.JP HOLD・実取得/実学習/予想DB書込/本番予想OFF。将来の現行原本保存・段階backend受入・復元条件を維持。
+
+## Preserve original v1 bytes before session migration — 2026-10-20
+
+前head d9eff3e33435af2b65a465c3c063d72506b33dc4は全7系統success、回帰39417795189は47/47、runtime39417795250 verified=true。
+ML39417795204/job118610955051でworkbench Python47試験と実Chrome操作/保存復旧成功。main/他open PR #250/#257は変更なし。
+
+v1からv2への移行前原本が手動バックアップに依存していたため、保存先指定時の移行直前に原本を自動保存する。
+synthetic-session-v1-before-migration.jsonへ元ファイルのバイト列をそのまま保存し、fsync/排他公開/dir fsync/一致確認後に移行。
+既存原本は上書きしない。同一原本は再同期して利用し、異なる原本/リンク/非通常ファイル/上限/保存失敗は503と書込停止。
+旧ファイル/メモリは保持。v2保存に失敗しても移行前原本を保持する。新規v2/旧記録操作/一時モードでは新設しない。
+既にv2移行済みで原本がない場合は推測生成しない。旧版復帰は別保存先で原本を使用し、現行v2/別確認一式を巻き戻さない。
+link→一時名unlink間の強制終了は2リンクが残るため、旧v1復元後も次の移行を拒否。原本を保全し明示修復するまで再開しない。
+
+新規7＋影響する既存14＝21試験がローカル成功。完全バイト一致/別保存先復元/既存非上書き/同名競合、I/O障害、
+実SIGKILL3境界、HTTP503/メモリ保持、リンク/FIFO/上限を検証。JS構文/diff check成功。新head CIは既存設定の自動実行で判定する。
+契約docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md「保存形式の移行前原本を自動保存」。確定head/CIはPR本文が最新。
+PR本文は上限に近いため最新節を更新し、以前の確定CIと重要契約を保持する。結果記録だけでcommit/CIを再起動しない。
+通常開発は工程ごとの確認待ちを挟まず検証・保存まで進める。公開/マージ/配備は引き続き未承認。
+API20/12/11/7・KEIRIN.JP HOLD・実取得/実学習/予想DB書込/本番予想OFF、将来の原本保存/段階backend受入/復元条件を維持。
+
+## Synthetic session expiration and v1 compatibility — 2026-10-20
+
+前head d192cbd7bd8af48022ca5fd2bd8e880b32760381は全7系統success、回帰39413810530は47/47、runtime39413810736 verified=true。
+main d069ab9b6adcf9585954a5bae7be7df0546e473c、他open PR #250/#257は変更なし。旧取消し/VM失敗を再実行しない。
+
+期限更新後のseries*10+車数で17R/19Rになる制約を修正。新規v2セッションは7R/9Rを維持し、期限切れ後は
+現在+1時間と既存最遅予定+1日の遅い方へ進め、JST日付/レース識別の重複を防ぐ。同じ開催内の再予測は同じ識別。
+v1は従来規則で読み込み、読込/選択/旧結果記録では形式維持。新予測時だけ一回のcheckpointでv2へ移行。
+旧series/予定/予測hashを保持し再照合。原予測・時刻・履歴を変更しない。旧17R/19R保留は移行後も全体拒否。
+v2を旧プログラムで読むことはできない。旧版へ戻る必要があれば新予測前のv1バックアップが必要。
+保存失敗前後のメモリ保持/503/再起動再検証、20件/32MiB上限、別確認一式と判断の保存契約は維持。
+
+ローカル新規6+影響する既存14=20試験成功（実合成モデル期限更新1含む）。反復期限更新/JST年越し/7・9車、
+保留追加/保存復元/v1互換/旧番号拒否/移行時fsync失敗/不正入力を検証。CIは既存設定による新候補の自動実行で判定。
+契約docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md「期限更新後の合成レース識別」。確定head/CI結果はPR本文を優先する。
+次は新headのMLと全依存CIを確認し、失敗時は当該ログで診断する。成功済み試験の手動反復はしない。
+公開/マージ/配備未承認、API20/12/11/7・KEIRIN.JP HOLD・実取得/実学習/予想DB書込/本番予想OFF。
+将来の現行原本保存・段階backend受入・失敗時復元条件を維持。合成結果を実データ/本番受入へ拡張しない。
+
+## Packet VM Python startup compatibility — 2026-10-20
+
+根拠貼付け候補a3dabd0のML39413293532/job118596105067はsuccess。390/1280×7/9車の拡張Chrome4ケース成功。
+回帰39413293240/job118596105543はkernel7.0の512M packet VMでPython encodings不在→PID1終了。
+前候補45abeb0の同試験はkernel6.17で成功。UI変更との直接関連なし、正確な欠落原因は未確定。
+packet VMを固定1024Mにし、payloadサイズとcodec存在/hashを記録する。initramfs展開失敗の即時拒否も追加。
+ローカルVM10/packet15試験成功。全期限・画像上限・隔離・認証/expiry/S3検査は維持。実VMは新候補CIで判定。
+詳細docs/CI_VM_INITRAMFS_20261020.md。最新head/CI確定結果はPR本文を正とする。旧失敗の無条件再試行なし。
+公開/マージ/配備未承認、API20/12/11/7・HOLD/OFF・将来の現行原本保存/段階受入/復元条件を維持。
+
+## Synthetic review evidence text input — 2026-10-20
+
+前head45abeb0352f3efbd1dafa5d4f037549806c9d8f1は全7系統CI成功、回帰39410059644は47/47、runtime39410059690 verified=true。
+main/他open PR #250/#257は変更なし。旧取消しとVM起動失敗は前候補の確定記録を再利用し、再試行しない。
+
+合成確認の根拠JSONを画面へ貼り付け、明示読込できる候補を追加。ファイル受渡しをさらに減らす。
+UTF-8 3 KiB上限/JSON構文を画面で確認し、元文字列を既存判断APIへ送る。完全な根拠照合はサーバーで維持。
+編集/対象変更時に前の根拠を解除し、再読込前の判断を停止。ファイル選択と貼付けは同時に有効にしない。
+根拠/判断の自動生成なし。未送信入力は保存せず、成功判断だけ既存保存・復元経路を使う。
+ローカルJS構文/diff check成功。既存Chrome4ケースを貼付け・拒否・保存復旧まで拡張。新head CI結果はPR本文を正とする。
+契約はdocs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md「根拠JSONの貼り付け」。
+公開/マージ/Function配備未承認、API20/12/11/7・HOLD/OFFを維持。将来は別途承認・現行原本保存・段階受入・復元が必要。
+
+## Synthetic VM startup compatibility diagnosis — 2026-10-20
+
+合成保留直接追加候補81b7164のML39408953490は成功。新規Python6/Chrome4、workbench計41試験成功。
+一方、回帰39408953553の既存VMでkernel7.0上のinitramfs書込失敗→systemd実行不可を確認。
+kernel6.17の同種成功ログと照合。前候補のtimeoutやQMP問題とは別。詳細はdocs/CI_VM_INITRAMFS_20261020.md。
+容量不足を仮説として、systemd合成VMだけ512M→1024M、archive/ゲスト容量診断を追加。
+安全条件、期限、画像上限、packet-only VM、本番/ホスト設定は変更なし。
+ローカル既存19試験＋C static/Werrorコンパイル/host実行拒否を確認。実VMは新head CIで検証する。
+新head/最終結果はPR本文を正とする。kernel7環境での改善と全CI成功が確認できるまでは未解決。
+公開/配備未承認、API20/12/11/7、KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF。
+
+## Synthetic session to held-review direct transfer — 2026-10-20
+
+基準main d069ab9b6adcf9585954a5bae7be7df0546e473c、前head bd654a9e79a0e5ce1345c9ae081339e5f1353f58。
+引き継いだ未成功CIは解消。取消し7件のannotationsは全てjob timeout、全stepと試験ログは成功済みだった。
+取消し回帰6件/API1件だけ再実行して成功後、依存未成功で停止したruntime1件を再実行して成功。
+回帰39279107744 attempt2は47/47、history39279107755/runtime39279107742 attempt2 success。
+成功済み41件は初回の実行時刻を保持して再利用。検査/timeout変更なし。終了処理遅延の根本原因は未確定。
+main/他open PR #250/#257に差分なし。非公開Work/未push作業は未確認。
+
+同じ合成予測セッションのML保留を、確認画面からファイル操作なしで明示追加する候補を実装。
+元保留一覧と確認一式の両revisionを同一lock内で照合。不一致409、全体検証、追加のみ、保存失敗503。
+通常履歴は追加せず、予測/モデル不変、根拠/判断の自動生成なし。新規保留の自動同期はしない。
+既存読込/保存を再利用。旧17R/19R等は全体拒否し番号を補正しない。合成入力限定。
+ローカル新規6＋影響する既存7試験成功。新Chrome4ケースをCI追加、構文/diff check成功。
+新head CIはPR本文の最新記録を正とする。前headの成功を新候補の証拠へ代用しない。
+詳細：docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md「同じ合成セッションから直接追加」。
+次は本候補のCI/Chrome結果確認。実owner/実データ審査・公開Web/Edgeの訂正・通常収集への解除は未接続。
+公開/配備未承認、API20/12/11/7、KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF。
+将来の配備は別途承認、現行原本保存・段階backend受入・復元が必要。#265承認/旧版ZIPは流用しない。
+
+## Synthetic held-review automatic save/recovery — 2026-10-20
+
+main d069ab9b6adcf9585954a5bae7be7df0546e473c、Draft #266前head03b1ad279738f9310c506467600e93d51479b392から継続。
+前候補は7系統success、回帰39226822818=47/47、runtime39226822743 success。ML39226822632も新規7試験/Chrome12ケース成功。
+最新remote・他open PR #250=0659657 / #257=99aeacaに変化なし。成功済みCIの手動再実行なし。
+
+--state-dir指定時に、保留確認一式をheld-review/held-review.jsonへ自動保存する候補を追加。
+既存予測セッションとは独立。検証済みSessionStoreの固定ファイル/協調ロック/atomic replace/fsyncを共有。
+保存完了後にメモリへ反映して成功応答。失敗や外部書換えは503とwrite_blockedで停止し、再起動時に検証する。
+破損時に空で上書きせず、孤立partialを昇格しない。予測/モデル不変、実学習・通常履歴化なし。
+画面で一時保存/自動保存/復元/保存失敗を表示。未送信フォームは保存対象外。
+復元試験で監査配列順序の差を検出し、保存一式とレポートの順序を揃えて修正。
+
+ローカル：新規保存/復旧9＋既存確認API7＋共有保存処理7の計23試験成功。既存の実モデル学習試験はCIへ委ねる。
+実SIGKILL・置換前後・同期失敗・途中/完了復元・二重起動・破損/外部変更・503を検証。
+新Chrome4ケース（390/1280×7/9車）を既存ML CIへ追加。新head/CIはPR本文の最新記録が正。
+契約：docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md。電源断・任意ホスト耐久性・署名/グローバル台帳の保証はない。
+次は新候補CI確認。その後の許可済み合成開発は、予測から保留確認までのファイル受渡し削減を検討。
+
+公開/配備未承認、API20/12/11/7、KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF。
+実owner/実データ審査・権限・公開Web/Edge・通常収集への解除反映は未接続。非公開Work/未push作業は未確認。
+将来の配備には別途承認、現行原本保存・段階backend受入・復元が必要。#265承認/旧版ZIPは流用しない。
+
+## Synthetic held-review UI and bundle — 2026-10-19
+
+修正head19df940のML39225660699/job117971190799はsuccess。新規Chrome12ケースとPython/API7試験成功。
+最終レビューで409競合応答の状態読取にも既存lockを適用し、同時更新中の不整合表示を防ぐ。
+この最終差分の候補head/CIはPR本文を正とする。前候補の成功を新headの証拠に代用しない。
+
+初回head956559aのML39224926950/job117968775119は新Chrome保留選択で停止。
+Python JSONをJavaScriptで再構成するとPhase32のfloat表記が変わりdigestが不一致になることを再現。
+製品UI/APIと試験fixtureで元JSON文字列を保持するよう修正。digest検査は緩和せず、転送試験を1件追加。
+修正後headのCIはPR本文で確認。既存成功CIの手動再実行や未完CIの取消しはしない。
+
+main d069ab9b6adcf9585954a5bae7be7df0546e473c、Draft #266前head f3eb9877c3d6798e69016a89debd027086a4b543から継続。
+前候補の7系統CI成功、回帰39205905562は47/47。新規11試験もML39205905481で成功済み。
+以前のCI待ちは解消。成功済み試験の手動再実行なし。新コードに対するCI結果はPR本文の最新記録が正。
+
+ローカル合成workbenchへ /held-review を追加。両エンジンの保留を読み、根拠JSONと判断を入力する。
+確認一式をダウンロード/再読込でき、CLIレポートも再計算して再利用する。元履歴は変更しない。
+読込は追加のみ。部分一式で未確認保留/競合判断を消さず、改変・孤立確認・上限超過は全体拒否。
+revision不一致では別タブの古い操作を409で停止。合成予測画面の保存とは別のメモリ保持であることを明示。
+Python/API新規7試験を実施。390/1280幅のChrome保存/復元/入力試験を既存ML CIへ追加。
+ローカルにChromeなし。新候補の画面成功・全CIはPR本文の最終結果で確認する。
+契約・上限・1〜12R制約・保存の限界：docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md。
+
+次は新head CI結果確認。その後、許可済み合成範囲で確認記録の自動保存/中断復旧と操作負担削減を検討。
+公開Web/Edgeの訂正、実owner/実データ審査・権限・永続台帳、通常収集への解除反映は未接続。
+他open PR #250=0659657 / #257=99aeacaは変更なし。非公開Work/未push作業は未確認。
+公開/配備未承認、API20/12/11/7、KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF維持。
+将来の配備は別途承認、現行原本保存・段階backend受入・復元が必要。#265承認/旧版ZIPは流用しない。
+
+## Synthetic held-event review — 2026-10-19
+
+main d069ab9b6adcf9585954a5bae7be7df0546e473c、Draft #266の前head78488e85c14b3431de3e5c5df623ba6b87b20321から継続。
+前候補は7系統CI成功。回帰39197013687は47/47、runtime39197013668、PostgreSQL39197013600もsuccess。
+ML39197013605/API39197013613/collection39197013761/AWS39197013752成功。integrated39197013675はskipped。
+前記録の未完CIは解消済み。合格済み試験の手動再実行なし。過去QMP失敗の根本原因は未確定。
+
+ml.held_history_reviewを追加。保留確認と誤申告訂正の根拠/判断/元履歴を別記録として保存する。
+入力内の同じレース・両エンジンの保留をすべて確認し、訂正結果も一致した場合だけ合成レビュー内で再評価。
+確認漏れ、新規保留、訂正競合、予定発走/車番構成/最新snapshot競合は対象レースを未解決にする。
+非標準確認は評価対象外のまま確定。元予測/モデル不変、通常履歴/学習データexportなし。
+新規11試験成功。既存ML workflowへ新試験追加。契約：docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md。
+新head/CI結果はPR本文の最新記録が正。次は新候補CIと、合成レビューの操作画面・保存/再読込連携。
+Web/Edge・実owner・通常収集経路への解除反映と、実データ審査/権限/永続記録は未接続。
+GitHub他open PR #250=0659657 / #257=99aeacaは変更なし。非公開Work/未push作業は未確認。
+公開/配備未承認、API20/12/11/7、KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF維持。
+将来の配備は別途承認、現行原本保存・段階backend受入・失敗時復元が必要。#265承認/旧版ZIPを流用しない。
+
+## Phase32 / ML held-event transfer — 2026-10-19 12:54 JST
+
+main `d069ab9b6adcf9585954a5bae7be7df0546e473c`、Draft #266の前head `6777d6ad1e092ec9a69167cd92e04d5910081723`から継続。
+前headは7系統CI成功、回帰39184944241は47/47。runtime39184944242は初回の依存待ち期限切れ後、
+同一headの依存成功を確認して失敗1ジョブだけ再実行しattempt2成功。詳細はPR本文12:44 JST記録。
+以前の「新head CI待ち」「Chrome未確認」はこの成功確認より古い。過去QMP失敗の根本原因は未確定。
+
+今回、ml.held_history_transferに合成入力専用の双方向保留イベント連携を追加。
+別々の保存済みPhase32/ML snapshotを検査し、日付/会場/番号・予定発走・車番構成一致を要求する。
+元予測/モデル/時刻を保持し、source/target両履歴とdigestを連携記録へ保存。予測の変換・モデル捏造なし。
+CLIは連携記録の作成と検証後のtarget出力。既存ファイル上書き・通常結果化・保留解除はなし。
+新規8試験成功。7/9車×3状態×双方向、評価除外、別レース指標不変、改変/時刻/識別不一致、CLIを検証。
+変更対象の試験だけ実行し、既存ML CIへ新試験を追加。新head/CI結果はPR本文の最新記録を正とする。
+契約と限界：docs/KEIRIN_HELD_HISTORY_TRANSFER_20261019.md。本人の選手IDや情報源真正性は検証していない。
+次は新head CI確認、保留解除の監査・競合・訂正契約。Web/EdgeのML連携と実owner backend受入は残件。
+
+他open PR #250=0659657 / #257=99aeacaは変更なし。非公開Work/未push作業は未確認。
+公開・Function配備は未承認。API predict20/history12/backtest11/history-pipeline7は変更なし。
+KEIRIN.JP HOLD、実取得・実学習・予想DB書込・本番予想OFF。
+将来の公開/配備は別途承認、現行20/12/11/7原本保存・段階受入・失敗時復元が必要。#265承認/旧版ZIPは流用しない。
+
+## Phase32 owner held API UI — 2026-10-19
+
+Chrome診断：修正head aa146adのML39184712111/job117844583964は生成器・package検証を通過。
+新Chrome試験が対応更新待ちで停止。模擬predict-status応答に必須service名がなく、
+checkStatusがinvalid_statusで後続GET前に終了する契約不一致を確認した。
+試験の模擬応答へservice=predict-statusを追加。製品処理・待機上限・安全条件は変更しない。
+
+追加診断：head875b677のML CI39184498691/job117843944540は、レビュー生成器の
+owner_web_integration_anchor_changedで停止（Chrome未開始）。clearSession先頭の
+ownerModelPreview.reset()を元の位置へ戻し、保留状態の無効化をその直後に維持した。
+生成器/owner controller/失敗時receiptの3試験はローカル成功。完全package試験は
+ローカルのLightGBM不在で未完了のため、新head CIで確認する。検査の緩和・同一head再実行なし。
+
+基準main `d069ab9b6adcf9585954a5bae7be7df0546e473c`は変更なし。Draft #266を継続。
+前head `482857c2ffde32506deb345a0798dad460fb9964`は7系統CI成功、回帰39181274460も47/47成功。
+ML39181274341 / API39181274307 / collection39181274296 / AWS39181274448 /
+PostgreSQL39181274574 / runtime39181274508成功。integrated39181274348はskippedで成功数に含めない。
+過去のQMP初回RESUME失敗は今回再発しなかったが、原因確定・恒久修正とは扱わない。
+
+今回、owner画面へ同着・欠車・中止の保留生成、保存、混在バックテストを接続した未公開候補。
+GETのowner・安全状態・正確な保留schema対応を確認できるAPIだけ保留操作を有効にする。
+未対応API・不正保留・改変応答は停止。生成応答を送信snapshot/settlementと照合し、
+集計応答の入力数・保留ID・除外数をローカルの保留規則と照合する。
+全件保留は「評価対象なし」で通常指標を表示しない。入力変更・ログアウト後の古い応答を無効化。
+実Web script＋実handlerの7/9車合成試験、通常capture試験、web/safety回帰は成功。
+390/1280幅のChrome owner保存/再読込/除外試験を追加。新headのCI結果はPR本文を正とする。
+この記録時点で新Chrome試験の成功・配備済みbackendの実owner受入とは扱わない。
+
+他open PR #250/#257は記録済みheadと一致。非公開Work/未push作業は未確認。
+公開・Function配備は未承認。API predict20/history12/backtest11/history-pipeline7は未変更。
+KEIRIN.JP HOLD、実取得・実学習・予想DB書込・本番予想OFF。
+MLモデル履歴の相互変換・保留解除・配備済みbackend受入は未完。詳細はdocs/KEIRIN_HELD_HISTORY_20261019.md。
+将来の配備には別途承認、現行20/12/11/7原本保存、段階受入・失敗時復元が必要。
+#265承認や旧版19/11/10/6の保存ZIPを今回へ流用しない。
+
+## Phase32 held API — 2026-10-19
+
+#266 head `daa9f9efb3eb59e2ced8338aeb4eaa4af9f79981`から継続。main `d069ab9b6adcf9585954a5bae7be7df0546e473c`は変更なし。
+前headの5 CI成功。回帰39177306812は46/47成功、QMP初回RESUME受信で1件失敗。
+runtime39177306779は20分の回帰待ちで停止。詳細は`docs/CI_QMP_FIRST_FRAME_20261019.md`。
+共通VM検査の厳格拒否を維持し、同一head再実行なし。根本原因・恒久修正は未確定。
+今回、history-pipelineの保留JSON生成、backtestの保留・同一race_id除外を未公開候補へ接続。
+全件保留時は通常指標null、学習/保存/本番OFF。不正な保留は要求全体422。通常結果注記ガードは維持。
+Python/browser/Edgeで同一JSONを確認し、エンジン識別子矛盾の拒否も統一。
+Python6試験、7/9車の実handler結合、既存Web結合、web/safety回帰が成功。新head CIはPR本文が正。
+詳細・限界は`docs/KEIRIN_HELD_HISTORY_20261019.md`。owner画面の保留API操作はまだ無効。
+MLモデル履歴変換・保留解除・配備済み実owner受入は未実施。
+公開/配備は未承認。API predict20/history12/backtest11/history-pipeline7、HOLD/OFFを維持。
+
+## Phase32 direct history guard — 2026-10-19
+
+#266 head `e5f561201fb3189ec1c4bd5c6d0257cebea6455d`から継続。mainは`d069ab9b6adcf9585954a5bae7be7df0546e473c`。
+前headのChrome保存・再読込・統合は成功。5 CI成功、runtime39176166395は回帰待ち、回帰39176166392はqueued（08:35 JST照合）。再実行なし。
+今回、非標準結果を注記した履歴が直接backtest APIで通常集計される問題を合成試験で再現し修正。
+root/metadataの非標準・未知status、結果補助項目、既知の2種類の保留schemaを拒否。混在要求は全体422、部分指標なし。
+状態省略の旧形式と明示normalは互換維持し、全指標一致を確認。保留schemaに通常ラベルを付けた入力はPython/browserも除外。
+7/9車の直接API＋pipeline、実Web script＋実handler、Python5試験（JS照合含む）が成功。新head CIはPR本文を正とする。
+契約と残件は`docs/KEIRIN_HELD_HISTORY_20261019.md`。次は新head CIとEdge保留生成/集計の接続。
+今回は拒否ガードまでで、Edge保留生成・集計・MLモデル履歴変換・解除処理は未実装。
+公開/配備は未承認。API predict20/history12/backtest11/history-pipeline7は未変更。
+KEIRIN.JP HOLD、実取得・実学習・DB書込・本番予想OFF。#265の承認を拡張しない。
+
+## Phase32 offline held history — 2026-10-19
+
+main `d069ab9b6adcf9585954a5bae7be7df0546e473c`と#266旧head `7a4fa23bdb2e32d79a40b899d917160c553ee8c2`を照合。
+#266旧headは7 workflows成功、回帰39128022537は47/47成功。再実行なし。
+#266へ保留JSON、オフラインUI保存・再読込、Python/ブラウザ評価除外を追加する未公開候補。
+詳細・検証・限界は `docs/KEIRIN_HELD_HISTORY_20261019.md`。新headのCIはPR本文を正とする。
+公開・Function配備は未承認。API predict20/history12/backtest11/history-pipeline7は未変更。
+KEIRIN.JP HOLD、実取得・実学習・DB書込・本番予想OFF。次は新headの未完CIのみ確認。
+Edge保留応答・MLモデル履歴の相互変換・解除処理は未実装。全経路完成と扱わない。
+
+## Phase32 result declaration guard — 2026-10-18
+
+基準main `d069ab9b6adcf9585954a5bae7be7df0546e473c`（#265公開済み）。
+#265の公開後回帰39125663260は47/47成功、Pages39125662974も成功。
+APIはpredict20/history12/backtest11/history-pipeline7。公開済み試験は再実行しない。
+今回の未公開候補はPhase32の結果申告を通常履歴へ黙って落とさないガード。
+詳細・限界・次工程は `docs/KEIRIN_RESULT_DECLARATIONS_20261018.md`。
+新候補のマージ・配備は未承認。KEIRIN.JP HOLD、実取得・実学習・DB書込・本番予想OFF。
+ML保留記録との相互変換・集計・UI接続は未完で、このガードを全経路接続完了とは扱わない。
+
 ## Data duplicate-type correction / prepared Claude pilot — 2026-10-14
 
 Baseline main `703e2ed24a8d0c0df307b90776f2272478b96013` is unchanged since the

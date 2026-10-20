@@ -25,6 +25,7 @@ def module(name, path):
 p = module('packets', HERE / 'test_secret_custody_suspend_packets.py')
 vm = p.vm
 u = module('units', HERE.parent / 'review/secret_custody_boot_units.py')
+SYSTEMD_GUEST_MEMORY = '1024M'
 
 
 def payload(path, composed=False, restart=False, persistence=False, inbound=False, inbound_lease=False, inbound_restart=False, inbound_persistence=False):
@@ -78,6 +79,9 @@ def payload(path, composed=False, restart=False, persistence=False, inbound=Fals
     image = p.archive(files, systemd=True)
     (path / 'initramfs').write_bytes(image)
     print('SYSTEMD_BOOT_PROVENANCE', json.dumps({'initramfs_sha256': hashlib.sha256(image).hexdigest(),
+          'initramfs_compressed_bytes': len(image),
+          'payload_file_bytes': sum(len(data) for data, _ in files.values()),
+          'guest_memory': SYSTEMD_GUEST_MEMORY,
           'shutdown_units': {name: hashlib.sha256(Path('/usr/lib/systemd/system/' + name).read_bytes()).hexdigest() for name in shutdown_units},
           'binaries': {name: hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in binaries},
           'kernel_release': os.uname().release, 'kernel_sha256': hashlib.sha256((path / 'vmlinuz').read_bytes()).hexdigest(),
@@ -88,7 +92,10 @@ def payload(path, composed=False, restart=False, persistence=False, inbound=Fals
 def command(path, mode):
     if mode not in ('closed', 'missing', 'invalid'): raise ValueError('FIXED_BOOT_MODE_REQUIRED')
     args = vm.command(path)
-    args[args.index('-m') + 1] = '512M'
+    # The kernel, compressed archive and unpacked Python/systemd payload coexist
+    # during boot. 512M failed to unpack on the observed 7.0 CI kernel. Keep a
+    # fixed 1 GiB fixture budget; never loosen image, deadline or policy guards.
+    args[args.index('-m') + 1] = SYSTEMD_GUEST_MEMORY
     args[args.index('-append') + 1] += ' kc_systemd_probe=1 kc_boot_case=' + mode + ' systemd.show_status=false systemd.log_level=warning end=7'
     return args
 
