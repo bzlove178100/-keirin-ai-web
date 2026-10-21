@@ -241,3 +241,95 @@ loopback/同一origin/既存X-Keirin-Local/small JSONを要求。表示後にモ
 JS構文/diff check成功。実Chromeと全CIの確定証拠は#267本文を優先する。
 学習前の実験登録/失敗/再試行/検証集合再使用、第一段階を含む独立評価、商品目的変数/受入、DREAM、会員/課金は残る。
 API20/12/11/7記録値、HOLD/OFF、#266/#267未マージ/未公開/未配備、将来の現行原本/段階受入/復元条件を維持。
+
+
+## 学習前の実験登録・中断と再試行の記録（2026-10-21）
+
+`ml.final_five_experiment_ledger` を合成専用のオフライン入口として追加する。
+旧fit CLIは互換性のため維持し、旧経路や別台帳で行った学習を追跡済みとは扱わない。
+既存の選定台帳と画面は変更しない。選定台帳のtraining_attempts_tracked=falseも維持する。
+本台帳だけで、入力一式・cutoff・固定方式/特徴/parameters/rounds・学習/検証manifest・除外理由・
+登録理由・順序・ローカル時刻を、学習を呼び出す前に保存する。
+登録は結果を見ていない証明ではなく、既存の合成履歴を用いる回顧的な試作である。
+
+### 保存と実行の順序
+
+1. registerで入力全体と計画を固定し、registeredを保存。学習なし。
+2. runでrunningを保存してから固定rankerを1回だけ呼ぶ。登録時に固定した入力を使用する。
+3. completedまたはblockedを、モデル/比較reportと一緒に保存。学習条件不足ならmodel=nullで学習なし。
+4. Python例外はfailedを保存して元の例外を呼出し元へ返す。台帳の理由はexecution_exceptionに限定する。
+   任意の例外本文/パス/私有情報を台帳へコピーしない。結果保存自体の障害はfailedへ書き換えない。
+5. SIGKILL/KeyboardInterruptや保存不確実時のrunningは結果不明。再起動しても自動再実行しない。
+   abandonで理由付きinterruptedを保存し、再試行を必要とする場合だけ別IDを登録する。
+
+一度terminalになったIDのrunは保存済み状態を返すだけで学習を繰り返さない。
+同ID・同登録内容は重複を作らず、理由/入力/条件/再試行元の変更は拒否。
+同じ入力digestと計画の再試行は、最新の同条件terminal IDをretry-ofで指定する。
+条件や入力を変えた実験は別IDで登録し、下記の検証レース重複で関連を確認する。
+未解決のregistered/runningを残したまま次の実験を登録しない。registeredはrunまたはabandonで解決する。
+同一プロセスはRLock、別プロセスは既存POSIXロックで直列化する。
+
+### CLI例
+
+以下のIDは説明用。新しい実験では新規の32桁小文字hex IDを用い、応答喪失後は同じIDで照会する。
+cutoffは対象の生成fixtureに合う境界を明示する。
+
+```sh
+python -m ml.final_five_experiment_ledger register synthetic-ml-histories.json \
+  --cutoff 2026-10-24T10:00:00+09:00 --attempt-id 11111111111111111111111111111111 \
+  --reason '固定条件の合成比較' --synthetic --state-dir /outside/repo/experiment-state
+python -m ml.final_five_experiment_ledger run 11111111111111111111111111111111 \
+  --synthetic --state-dir /outside/repo/experiment-state
+python -m ml.final_five_experiment_ledger inspect --synthetic --state-dir /outside/repo/experiment-state
+python -m ml.final_five_experiment_ledger show 11111111111111111111111111111111 \
+  --synthetic --state-dir /outside/repo/experiment-state
+python -m ml.final_five_experiment_ledger export 11111111111111111111111111111111 \
+  --output experiment.json --synthetic --state-dir /outside/repo/experiment-state
+```
+
+completedだけを旧形式の{model,report}へexportできる。既存FrozenChallenger/比較画面で明示指定して読み込める。
+exportの出力は新規ファイルに限定する。台帳を再実行する必要はなく、部分出力は別名へexportし直す。
+export先の電源断耐久性や端末への保存完了は、この台帳のcheckpoint保証とは別である。
+runはcompletedならexit 0、保存済みblocked/failed/interruptedなら2、例外/未解決runningは1。
+
+```sh
+# runningの結果が不明な場合だけ、中断を記録する。成功済み実験の取消しではない。
+python -m ml.final_five_experiment_ledger abandon 11111111111111111111111111111111 \
+  --reason '中断後の確認で結果未保存' --synthetic --state-dir /outside/repo/experiment-state
+python -m ml.final_five_experiment_ledger register synthetic-ml-histories.json \
+  --cutoff 2026-10-24T10:00:00+09:00 --attempt-id 22222222222222222222222222222222 \
+  --retry-of 11111111111111111111111111111111 --reason '原因を確認した上で明示再試行' \
+  --synthetic --state-dir /outside/repo/experiment-state
+```
+
+### 検証集合の再使用と限界
+
+inspectは先行する全登録とのrace IDの重なりを表示する。
+validation_reused＝検証同士、validation_previously_training＝今回検証/以前学習、
+training_previously_validation＝今回学習/以前検証。入力の順序、snapshot、cutoffが変わっても
+同じrace IDなら重複を数える。未実行/失敗/中断の登録も保守的に含める。
+重複なしを独立評価合格と扱わず、閲覧/試行の実際の回数・人間の事前知識・別台帳/旧fitは検知できない。
+不正/除外レースや未提供の保留を横断的に追跡する仕組みではない。既存selectorの除外理由は保存する。
+全表示はevaluation_eligible=false、independent_evaluation_established=false、product_acceptance=false。
+自動で優秀モデルを選ぶ処理・再学習・昇格・金銭指標は追加しない。
+
+保存先はrepo外。固定ファイルfinal-five-experiments.json、別ロック/一時名を使う。
+最大5入力一式、各200履歴/8 MiB、20実験、全体32 MiB。超過は古い記録を削除せず拒否する。
+入力はregular/single-link/nofollowで限定読み込み。状態保存は既存SessionStoreのatomic replace/fsyncを再利用。
+保存失敗/不確実時は全操作を停止し、再起動後に最後の完全checkpointを検証する。
+復元時は入力hash・計画・retry参照・状態・元学習manifestを照合し、モデルを再読込して比較reportを再計算する。
+復元/照会/exportで再学習なし。依存実装の差などで再計算が一致しなければ拒否し、自動修復しない。
+有効な古いcheckpointへの差戻し、全体を再作成する者の改変、署名/真正性、外部実行履歴、
+学習したモデル本体の出所、ローカル時計や任意ホストの電源断耐久性は証明しない。
+旧.partialは自動採用/削除しない。元入力/Workbench/選定台帳は変更しない。
+
+新規12試験で事前保存→実学習、再読込/応答再試行時の学習なし、失敗/中断/別ID再試行、
+入力順序/境界変更時の重複、保留/競合/除外、再hashした破損の拒否、保存失敗前後、
+実SIGKILLの学習中/terminal置換前後3境界、上限/ロック/外部変更、別process CLI/export互換を確認する。
+共通rankerを計画/学習/再評価へ分離したため既存9試験も実行する。選定規則・学習parametersは不変。
+ML CIの既存test_final_five*.py対象へ自動で含まれる。画面変更/新規Chrome/CI条件変更なし。
+確定CIは#267本文へ保存し、記録だけのcommitは作らない。
+
+残件：実験台帳の画面操作/選定との追跡接続、第一段階を含む独立評価・実用特徴、
+商品目的変数/受入基準、DREAM、会員/課金/許諾済み実データ受入。
+合成試験を実精度/利益/商品完成の証拠にしない。API20/12/11/7記録値・HOLD/OFF・未マージ/未公開/未配備を維持する。

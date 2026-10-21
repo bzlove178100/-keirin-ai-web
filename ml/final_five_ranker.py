@@ -157,8 +157,8 @@ def predict_ranker(artifact, snapshot, *, synthetic=False):
     return _predict(artifact, _load(artifact), snapshot)
 
 
-def run_experiment(records, cutoff, *, synthetic=False):
-    """One fixed fit; test labels never enter training, tuning or early stopping."""
+def _prepare_experiment(records, cutoff, synthetic):
+    """Build the fixed plan without fitting or selecting by holdout metrics."""
     train, test, counts = _partition(records, cutoff, synthetic)
     report = {'schema_version': 'synthetic-final-five-experiment-v1', **LIMITS,
               'evaluation_design': 'retrospective_second_stage_chronological_holdout',
@@ -168,7 +168,7 @@ def run_experiment(records, cutoff, *, synthetic=False):
               'cutoff': cutoff, **counts, 'training_runs': 0, 'model_sha256': None,
               'strata': [], 'per_race': []}
     def blocked(reason):
-        return {'model': None, 'report': {**report, 'status': reason}}
+        return train, test, {**report, 'status': reason}, [], [], [], []
     if len({_iso(r['prediction_timestamp'], 'prediction_timestamp') for r in train}) < 5:
         return blocked('blocked_fewer_than_five_training_times')
     if not test:
@@ -184,15 +184,22 @@ def run_experiment(records, cutoff, *, synthetic=False):
         manifest.append(_manifest(record, candidates))
     if len(set(labels)) != 2:
         return blocked('blocked_training_requires_both_labels')
-    import lightgbm as lgb
-    import numpy as np
-    data = lgb.Dataset(np.asarray(matrix, dtype=float), label=labels, weight=weights, feature_name=FEATURES)
-    model = lgb.train(deepcopy(PARAMS), data, num_boost_round=ROUNDS)
-    artifact = {'schema_version': SCHEMA, 'policy': POLICY, 'features': list(FEATURES),
-                'params': deepcopy(PARAMS), 'rounds': ROUNDS, 'limits': dict(LIMITS),
-                'cutoff': cutoff, 'training_manifest': manifest,
-                'lightgbm_version': lgb.__version__, 'model_text': model.model_to_string()}
-    artifact['sha256'] = _digest(artifact)
+    return train, test, report, matrix, labels, weights, manifest
+
+
+def experiment_plan(records, cutoff, *, synthetic=False):
+    """Registration plan; no model fit and no selection from validation results."""
+    train, test, report, _, _, _, _ = _prepare_experiment(records, cutoff, synthetic)
+    return {'policy': POLICY, 'features': list(FEATURES), 'params': deepcopy(PARAMS),
+            'rounds': ROUNDS, 'cutoff': cutoff,
+            'eligibility': report.get('status', 'ready'),
+            'training': [_manifest(r, candidate_matrix(r['snapshot'])[0]) for r in train],
+            'validation': [_manifest(r, candidate_matrix(r['snapshot'])[0]) for r in test],
+            'counts': {k: report[k] for k in ('input_records', 'training_races', 'test_races',
+                        'held_races', 'duplicate_snapshots_removed', 'excluded')}}
+
+
+def _evaluate_experiment(artifact, test, report, labels):
     # Evaluate the reloaded representation, so persisted inference is exercised.
     loaded = _load(artifact)
     rows = []
@@ -227,6 +234,36 @@ def run_experiment(records, cutoff, *, synthetic=False):
                   training_candidates=len(labels), training_positive_candidates=sum(labels),
                   model_sha256=artifact['sha256'], strata=strata, per_race=rows)
     return {'model': artifact, 'report': report}
+
+
+def replay_experiment(records, cutoff, artifact, *, synthetic=False):
+    """Recompute a stored result from frozen sources without training."""
+    _, test, report, _, labels, _, manifest = _prepare_experiment(records, cutoff, synthetic)
+    if 'status' in report:
+        if artifact is not None:
+            raise ValueError('blocked_experiment_has_model')
+        return {'model': None, 'report': report}
+    if (not isinstance(artifact, dict) or artifact.get('cutoff') != cutoff or
+            _canonical(artifact.get('training_manifest')) != _canonical(manifest)):
+        raise ValueError('experiment_training_manifest_mismatch')
+    return _evaluate_experiment(artifact, test, report, labels)
+
+
+def run_experiment(records, cutoff, *, synthetic=False):
+    """One fixed fit; test labels never enter training, tuning or early stopping."""
+    _, test, report, matrix, labels, weights, manifest = _prepare_experiment(records, cutoff, synthetic)
+    if 'status' in report:
+        return {'model': None, 'report': report}
+    import lightgbm as lgb
+    import numpy as np
+    data = lgb.Dataset(np.asarray(matrix, dtype=float), label=labels, weight=weights, feature_name=FEATURES)
+    model = lgb.train(deepcopy(PARAMS), data, num_boost_round=ROUNDS)
+    artifact = {'schema_version': SCHEMA, 'policy': POLICY, 'features': list(FEATURES),
+                'params': deepcopy(PARAMS), 'rounds': ROUNDS, 'limits': dict(LIMITS),
+                'cutoff': cutoff, 'training_manifest': manifest,
+                'lightgbm_version': lgb.__version__, 'model_text': model.model_to_string()}
+    artifact['sha256'] = _digest(artifact)
+    return _evaluate_experiment(artifact, test, report, labels)
 
 
 def main(argv=None):

@@ -1,5 +1,19 @@
 # keirin-ai ML pipeline
 
+## Synthetic FINAL 5 experiment registration
+
+`python -m ml.final_five_experiment_ledger register` freezes synthetic histories,
+cutoff, fixed training recipe and train/validation manifests before any fit.
+`run` commits a running checkpoint before training; terminal IDs never refit.
+A killed or uncertain running attempt requires `abandon` with a reason before
+an explicit new-ID retry. `inspect` tracks race overlap with all prior local
+registrations, including failed, interrupted and unrun attempts. `show` reads
+one attempt; `export` writes a completed model in the existing comparison format.
+Restore recomputes the report without training. This bounded local ledger does
+not certify independent evaluation, track other ledgers/legacy fit calls, or
+promote models. The comparison/selection UI is unchanged. Commands, retry and
+recovery details are in the FINAL 5 contract below.
+
 ## Synthetic FINAL 5 selection receipts
 
 `python -m ml.final_five_selection_ledger` records the explicitly chosen saved

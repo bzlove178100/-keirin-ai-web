@@ -1,5 +1,38 @@
 # Work status
 
+## FINAL 5 preregistered synthetic experiment ledger — 2026-10-21
+
+再開照合：main d069ab9b6adcf9585954a5bae7be7df0546e473c、#267 b9a1568184eae043567f96e47165e139c2878b82。
+直前headは全7CI/回帰39551502665の47件/ML39551502728のWorkbench92＋ranker/台帳18＋実Chrome成功。
+runtime39551502736/job119061512647の2026-10-21T06:00:09.2804714Zログで同一head verified=true。
+#266 ae2658f7acadb597bf67217c165afe722a651587、#250/#257、mainは不変。非公開/未push Workは未確認。
+PR冒頭/末尾とAGENTS/SOURCE/要件/WORK/第二段階AI・保留確認契約を照合。成功済みCIは再実行しない。
+
+次の許可済み合成開発としてml.final_five_experiment_ledgerを追加。
+学習前の入力/固定条件/学習・検証manifest登録→running保存→1回の学習→結果保存。
+同IDの応答再試行は再学習なし。failed/interrupted/blockedも保持し、同条件再試行は最新元ID＋別ID＋理由が必要。
+未解決runningは結果不明として明示abandonを要求。自動再試行/再開/昇格は追加しない。
+inspectは全先行登録（未実行/失敗も含む）の検証再使用/学習と検証の移動をrace IDで表示する。
+元入力一式・モデル/reportを保存、復元時は元manifestと再推論reportを照合し再学習しない。
+5入力一式/各200履歴・8 MiB/20実験/全体32 MiB、超過は削除せず拒否。既存SessionStoreの別ファイルで保存。
+exportは既存{model,report}形式で比較画面と互換。旧fit/別台帳/画面選定との追跡は未接続。
+
+ローカル新規11試験＋追加の保留/競合/除外1試験＝12成功。影響する既存ranker9試験も成功。
+実LightGBMの事前保存/別process再読込/CLI互換、学習例外・KeyboardInterrupt、
+実SIGKILLの学習中/terminal置換前後3境界、fsync失敗前後、結果不明時の再実行拒否、
+明示再試行/入力順序・cutoff変更時の重複、再hash破損/上限/ロック/外部変更/元入力不変を確認。
+rankerの共通計画・学習・再評価を分離したが、学習方式/parameters/点数/基準は変更しない。
+既存ML CIのtest_final_five*.pyで自動実行。画面変更/新規Chrome/CI条件変更なし。
+新headのCIはこれから確定し、結果を#267本文だけへ保存する。記録だけのcommit/手動再実行/取消しなし。
+契約：docs/KEIRIN_FINAL_FIVE_RANKER_20261021.md「学習前の実験登録・中断と再試行の記録」。
+
+残件：実験台帳の画面操作/選定との追跡接続、第一段階を含む独立評価/実用特徴、商品目的変数/受入基準、
+DREAM、会員/課金/許諾済み実データ受入。旧fit/別保存先/人間の事前閲覧や外部保留は横断検知しない。
+ローカル時計/digestは来歴・独立性・実精度・利益の証明ではない。evaluation_eligible/product_acceptance=false。
+API20/12/11/7は記録値、KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF。
+#266/#267マージ・公開・Function配備は未承認。#266現行原本保存/段階受入/復元条件と旧承認/ZIP不流用を維持。
+
+
 ## Selection UI Chrome wait correction — 2026-10-21
 
 #267 0301a60fc7f080d7a649ae8888a8b7e14d05da58のML39550765017/job119059187705がfailure。
