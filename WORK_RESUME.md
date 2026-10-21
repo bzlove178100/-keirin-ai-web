@@ -1,5 +1,26 @@
 # Work resume handoff
 
+## FINAL 5 saved-model comparison display — 2026-10-21
+
+再開照合：main d069ab9b6adcf9585954a5bae7be7df0546e473c、#267 c3395104cab7debc6c6b77f2096a1327024c1f5b。
+全7CI成功、回帰39544435728は47/47、runtime39544435731/job119039280176で同一head verified=true。
+成功確定を#267本文/#266末尾へ保存し、記録だけのcommit/手動再実行/取消しなし。
+#266 ae2658f7acadb597bf67217c165afe722a651587、#250/#257不変。非公開/未push作業は未確認。
+
+残件の画面接続として、保存済み第二段階モデルを明示指定した場合だけ起動時に検証/固定する。
+既存snapshotから基準と試作を同点数で比較。モデル未指定/学習済みrace/cutoff前/同セッションML保留はAI候補なし。
+元値と不足、未校正比較スコア、モデルhash/cutoffを表示し、本文/manifest/結果/reportは返さない。
+再確認時/失敗時に旧候補を消去、遅い応答破棄。予測/履歴/判断の書込や画面からの再学習なし。
+モデルファイル変更は稼働中へ自動反映せず、再起動時に再検証。不正モデルでは起動拒否、暗黙fallbackなし。
+新規Python/API6＋既存基準6がローカル成功。初回のfixture時刻不整合を修正し製品の検査は維持。
+JS構文/diff check成功。新Chrome2（390/1280幅、各7/9車×3/4/5点）と変更headの全CIは#267本文で確定する。
+前Workのscratch/ログイン/モデル/依存ライブラリを仮定せずGitHub保存物から再取得した。
+契約/起動例：docs/KEIRIN_FINAL_FIVE_RANKER_20261021.md「保存済みモデルの画面接続」。
+
+残件：商品受入基準/実用特徴/第一段階を含む独立評価、実験選択の記録、モデル管理/選定保存、DREAM、会員/課金/実データ受入。
+KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF、API20/12/11/7は記録値。
+マージ/公開/Function配備未承認。現行原本保存/段階backend受入/復元は#266本文を維持。
+
 ## FINAL 5 learned challenger — 2026-10-21
 
 再開照合：main d069ab9b6adcf9585954a5bae7be7df0546e473c、#267 20e4ba0cfaf6058e0901350943309df17e2712ac。

@@ -22,6 +22,7 @@ from ml.model_web_response import model_web_response, render_model_web_preview
 from ml.product_category_preview import fixture_view, render_category_preview
 from ml.final_five_preview import final_five_view, render_final_five_preview
 from ml.final_five_review import evaluate_final_five, render_final_five_review
+from ml.final_five_challenger_preview import FrozenChallenger, render_challenger_preview
 from ml.synthetic_demo import make_record
 from ml.synthetic_session import SCHEMA, LEGACY_SCHEMA, JST, MAX_SNAPSHOTS, SessionStore, SessionSaveError, validate_session
 from ml.settle_snapshot import _iso
@@ -30,7 +31,9 @@ from ml.held_history_review import evaluate_reviews
 
 
 class Workbench:
-    def __init__(self, state_dir=None):
+    def __init__(self, state_dir=None, final_five_experiment=None):
+        # Validate an explicitly selected saved model before creating state/locks.
+        self.challenger = FrozenChallenger(final_five_experiment)
         self._temporary = TemporaryDirectory(prefix='keirin-synthetic-')
         self.root = Path(self._temporary.name)
         self.ready = False
@@ -181,6 +184,14 @@ class Workbench:
                 'storage': {'mode': 'local_file' if self.store else 'temporary',
                             'restored': self.restored, 'write_blocked': bool(self.store and self.store.failed)}}
 
+    def challenger_view(self, key):
+        snapshot = self.snapshots[key]
+        held = any(r.get('schema_version') == 'ml-held-history-v1' and
+                   r.get('race_id') == snapshot['race_id'] for r in self.histories.values())
+        return self.challenger.view(snapshot, key, held=held,
+                    storage={'mode': 'local_file' if self.store else 'temporary',
+                             'restored': self.restored, 'write_blocked': bool(self.store and self.store.failed)})
+
     def _review_session_holds(self):
         if self.store is not None and self.store.failed:
             raise ValueError('prediction_session_restart_required')
@@ -276,6 +287,15 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, page, 'text/html; charset=utf-8')
                 if self.path == '/api/state':
                     return self.send(200, app.state())
+                match = re.fullmatch(r'/(api/final-five-challenger|final-five-challenger)/([0-9a-f]{32})', self.path)
+                if match and match[2] in app.snapshots:
+                    try:
+                        if match[1] == 'api/final-five-challenger':
+                            return self.send(200, app.challenger_view(match[2]))
+                        html, digest = render_challenger_preview(match[2])
+                        return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
+                    except (ValueError, KeyError, TypeError):
+                        return self.send(409, {'error': 'challenger_display_contract_invalid'})
                 if self.path == '/final-five-review':
                     html, digest = render_final_five_review()
                     return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
@@ -403,8 +423,9 @@ def main():
     parser.add_argument('--synthetic', action='store_true', required=True)
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--state-dir', type=Path, help='Optional local POSIX directory outside the checkout for synthetic predictions and held-review checkpoints.')
+    parser.add_argument('--final-five-experiment', type=Path, help='Optional saved synthetic FINAL 5 experiment; read once at startup, never trained or replaced by the UI.')
     args = parser.parse_args()
-    app = Workbench(args.state_dir)
+    app = Workbench(args.state_dir, args.final_five_experiment)
     server = None
     try:
         server = make_server(app, args.port)

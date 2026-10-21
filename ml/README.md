@@ -4,7 +4,10 @@
 
 `python -m ml.final_five_ranker` trains, saves and reloads an offline synthetic
 candidate selector, with a chronological second-stage holdout against the fixed
-probability baseline. It does not replace the existing UI or first-stage model.
+probability baseline. The optional Workbench `--final-five-experiment` argument
+loads that saved model once at startup for read-only comparison on frozen
+synthetic predictions. It does not replace the first-stage model or train on
+page requests. Without the argument the challenger is unavailable.
 See [contract and CLI](../docs/KEIRIN_FINAL_FIVE_RANKER_20261021.md) for the explicit
 synthetic gate, label-time purge, equal-budget comparison and limitations.
 This is not a product acceptance or independently verified end-to-end holdout.

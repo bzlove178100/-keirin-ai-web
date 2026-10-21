@@ -2,7 +2,8 @@
 
 The fixed engineering objective is candidate win classification, not money or a
 confirmed product rule. First-stage provenance is not independently verified.
-No web integration, network, live training, promotion or source-history writes.
+The CLI has no network, live training, promotion or source-history writes.
+An opt-in read-only Workbench companion can display saved model inference.
 """
 from __future__ import annotations
 

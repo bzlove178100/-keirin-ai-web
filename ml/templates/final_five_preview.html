@@ -3,7 +3,7 @@
 *{box-sizing:border-box}body{margin:0;background:#f3f6f8;color:#172d43;font:16px/1.6 system-ui,sans-serif}main{max-width:900px;margin:auto;padding:24px 16px}h1{font-size:28px}h2{font-size:21px;margin:0}a{color:#156b63}.notice{padding:16px;background:#fff4d9;border-left:4px solid #c7972c}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:20px 0}.pick{padding:18px;background:white;border:1px solid #dbe3e9;border-radius:12px}.muted{font-size:13px;color:#53697d}p{overflow-wrap:anywhere}button{font:inherit;padding:10px;border:1px solid #8092aa;border-radius:7px;background:white;cursor:pointer}#status{min-height:2em}@media(max-width:650px){.grid{grid-template-columns:1fr}h1{font-size:24px}}
 </style></head><body><main>
 <a href="/">合成予測の画面へ戻る</a><h1>FINAL 5 · 合成比較</h1>
-<div class="notice"><strong>選定方式を比較するための基準表示</strong><p>保存済み5カテゴリの最大15候補から、未校正確率が高い順に最大5点を表示します。同値は車番の並び順です。候補不足は補いません。</p><p>第二段階AIによる推薦は未実装です。展開・確信度・オッズ価値は評価していません。この順位は実レースの推奨や利益を示しません。</p></div>
+<div class="notice"><strong>選定方式を比較するための基準表示</strong><p>保存済み5カテゴリの最大15候補から、未校正確率が高い順に最大5点を表示します。同値は車番の並び順です。候補不足は補いません。</p><p>この画面は第二段階AIによる推薦ではありません。展開・確信度・オッズ価値は評価していません。この順位は実レースの推奨や利益を示しません。</p></div>
 <p class="muted">合成データ専用 · 実取得・実学習・DB書込・本番予想・課金 OFF</p>
 <button id="refresh">保存済み候補を再確認</button><p id="status" role="status" aria-live="polite">確認しています。</p>
 <p id="race"></p><p id="shortfall"></p><div id="picks" class="grid"></div>
