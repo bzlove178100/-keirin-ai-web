@@ -8,7 +8,22 @@ const python=process.env.PYTHON||'python';
  const browser=await chromium.launch({headless:true,executablePath:process.env.KEIRIN_BROWSER_EXECUTABLE||undefined});
  try{for(const width of [390,1280]){
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'keirin-control-ui-'));
-  const cutoff=execFileSync(python,['-c',"import sys; sys.path.insert(0,'tests'); from test_synthetic_workbench_experiment_control import control_fixture; print(control_fixture(sys.argv[1]))",root],{encoding:'utf8'}).trim();
+  const cutoff=execFileSync(python,['-c',`import sys
+from pathlib import Path
+sys.path.insert(0,'tests')
+from test_synthetic_workbench_experiment_control import control_fixture
+from ml.synthetic_session import SessionStore
+cutoff=control_fixture(sys.argv[1])
+# Keep one existing snapshot pending so a later hold is a valid new result,
+# never an attempted overwrite of an already settled immutable history.
+store=SessionStore(Path(sys.argv[1])/'state')
+try:
+ payload=store.loaded
+ del payload['histories'][sorted(payload['histories'])[-1]]
+ store.save(payload)
+finally: store.close()
+print(cutoff)
+`,root],{encoding:'utf8'}).trim();
   const statePath=path.join(root,'state','synthetic-session.json'),ledgerPath=path.join(root,'experiments','final-five-experiments.json'),gatePath=path.join(root,'entered');
   const original=await fs.readFile(statePath),origins=[],errors=[],requests=[];let child,page,url;
   async function stop(){if(child&&child.exitCode===null&&child.signalCode===null){const done=once(child,'exit');child.kill('SIGKILL');await done;}}
@@ -67,7 +82,7 @@ with patch('lightgbm.train',side_effect=gate): main()
    assert.equal((await ledger()).attempts[2].status,'running');const running=await fs.readFile(ledgerPath);await stop();await start();await page.goto(url+'/final-five-training');await shown();
    assert((await card(third).textContent()).includes('実行開始済み・完了未確認'));assert.equal(await card(third).locator('[data-action=run]').count(),0);assert.deepEqual(await fs.readFile(ledgerPath),running);assert.deepEqual(await fs.readFile(statePath),original);
    await abandon(third,'サーバー中断後の完了未確認');await register('原因確認後の別ID再試行',third);const fourth=await registered();
-   const hold=await page.evaluate(async()=>{const r=await fetch('/api/hold',{method:'POST',headers:{'Content-Type':'application/json','X-Keirin-Local':'synthetic-only'},body:JSON.stringify({snapshot_id:'0'.repeat(31)+'1',result_status:'withdrawn',withdrawn_car_numbers:[1]})});return r.status;});assert.equal(hold,200);
+   const hold=await page.evaluate(async()=>{const state=await(await fetch('/api/state')).json(),pending=state.snapshot_list.filter(r=>r.result_status==='pending');if(pending.length!==1)throw Error('expected exactly one pending hold fixture');const r=await fetch('/api/hold',{method:'POST',headers:{'Content-Type':'application/json','X-Keirin-Local':'synthetic-only'},body:JSON.stringify({snapshot_id:pending[0].snapshot_id,result_status:'withdrawn',withdrawn_car_numbers:[1]})});return {status:r.status,body:await r.json()};});assert.equal(hold.status,200,JSON.stringify(hold.body));
    await card(fourth).locator('[data-action=run]').click();await unconfirmed();assert.equal((await ledger()).attempts[3].status,'registered');
    await page.locator('#refresh').click();await shown();assert(await card(fourth).locator('[data-action=run]').isDisabled());assert((await card(fourth).textContent()).includes('登録後に元の履歴が変わったため実行できません。'));
    const statePattern='**/api/final-five-training';
