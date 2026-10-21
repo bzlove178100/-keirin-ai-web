@@ -158,7 +158,13 @@
 
   function buildHistory(snapshot, settlement) {
     validateSnapshot(snapshot);
-    const outcomeCombo = settlement && settlement.outcomeCombo;
+    if (!settlement || typeof settlement !== 'object' || Array.isArray(settlement) ||
+        Object.keys(settlement).some(key => !['outcomeCombo','settlementOdds','resultTimestamp','result_status'].includes(key))) fail('settlement_fields_invalid');
+    if (Object.prototype.hasOwnProperty.call(settlement, 'result_status')) {
+      if (['dead_heat','withdrawn','cancelled'].includes(settlement.result_status)) fail('nonstandard_result_requires_review');
+      if (settlement.result_status !== 'normal') fail('result_status_invalid');
+    }
+    const outcomeCombo = settlement.outcomeCombo;
     if (!validCombo(outcomeCombo)) fail('outcome_combo_invalid');
     const settlementOdds = Number(settlement && settlement.settlementOdds);
     if (!Number.isFinite(settlementOdds) || settlementOdds <= 0) fail('settlement_odds_invalid');
@@ -204,6 +210,7 @@
       selected_predictions: clone(prediction.selected_predictions),
       training_input: trainingInput,
       metadata: {
+        ...(Object.prototype.hasOwnProperty.call(settlement, 'result_status') ? {result_status: settlement.result_status} : {}),
         date: race.date || null,
         venue: race.venue || null,
         race_number: race.race_number == null ? null : race.race_number,
@@ -223,6 +230,69 @@
         schema_version: OUTPUT_SCHEMA,
       },
     };
+  }
+
+  const HELD_SCHEMA = 'phase32-held-history-v1';
+
+  function buildHeldHistory(snapshot, settlement) {
+    validateSnapshot(snapshot);
+    const engine = snapshot.engine_response;
+    if ([engine.engine_candidate, (engine.architecture || {}).engine]
+        .some(value => value != null && value !== ENGINE_VERSION)) fail('engine_version_mismatch');
+    const status = settlement && settlement.result_status;
+    if (!['dead_heat', 'withdrawn', 'cancelled'].includes(status)) fail('held_result_status_invalid');
+    const fields = ['result_status', 'result_timestamp'];
+    if (status === 'withdrawn') fields.push('withdrawn_car_numbers');
+    if (!settlement || Array.isArray(settlement) || Object.keys(settlement).sort().join(',') !== fields.sort().join(',')) fail('held_settlement_fields_invalid');
+    const {captured, scheduled} = snapshotTimes(snapshot);
+    const observed = parseAwareTime(settlement.result_timestamp, 'result_timestamp');
+    if (observed < captured) fail('result_before_capture');
+    if (status === 'dead_heat' && observed < scheduled) fail('result_before_scheduled_start');
+    if (status === 'withdrawn') {
+      const cars = settlement.withdrawn_car_numbers;
+      const roster = snapshot.race_data.players.map(p => p.car_number);
+      if (!Array.isArray(cars) || !cars.length || cars.some(c => !Number.isInteger(c) || !roster.includes(c)) || new Set(cars).size !== cars.length) fail('withdrawn_cars_invalid');
+    }
+    const race = snapshot.race_data.race;
+    if (typeof race.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(race.date) ||
+        typeof race.venue !== 'string' || !race.venue.trim() || !Number.isInteger(race.race_number) ||
+        race.race_number < 1 || race.race_number > 12) fail('held_race_identity_invalid');
+    return {
+      schema_version: HELD_SCHEMA,
+      race_id: `${race.date}-${race.venue}-${race.race_number}R`,
+      prediction_timestamp: snapshot.captured_at,
+      snapshot: JSON.parse(JSON.stringify(snapshot)), settlement: JSON.parse(JSON.stringify(settlement)),
+      evaluation_eligible: false, supervised_training_eligible: false,
+      db_write_enabled: false, external_fetch_enabled: false,
+      production_prediction_enabled: false, monetary_ev_enabled: false,
+    };
+  }
+
+  function canonical(value) {
+    if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
+    if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + canonical(value[k])).join(',') + '}';
+    return JSON.stringify(value);
+  }
+
+  function validateHeldHistory(record) {
+    if (!record || record.schema_version !== HELD_SCHEMA) fail('held_schema_mismatch');
+    if (canonical(record) !== canonical(buildHeldHistory(record.snapshot, record.settlement))) fail('held_record_mismatch');
+    return true;
+  }
+
+  function partitionHolds(records) {
+    const held = new Set(), ordinary = [], excluded = {};
+    const exclude = reason => { excluded[reason] = (excluded[reason] || 0) + 1; };
+    for (const record of records) {
+      if (record && record.schema_version === HELD_SCHEMA) {
+        try { validateHeldHistory(record); held.add(record.race_id); exclude('held_result'); }
+        catch (_) { exclude('invalid_held_record'); }
+      } else ordinary.push(record);
+    }
+    return { records: ordinary.filter(record => {
+      if (record && held.has(record.race_id)) { exclude('race_has_held_result'); return false; }
+      return true;
+    }), excluded, held_race_ids: [...held].sort() };
   }
 
   function recordsFromJson(value) {
@@ -252,6 +322,12 @@
   }
 
   function recordCandidate(record) {
+    for (const part of [record, (record && record.metadata) || {}]) {
+      if (!part || typeof part !== 'object' || Array.isArray(part) ||
+          [HELD_SCHEMA, 'ml-held-history-v1'].includes(part.schema_version) ||
+          (Object.prototype.hasOwnProperty.call(part, 'result_status') && part.result_status !== 'normal') ||
+          ['dead_heat','withdrawn_car_numbers','trifecta_outcomes','settlement'].some(key => Object.prototype.hasOwnProperty.call(part, key))) fail('nonstandard_result_requires_review');
+    }
     const metadata = record && record.metadata || {};
     const eligibility = metadata.training_eligibility || {};
     const training = record && record.training_input;
@@ -292,10 +368,11 @@
   }
 
   function prepareRecords(records) {
-    const excluded = {};
+    const partition = partitionHolds(records);
+    const excluded = partition.excluded;
     const groups = new Map();
     function exclude(reason, count) { excluded[reason] = (excluded[reason] || 0) + (count || 1); }
-    for (const record of records) {
+    for (const record of partition.records) {
       try {
         const item = recordCandidate(record);
         if (!groups.has(item.race_id)) groups.set(item.race_id, []);
@@ -323,7 +400,7 @@
       duplicates += group.length - 1;
     }
     selected.sort((a, b) => a.prediction_time - b.prediction_time || a.race_id.localeCompare(b.race_id));
-    return { selected, excluded, duplicate_snapshots_removed: duplicates };
+    return { selected, excluded, duplicate_snapshots_removed: duplicates, held_race_ids: partition.held_race_ids };
   }
 
   function splitRecords(selected) {
@@ -363,6 +440,8 @@
     const median = sortedOdds.length ? (sortedOdds.length % 2 ? sortedOdds[(sortedOdds.length - 1) / 2] : (sortedOdds[sortedOdds.length / 2 - 1] + sortedOdds[sortedOdds.length / 2]) / 2) : null;
     return {
       input_records: records.length,
+      held_unique_races: prepared.held_race_ids.length,
+      held_race_ids: prepared.held_race_ids,
       eligible_unique_races: selected.length,
       eligible_race_ids: selected.map((item) => item.race_id),
       distinct_prediction_times: distinctTimes,
@@ -405,6 +484,10 @@
     validateSnapshot,
     buildTrainingInput,
     buildHistory,
+    HELD_SCHEMA,
+    buildHeldHistory,
+    validateHeldHistory,
+    partitionHolds,
     historyEnvelope,
     recordsFromJson,
     collectionStatus,

@@ -142,6 +142,8 @@ def record(lines, event, seconds=90):
     deadline = time.monotonic() + seconds
     while True:
         line = lines.line(deadline)
+        if 'Initramfs unpacking failed:' in line:
+            raise RuntimeError('VM_INITRAMFS_UNPACK_FAILED ' + line)
         if line.startswith("VM_FAIL") or "Kernel panic" in line:
             raise RuntimeError(line)
         if line.startswith("VM_RECORD "):
@@ -336,6 +338,13 @@ class Tests(unittest.TestCase):
         self.assertEqual(qmp.number, 1)
         conn.sendall.assert_called_once_with(b'{"execute": "qmp_capabilities", "id": 1}\n')
         self.assertEqual(qmp.events, [])
+
+    def test_guest_record_refuses_incomplete_initramfs_before_boot_record(self):
+        lines = Mock()
+        lines.line.side_effect = ['[0.4] Initramfs unpacking failed: write error', 'VM_RECORD {}']
+        with self.assertRaisesRegex(RuntimeError, 'VM_INITRAMFS_UNPACK_FAILED.*write error'):
+            record(lines, 'boot')
+        self.assertEqual(lines.line.call_count, 1)
 
     def test_guest_record_rejects_nonfinite_clock_wrong_event_and_interface(self):
         good = {"event": "boot", "boot": "12345678-1234-1234-1234-123456789abc",

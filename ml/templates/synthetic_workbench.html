@@ -6,21 +6,43 @@
 <div class="notice"><strong>コードで生成した合成データ専用</strong><p>実レースの的中率・利益を示す画面ではありません。結果も合成入力として扱います。</p></div>
 <p class="safety">実データ取得 OFF · 実データ学習 OFF · DB書込 OFF · 本番予想 OFF</p>
 <section class="card"><h2>1. 合成レースを選ぶ</h2><p class="muted">初回だけ合成モデルを準備します。予測は表示前に自動保存されます。</p><div class="actions"><button id="predict7">7車を試す</button><button id="predict9">9車を試す</button></div><p id="message" role="status" aria-live="polite">準備状況を確認しています。</p><p id="saved" class="muted"></p><p id="storage-note" class="muted"></p><label id="resume-field" hidden>保存した予測を開く <select id="resume"></select></label></section>
-<section id="prediction" class="card" hidden><h2 id="race-title">モデル候補</h2><p class="muted">未校正スコアによる順位です。各カテゴリ最大3点、未確認オッズの補完なし。</p><div id="categories" class="grid"></div><div class="exports"><a id="preview" target="_blank" rel="noopener">全スコアを表示</a><a id="web-preview" target="_blank" rel="noopener">既存Web形式で表示</a><a id="snapshot-download">予測の記録を保存</a></div></section>
+<section id="prediction" class="card" hidden><h2 id="race-title">モデル候補</h2><p class="muted">未校正スコアによる順位です。各カテゴリ最大3点、未確認オッズの補完なし。</p><div id="categories" class="grid"></div><div class="exports"><a id="preview" target="_blank" rel="noopener">全スコアを表示</a><a id="web-preview" target="_blank" rel="noopener">既存Web形式で表示</a><a id="category-preview" target="_blank" rel="noopener">カテゴリ別の表示を合成確認</a><a id="final-five-preview" target="_blank" rel="noopener">FINAL 5の比較基準を表示</a><a id="final-five-challenger" target="_blank" rel="noopener">第二段階AIと基準を合成比較</a><a id="snapshot-download">予測の記録を保存</a></div></section>
 <section id="settlement" class="card" hidden><h2>2. 合成結果を入力して評価</h2><p class="muted">未来の架空レースの結果を模擬します。選んだ3車は重複できません。</p><div class="fields"><label>結果の状態<select id="result-status"><option value="normal">通常の着順</option><option value="dead_heat">同着・評価保留</option><option value="withdrawn">欠車・評価保留</option><option value="cancelled">中止・評価保留</option></select></label></div><p id="hold-note" class="muted" hidden>このレースの通常評価を保留します。単一の正解や的中率は計算しません。</p><label id="withdrawn-field" hidden>欠車の車番（複数はカンマ区切り）<input id="withdrawn" type="text" inputmode="numeric" placeholder="例：7"></label><div id="normal-fields" class="fields"><label>1着<select id="first"></select></label><label>2着<select id="second"></select></label><label>3着<select id="third"></select></label><label>合成確定オッズ<input id="odds" type="number" min="0.1" step="0.1" value="55.5"></label></div><div class="actions"><button id="settle">結果を照合して評価</button></div><p id="settlement-note" class="muted"></p><a id="history-download" hidden>結果照合の記録を保存</a></section>
-<section id="evaluation" class="card" hidden><h2>3. 保存した予測の評価</h2><p class="muted">結果を見た後の再学習は行いません。同じレースは最後に保存した有効な予測を採用します。保留記録があるレースは通常結果も含めて評価対象から外します。</p><div class="metrics"><div><strong id="race-count"></strong><span>評価対象レース</span></div><div><strong id="top3"></strong><span>上位3候補の的中率（合成）</span></div><div><strong id="held-count"></strong><span>評価を保留したレース</span></div><div><strong id="duplicates"></strong><span>除外した古い重複</span></div></div><div class="table-wrap"><table><thead><tr><th>車数</th><th>正解の順位</th><th>的中したカテゴリ</th></tr></thead><tbody id="review-rows"></tbody></table></div><p id="held-cases" class="muted"></p><p id="exclusions" class="muted"></p><div class="exports"><a href="/export/review">評価の記録を保存</a></div></section>
+<section id="evaluation" class="card" hidden><h2>3. 保存した予測の評価</h2><p class="muted">結果を見た後の再学習は行いません。同じレースは最後に保存した有効な予測を採用します。保留記録があるレースは通常結果も含めて評価対象から外します。</p><div class="metrics"><div><strong id="race-count"></strong><span>評価対象レース</span></div><div><strong id="top3"></strong><span>上位3候補の的中率（合成）</span></div><div><strong id="held-count"></strong><span>評価を保留したレース</span></div><div><strong id="duplicates"></strong><span>除外した古い重複</span></div></div><div class="table-wrap"><table><thead><tr><th>車数</th><th>正解の順位</th><th>的中したカテゴリ</th></tr></thead><tbody id="review-rows"></tbody></table></div><p id="held-cases" class="muted"></p><p id="exclusions" class="muted"></p><div class="exports"><a href="/final-five-review" id="final-five-review-link">FINAL 5の合成結果を確認</a><a href="/export/review">評価の記録を保存</a></div></section>
 <div class="exports"><a href="/export/session">未照合分を含む全記録を保存</a><a href="/export/histories">照合済み履歴をまとめて保存</a></div>
+<section class="card"><h2>移行前の原本</h2><p class="muted">保存形式を更新する直前の予測記録です。移行後の予測・結果や、別画面の確認判断は含みません。</p><button id="backup-check">移行前原本を確認</button><p id="backup-status" role="status" aria-live="polite">確認すると、取得できる原本の有無を表示します。</p><p id="backup-details" class="pick muted" hidden></p><a id="backup-download" hidden>照合した移行前原本を取得</a><p class="muted">旧形式で再開するときはサーバーを停止し、現在の全記録と確認一式を保持したまま、原本を別の保存先の synthetic-session.json として開いてください。</p></section>
+<p><a id="held-review-link" href="/held-review">保留の確認・誤申告訂正へ</a>（合成データ専用・保存状態は確認画面に表示）</p>
+<p><a id="experiment-audit-link" href="/final-five-experiments">第二段階AIの合成実験記録を確認</a></p>
+<p><a id="experiment-control-link" href="/final-five-training">第二段階AIの合成実験を登録・実行</a></p>
 <footer>この確認画面は同じ実行環境内だけで動作します。記録の保存方法は上の保存状態を確認してください。モデルは終了時に消去します。記録の上限は保存先ごとに20件です。</footer>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);let current=null,busy=false,writeBlocked=false;
 const names={hit_priority:'的中率優先',balance:'穴＋バランス',middle:'中穴',longshot:'大穴',super_longshot:'超大穴'};
 const statuses={pending:'未照合',normal:'通常',dead_heat:'同着',withdrawn:'欠車',cancelled:'中止'};
-const errors={session_save_failed_restart_required:'保存できませんでした。直前の記録を維持して停止しました。保存先を確認して再起動してください。',session_save_uncertain_restart_required:'保存の確定を確認できません。記録の二重作成を避けるため停止しました。同じ保存先で再起動して確認してください。',session_restart_required:'保存処理を停止しています。同じ保存先で再起動してください。',withdrawn_cars_invalid:'欠車の車番を重複なく入力してください。',outcome_not_in_riders:'異なる3車を選んでください。',settlement_odds_invalid:'オッズは0より大きい数値で入力してください。',snapshot_already_settled:'この予測は結果照合済みです。',model_snapshot_time_order_invalid:'確認用レースの予定時刻を過ぎました。記録を保存して画面の実行環境を再起動してください。',session_limit_export_and_restart:'20件に達しました。記録を取得し、新しい保存先または一時モードで開始してください。'};
+const errors={session_migration_backup_failed_restart_required:'移行前のバックアップを確認できないため停止しました。旧記録は保持しています。保存先と既存バックアップを確認してください。',session_save_failed_restart_required:'保存できませんでした。直前の記録を維持して停止しました。保存先を確認して再起動してください。',session_save_uncertain_restart_required:'保存の確定を確認できません。記録の二重作成を避けるため停止しました。同じ保存先で再起動して確認してください。',session_restart_required:'保存処理を停止しています。同じ保存先で再起動してください。',withdrawn_cars_invalid:'欠車の車番を重複なく入力してください。',outcome_not_in_riders:'異なる3車を選んでください。',settlement_odds_invalid:'オッズは0より大きい数値で入力してください。',snapshot_already_settled:'この予測は結果照合済みです。',model_snapshot_time_order_invalid:'確認用レースの予定時刻を過ぎました。記録を保存して画面の実行環境を再起動してください。',session_limit_export_and_restart:'20件に達しました。記録を取得し、新しい保存先または一時モードで開始してください。'};
 function message(text,error=false){$('message').textContent=text;$('message').className=error?'error':'';}
+function clearBackup(){const link=$('backup-download');link.hidden=true;link.removeAttribute('href');$('backup-details').hidden=true;}
+async function checkBackup(){
+ clearBackup();$('backup-check').disabled=true;$('backup-status').textContent='原本を照合しています。';
+ try{const response=await fetch('/api/session-v1-backup');if(!response.ok)throw new Error();const info=await response.json();
+  const messages={temporary:'一時モードでは移行前原本を自動保存しません。',missing:'保存された移行前原本はありません。原本は旧形式から移行するときに作成されます。',invalid:'原本の形式や読込状態を確認できません。保存先を確認してください。',unrelated:'現在の記録と一致する移行前原本ではありません。保存先を確認してください。',current_changed:'保存先の記録が変わっています。サーバーを再起動して確認してください。'};
+  if(info.status==='available'){$('backup-status').textContent='現在の記録と照合できる移行前原本があります。';$('backup-details').textContent=`予測 ${info.snapshots}件 · 結果 ${info.histories}件 · ${info.bytes} bytes · SHA-256 ${info.sha256}`;$('backup-details').hidden=false;$('backup-download').href='/export/session-v1/'+info.sha256;$('backup-download').hidden=false;}
+  else $('backup-status').textContent=messages[info.status]||'原本の状態を確認できません。';
+ }catch{$('backup-status').textContent='原本を確認できませんでした。接続を確認してもう一度お試しください。';}finally{$('backup-check').disabled=false;}
+}
+$('backup-check').onclick=checkBackup;
+$('backup-download').onclick=async event=>{
+ event.preventDefault();const href=$('backup-download').getAttribute('href');if(!href)return;clearBackup();
+ try{const response=await fetch(href);if(!response.ok){$('backup-status').textContent='確認後に原本または保存状態が変わりました。もう一度原本を確認してください。';return;}
+  const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download='synthetic-session-v1-before-migration.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  $('backup-status').textContent='原本の取得を開始しました。端末の保存先を確認してください。';
+ }catch{$('backup-status').textContent='原本を取得できませんでした。接続を確認してもう一度原本を確認してください。';}
+};
 function disabled(){for(const id of ['predict7','predict9','settle','resume'])$(id).disabled=busy||writeBlocked||(id==='settle'&&(!current||current.settled));for(const id of ['first','second','third','odds','result-status','withdrawn'])$(id).disabled=busy||writeBlocked||!current||current.settled;}
 function resultFields(){const status=$('result-status').value;$('normal-fields').hidden=status!=='normal';$('hold-note').hidden=status==='normal';$('withdrawn-field').hidden=status!=='withdrawn';$('settle').textContent=status==='normal'?'結果を照合して評価':'保留理由を記録';}
 function render(state){
+ clearBackup();$('backup-status').textContent='確認すると、取得できる原本の有無を表示します。';
  current=state.current;writeBlocked=state.storage.write_blocked;
  $('storage-note').textContent=writeBlocked?'保存エラーのため操作を停止しています。記録の取得はできます。':state.storage.mode==='local_file'?(state.storage.restored?'前回の記録を復元しました。操作のたびに自動保存します。':'操作のたびに自動保存します。同じ保存先で再起動すると復元できます。'):'一時モード：終了すると記録が消えます。終了前に保存リンクから取得してください。';
  $('resume-field').hidden=state.snapshot_list.length===0;$('resume').replaceChildren();
@@ -42,7 +64,7 @@ function render(state){
   const outcome=current.settlement?.outcome_combo?.split('-')||['1','2','3'];
   for(const [index,id] of ['first','second','third'].entries()){$(id).replaceChildren();for(let car=1;car<=n;car++){const option=document.createElement('option');option.value=car;option.textContent=car+'番';$(id).append(option);}$(id).value=outcome[index];}
   $('odds').value=current.settlement?.settlement_odds??55.5;
-  $('web-preview').href='/web-view/'+current.snapshot_id;$('preview').href='/preview/'+current.snapshot_id;$('snapshot-download').href='/snapshot/'+current.snapshot_id;
+  $('web-preview').href='/web-view/'+current.snapshot_id;$('category-preview').href='/category-view/'+current.snapshot_id;$('final-five-preview').href='/final-five-view/'+current.snapshot_id;$('final-five-challenger').href='/final-five-challenger/'+current.snapshot_id;$('preview').href='/preview/'+current.snapshot_id;$('snapshot-download').href='/snapshot/'+current.snapshot_id;
   $('history-download').href='/history/'+current.snapshot_id;$('history-download').hidden=!current.settled;
   $('settlement-note').textContent=current.settled?(status==='normal'?'結果照合済みです。保存した予測は変更していません。':statuses[status]+'のため評価を保留しました。予測は保存時のままです。'):'';
  }

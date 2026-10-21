@@ -1,5 +1,78 @@
 # keirin-ai ML pipeline
 
+## Synthetic FINAL 5 experiment registration
+
+Workbench can enable explicit experiment operations with
+`--final-five-experiment-dir /outside/repo/experiment-state`. This is mutually
+exclusive with the read-only `--final-five-experiment-ledger` checkpoint flag.
+The registration page uses only current validated generated-session histories,
+with a chosen cutoff, reason, stable request ID and explicit retry parent.
+Registration saves conditions without training; a separate action executes the
+existing ledger once. Changed histories (including a new hold) or stale ledger
+revisions refuse execution. Lost responses are checked by the same ID; terminal
+attempts never fit again. An interrupted server restores `running` as unknown
+until explicit abandonment with a reason. Operations are synchronous and
+serialized: no live-fit cancel, automatic retry or automatic model switch.
+Completed models can be downloaded in the existing comparison format. The
+audit page reads the owned ledger's current checkpoint; frozen read-only mode
+retains its restart-on-change behavior.
+
+`python -m ml.final_five_experiment_ledger register` freezes synthetic histories,
+cutoff, fixed training recipe and train/validation manifests before any fit.
+`run` commits a running checkpoint before training; terminal IDs never refit.
+A killed or uncertain running attempt requires `abandon` with a reason before
+an explicit new-ID retry. `inspect` tracks race overlap with all prior local
+registrations, including failed, interrupted and unrun attempts. `show` reads
+one attempt; `export` writes a completed model in the existing comparison format.
+Restore recomputes the report without training. This bounded local ledger does
+not certify independent evaluation, track other ledgers/legacy fit calls, or
+promote models. Commands, retry and
+recovery details are in the FINAL 5 contract below.
+
+Workbench accepts `--final-five-experiment-ledger /outside/repo/final-five-experiments.json`
+to read an existing checkpoint without creating locks or writing to it. The
+experiment history page shows every attempt, retry parent, prior race overlap,
+and the six separate rider-count/budget comparisons. Current-model and saved
+selection links show **all** completed attempts with the same model digest;
+this match does not establish training provenance or independent evaluation.
+The reader validates and pins the checkpoint at startup; any later change or
+missing file stops display until restart. Unconfigured, no matching record,
+and read failure remain distinct. Requests never train, register, retry,
+abandon, switch models or change selection receipts in this frozen mode.
+Explicit operations require the separate directory option described above.
+
+## Synthetic FINAL 5 selection receipts
+
+`python -m ml.final_five_selection_ledger` records the explicitly chosen saved
+model, frozen snapshot, same-budget comparison and a reason in a bounded local
+checkpoint outside this repository. `inspect` lists reselections; `show` returns
+one receipt. Restoration revalidates models/snapshots and recomputes selections
+without training. Request IDs make interrupted retries idempotent; a new ID
+preserves a new selection, even for the same model/snapshot.
+This is a retrospective synthetic receipt, not a prospective prediction record,
+an evaluation source, a training-attempt ledger or a model promotion mechanism.
+Standalone receipts cannot check holds in other workspaces. See
+`../docs/KEIRIN_FINAL_FIVE_RANKER_20261021.md` for commands, limits and recovery.
+
+Workbench can opt into the same ledger using `--final-five-selection-dir`.
+An explicit save rechecks the displayed model/snapshot and current session holds.
+The page preserves its request ID before sending so a lost response can be
+looked up or retried without silently adding another receipt. Historical lookup
+works even when the current model is unavailable; it never restores eligibility.
+Simply opening or refreshing a comparison does not append a record.
+
+## Synthetic FINAL 5 learned challenger
+
+`python -m ml.final_five_ranker` trains, saves and reloads an offline synthetic
+candidate selector, with a chronological second-stage holdout against the fixed
+probability baseline. The optional Workbench `--final-five-experiment` argument
+loads that saved model once at startup for read-only comparison on frozen
+synthetic predictions. It does not replace the first-stage model or train on
+page requests. Without the argument the challenger is unavailable.
+See [contract and CLI](../docs/KEIRIN_FINAL_FIVE_RANKER_20261021.md) for the explicit
+synthetic gate, label-time purge, equal-budget comparison and limitations.
+This is not a product acceptance or independently verified end-to-end holdout.
+
 ## Current stage
 
 The repository can capture a leakage-safe `training_input` inside prospective history records and convert eligible history JSON into rider-level rows.
@@ -317,7 +390,11 @@ excludes **all** records for that race, including later ordinary records. Evalua
 returns `held_races` and `held_cases`; `excluded` counts excluded records. Held races
 do not enter hit-rate/log-loss/Brier denominators. Unrelated ordinary races retain
 their metrics. If all races are held, metrics are empty and evaluation is blocked
-(the CLI writes the report and exits 2). No hold-resolution/override is provided.
+(the CLI writes the report and exits 2). This original history evaluator does not
+release holds. For audited decisions and frozen scoring of corrected generated
+fixtures, see [the synthetic held review contract](../docs/KEIRIN_HELD_HISTORY_REVIEW_20261019.md).
+That separate review keeps the original holds, exports no training/ordinary
+records, and requires all supplied holds of the race to have consistent reviews.
 
 The workbench result-state selector records these same events, hides ordinary
 finish/odds fields, and retains the held reason on reload/export. This is explicit

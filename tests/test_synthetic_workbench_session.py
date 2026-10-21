@@ -12,14 +12,14 @@ import unittest
 from unittest.mock import patch
 
 from ml.model_history import _canonical, _digest, settle_snapshot
-from ml.synthetic_session import SCHEMA, FILENAME, MAX_BYTES, SessionSaveError, SessionStore
+from ml.synthetic_session import SCHEMA, LEGACY_SCHEMA, FILENAME, MAX_BYTES, SessionSaveError, SessionStore
 from ml.synthetic_workbench import Workbench, make_server
 from test_model_history import snapshot, settlement
 
 
 def saved_session():
     seven, nine = snapshot(7), snapshot(9)
-    return {'schema_version':SCHEMA, 'synthetic_only':True, 'series':0,
+    return {'schema_version':LEGACY_SCHEMA, 'synthetic_only':True, 'series':0,
             'scheduled':seven['scheduled_start'], 'current':'a'*32,
             'snapshots':{'a'*32:seven, 'b'*32:nine},
             'histories':{'a'*32:settle_snapshot(seven,settlement(seven),synthetic=True)}}
@@ -49,7 +49,7 @@ class SyntheticSessionTests(unittest.TestCase):
                 self.assertEqual(app.histories['b'*32]['settlement']['withdrawn_car_numbers'],[9])
                 with self.assertRaisesRegex(ValueError,'already_settled'):app.settle('a'*32,'1-2-3',50)
             finally:app.close()
-            self.assertEqual({p.name for p in directory.iterdir()},{FILENAME,'session.lock'})
+            self.assertEqual({p.name for p in directory.iterdir()},{FILENAME,'session.lock','held-review'})
             self.assertEqual((directory/FILENAME).stat().st_mode & 0o777,0o600)
 
     def test_failed_write_does_not_change_memory_or_previous_file(self):
@@ -168,7 +168,8 @@ class SyntheticSessionTests(unittest.TestCase):
                     clock.now.return_value=max(datetime.now(timezone.utc),app.scheduled)+timedelta(hours=2)
                     state=app.predict(7)  # Real generated model; restored records are never training input.
                 key=state['current']['snapshot_id']
-                self.assertEqual(app.series,1)
+                self.assertEqual(app.schema,SCHEMA)
+                self.assertEqual(state['current']['race']['race_number'],7)
                 self.assertNotEqual(app.snapshots[key]['race_id'],old['a'*32]['race_id'])
                 self.assertEqual(app.snapshots['a'*32],old['a'*32])
                 app.settle(key,'1-2-3',55.5)

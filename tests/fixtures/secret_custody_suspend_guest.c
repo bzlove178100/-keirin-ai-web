@@ -10,6 +10,8 @@
 #include <sys/mount.h>
 #include <sys/reboot.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
+#include <sys/sysinfo.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -74,6 +76,18 @@ int main(void) {
     no_network();
 #ifdef KC_SYSTEMD_PROBE
     if (!strstr(cmdline, " kc_systemd_probe=1 ")) fail("FIXED_SYSTEMD_OPT_IN_REQUIRED");
+    /* Only inside the verified disposable guest: diagnose rootfs capacity
+       separately from a missing executable or an observation deadline. */
+    struct statfs rootfs;
+    struct sysinfo memory;
+    if (statfs("/", &rootfs) || sysinfo(&memory)) fail("GUEST_BOOT_CAPACITY_REQUIRED");
+    printf("VM_BOOT_CAPACITY ram_bytes=%llu free_ram_bytes=%llu rootfs_type=%lx rootfs_bytes=%llu rootfs_free_bytes=%llu rootfs_free_inodes=%llu\n",
+           (unsigned long long)memory.totalram * memory.mem_unit,
+           (unsigned long long)memory.freeram * memory.mem_unit,
+           (unsigned long)rootfs.f_type,
+           (unsigned long long)rootfs.f_blocks * rootfs.f_bsize,
+           (unsigned long long)rootfs.f_bfree * rootfs.f_bsize,
+           (unsigned long long)rootfs.f_ffree);
     if (mount("tmpfs", "/run", "tmpfs", MS_NOSUID | MS_NODEV, "size=16m,mode=0755")) fail("SYSTEMD_RUN_REQUIRED");
     execl("/usr/lib/systemd/systemd", "systemd", (char *)NULL);
     fail("SYSTEMD_GUEST_EXEC_FAILED");

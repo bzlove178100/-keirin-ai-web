@@ -19,13 +19,28 @@ from ml.dataset import build_rows
 from ml.model_history import capture_prediction, settle_snapshot, evaluate_histories, _digest
 from ml.offline_preview import render_preview
 from ml.model_web_response import model_web_response, render_model_web_preview
+from ml.product_category_preview import fixture_view, render_category_preview
+from ml.final_five_preview import final_five_view, render_final_five_preview
+from ml.final_five_review import evaluate_final_five, render_final_five_review
+from ml.final_five_challenger_preview import FrozenChallenger, render_challenger_preview
+from ml.final_five_selection_ledger import SelectionLedger
+from ml.final_five_experiment_preview import FrozenExperimentAudit, render_experiment_preview
+from ml.final_five_experiment_control import ExperimentControl, ExperimentConflict, render_experiment_control, unconfigured_state
 from ml.synthetic_demo import make_record
-from ml.synthetic_session import SCHEMA, MAX_SNAPSHOTS, SessionStore, SessionSaveError
+from ml.synthetic_session import SCHEMA, LEGACY_SCHEMA, JST, MAX_SNAPSHOTS, SessionStore, SessionSaveError, validate_session
 from ml.settle_snapshot import _iso
+from ml.held_review_workspace import ReviewWorkspace, ReviewConflict, parse_json_file, MAX_BYTES as REVIEW_MAX_BYTES
+from ml.held_history_review import evaluate_reviews
 
 
 class Workbench:
-    def __init__(self, state_dir=None):
+    def __init__(self, state_dir=None, final_five_experiment=None, final_five_selection_dir=None,
+                 final_five_experiment_ledger=None, final_five_experiment_dir=None):
+        if final_five_experiment_ledger is not None and final_five_experiment_dir is not None:
+            raise ValueError('choose_readonly_or_managed_experiment_ledger')
+        # Validate an explicitly selected saved model before creating state/locks.
+        self.challenger = FrozenChallenger(final_five_experiment)
+        self.experiment_audit = FrozenExperimentAudit(final_five_experiment_ledger)
         self._temporary = TemporaryDirectory(prefix='keirin-synthetic-')
         self.root = Path(self._temporary.name)
         self.ready = False
@@ -35,8 +50,13 @@ class Workbench:
         self.lock = RLock()
         self.scheduled = datetime.now(timezone.utc) + timedelta(hours=1)
         self.series = 0
+        self.schema = SCHEMA
+        self.legacy = None
         self.store = None
         self.restored = False
+        self.selection_ledger = None
+        self.experiment_control = None
+        self.held_review = ReviewWorkspace()
         try:
             if state_dir is not None:
                 if Path(state_dir).resolve().is_relative_to(Path(__file__).resolve().parents[1]):
@@ -45,23 +65,36 @@ class Workbench:
                 if self.store.loaded is not None:
                     self._apply(self.store.loaded)
                     self.restored = True
+                self.held_review = ReviewWorkspace(Path(state_dir) / 'held-review')
+            if final_five_selection_dir is not None:
+                self.selection_ledger = SelectionLedger(final_five_selection_dir, synthetic=True)
+            if final_five_experiment_dir is not None:
+                self.experiment_control = ExperimentControl(self, final_five_experiment_dir)
         except BaseException:
             self.close()
             raise
 
     def close(self):
+        if self.experiment_control is not None:
+            self.experiment_control.close()
+        if self.selection_ledger is not None:
+            self.selection_ledger.close()
+        self.held_review.close()
         if self.store is not None:
             self.store.close()
         self._temporary.cleanup()
 
     def _payload(self, **changes):
-        return {'schema_version':SCHEMA, 'synthetic_only':True,
-                'scheduled':self.scheduled.isoformat(), 'series':self.series,
+        metadata = {'series': self.series} if self.schema == LEGACY_SCHEMA else {'legacy': self.legacy}
+        return {'schema_version':self.schema, 'synthetic_only':True,
+                'scheduled':self.scheduled.isoformat(), **metadata,
                 'snapshots':self.snapshots, 'histories':self.histories, 'current':self.current, **changes}
 
     def _apply(self, payload):
+        self.schema = payload['schema_version']
+        self.legacy = payload.get('legacy')
         self.scheduled = _iso(payload['scheduled'], 'session_scheduled')
-        self.series = payload['series']
+        self.series = payload.get('series', 0)
         self.snapshots = payload['snapshots']
         self.histories = payload['histories']
         self.current = payload['current']
@@ -69,6 +102,8 @@ class Workbench:
     def _commit(self, payload):
         if self.store is not None:
             self.store.save(payload)
+        else:
+            validate_session(payload)
         self._apply(payload)
         return self.state()
 
@@ -102,15 +137,26 @@ class Workbench:
             raise SessionSaveError('session_restart_required')
         if len(self.snapshots) >= MAX_SNAPSHOTS:
             raise ValueError('session_limit_export_and_restart')
+        payload = self._payload()
+        validate_session(payload)
         self._train()
         from ml.predict_position_models import predict_race
-        scheduled, series = self.scheduled, self.series
+        scheduled = self.scheduled
         now = datetime.now(timezone.utc)
-        if now >= scheduled:
-            scheduled, series = now + timedelta(hours=1), series + 1
+        upgrading = self.schema == LEGACY_SCHEMA
+        if now >= scheduled or upgrading:
+            # Advancing by at least a day keeps 7R/9R identities distinct even
+            # when the old schedule expired earlier on the same JST day.
+            previous = [scheduled, *(_iso(s['scheduled_start'], 'scheduled_start')
+                                     for s in self.snapshots.values())]
+            scheduled = max(now + timedelta(hours=1), max(previous) + timedelta(days=1))
+        if upgrading:
+            payload['schema_version'] = SCHEMA
+            payload['legacy'] = {'series': payload.pop('series'), 'scheduled': payload['scheduled'],
+                                 'snapshot_hashes': {key: s['snapshot_sha256'] for key, s in self.snapshots.items()}}
         race_data = make_record(16, count)['training_input']
-        race_data['race'].update(date=scheduled.astimezone(timezone(timedelta(hours=9))).date().isoformat(),
-                                 venue='SYNTHETIC', race_number=series*10+count, scheduled_start_jst=scheduled.isoformat())
+        race_data['race'].update(date=scheduled.astimezone(JST).date().isoformat(),
+                                 venue='SYNTHETIC', race_number=count, scheduled_start_jst=scheduled.isoformat())
         race_data['odds']['trifecta'] = {'1-2-3':25.4, '2-3-4':72.0}
         if count == 9:
             race_data['odds']['trifecta'] = {'-'.join(map(str,c)): [25.4,72.0,200.0,600.0][i % 4]
@@ -118,8 +164,8 @@ class Workbench:
         prediction = predict_race(race_data, self.root / 'models')
         snapshot = capture_prediction(prediction, synthetic=True)
         key = uuid4().hex
-        return self._commit(self._payload(snapshots={**self.snapshots, key:snapshot}, current=key,
-                                         scheduled=scheduled.isoformat(), series=series))
+        payload.update(snapshots={**self.snapshots, key:snapshot}, current=key, scheduled=scheduled.isoformat())
+        return self._commit(payload)
 
     def settle(self, key, outcome, odds):
         return self._record(key, {'outcome_combo':outcome, 'settlement_odds':odds})
@@ -149,6 +195,87 @@ class Workbench:
     def report(self):
         return evaluate_histories(list(self.histories.values()), synthetic=True)
 
+    def final_five_report(self):
+        return {**evaluate_final_five(list(self.histories.values()), synthetic=True),
+                'pending_snapshots': len(self.snapshots)-len(self.histories),
+                'storage': {'mode': 'local_file' if self.store else 'temporary',
+                            'restored': self.restored, 'write_blocked': bool(self.store and self.store.failed)}}
+
+    def challenger_view(self, key):
+        snapshot = self.snapshots[key]
+        held = any(r.get('schema_version') == 'ml-held-history-v1' and
+                   r.get('race_id') == snapshot['race_id'] for r in self.histories.values())
+        view = self.challenger.view(snapshot, key, held=held,
+                    storage={'mode': 'local_file' if self.store else 'temporary',
+                             'restored': self.restored, 'write_blocked': bool(self.store and self.store.failed)})
+        ledger = self.selection_ledger
+        if ledger is not None:
+            try: ledger._current()
+            except SessionSaveError: pass  # Display the stopped state; never claim a save.
+        view.update(snapshot_sha256=snapshot['snapshot_sha256'],
+                    selection_storage={'configured': ledger is not None,
+                        'write_blocked': bool(ledger and ledger.store.failed)})
+        return view
+
+    def record_challenger(self, key, snapshot_sha256, model_sha256, request_id, reason):
+        if self.selection_ledger is None:
+            raise ValueError('selection_storage_not_configured')
+        if key not in self.snapshots:
+            raise ValueError('snapshot_not_found')
+        if self.store is not None:
+            if self.store.failed:
+                raise SessionSaveError('session_restart_required')
+            try:
+                if self.store._read() != self.store.expected:
+                    raise ValueError('prediction_session_changed')
+            except (ValueError, OSError) as exc:
+                self.store.failed = True
+                raise SessionSaveError('prediction_session_changed_restart_required') from exc
+        validate_session(self._payload())
+        view = self.challenger_view(key)
+        if view['status'] != 'ready':
+            raise ValueError(view['blocked_reason'])
+        if view['snapshot_sha256'] != snapshot_sha256 or view['model']['sha256'] != model_sha256:
+            raise ValueError('selection_source_changed_refresh_required')
+        return self.selection_ledger.record(self.challenger.artifact, self.snapshots[key], request_id, reason)
+
+    def selection_receipt(self, request_id):
+        if self.selection_ledger is None:
+            raise ValueError('selection_storage_not_configured')
+        # Historical read, including after a new hold/model change. It does not
+        # change current eligibility or reselect with the current model.
+        return self.selection_ledger.receipt(request_id)
+
+    def _review_session_holds(self):
+        if self.store is not None and self.store.failed:
+            raise ValueError('prediction_session_restart_required')
+        # The source must still be a valid generated session, including the
+        # correspondence between each saved prediction and its result.
+        validate_session(self._payload())
+        holds = [record for _, record in sorted(self.histories.items())
+                 if record['schema_version'] == 'ml-held-history-v1']
+        evaluate_reviews(holds, [], synthetic=True)
+        return holds
+
+    def review_session_source(self):
+        holds = self._review_session_holds()
+        existing = {_digest(record) for record in self.held_review.holds}
+        return {'source_revision': _digest(holds), 'held_count': len(holds),
+                'already_added': sum(_digest(record) in existing for record in holds),
+                'records': [{'race': record['snapshot']['prediction']['race'],
+                             'result_status': record['settlement']['result_status']}
+                            for record in holds]}
+
+    def import_review_session(self, source_revision, revision):
+        holds = self._review_session_holds()
+        if source_revision != _digest(holds):
+            raise ReviewConflict('review_session_source_changed')
+        if not holds:
+            raise ValueError('review_session_has_no_holds')
+        # Append through the existing validator/checkpoint transaction. Never
+        # change the prediction session or manufacture evidence/decisions.
+        return self.held_review.load(holds, revision)
+
     def state(self):
         current = None
         if self.current:
@@ -167,18 +294,24 @@ class Workbench:
                                  for key,s in sorted(self.snapshots.items(),key=lambda item:(item[1]['captured_at'],item[0]))],
                 'saved_snapshots':len(self.snapshots), 'saved_histories':len(self.histories), 'report':self.report()}
 
+    def migration_backup(self):
+        return self.store.inspect_legacy_backup() if self.store else ({'status': 'temporary'}, None)
+
 
 def make_server(app: Workbench, port: int = 0):
     page = (Path(__file__).parent / 'templates' / 'synthetic_workbench.html').read_text(encoding='utf-8')
     script = re.search(r'<script>(.*?)</script>', page, re.S).group(1)
     script_hash = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
+    review_page = (Path(__file__).parent / 'templates' / 'held_review_workbench.html').read_text(encoding='utf-8')
+    review_script = re.search(r'<script>(.*?)</script>', review_page, re.S).group(1)
+    review_hash = base64.b64encode(hashlib.sha256(review_script.encode()).digest()).decode()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
             pass
 
         def send(self, status, payload, content_type='application/json; charset=utf-8', filename=None, page_script_hash=None):
-            data = (json.dumps(payload, ensure_ascii=False, allow_nan=False) if content_type.startswith('application/json') else payload).encode()
+            data = payload if isinstance(payload, bytes) else (json.dumps(payload, ensure_ascii=False, allow_nan=False) if content_type.startswith('application/json') else payload).encode()
             self.send_response(status)
             self.send_header('Content-Type', content_type)
             self.send_header('Content-Length', str(len(data)))
@@ -208,6 +341,101 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, page, 'text/html; charset=utf-8')
                 if self.path == '/api/state':
                     return self.send(200, app.state())
+                if self.path == '/final-five-training':
+                    html, digest = render_experiment_control()
+                    return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
+                if self.path == '/api/final-five-training':
+                    try:
+                        return self.send(200, app.experiment_control.state() if app.experiment_control else unconfigured_state())
+                    except (SessionSaveError, ValueError):
+                        return self.send(503, {'error': 'experiment_state_unavailable_restart_required'})
+                match = re.fullmatch(r'/export/final-five-experiment/([0-9a-f]{32})', self.path)
+                if match:
+                    try:
+                        if app.experiment_control is None:
+                            raise ValueError('experiment_control_not_configured')
+                        result = app.experiment_control.ledger.export(match[1])
+                        return self.send(200, result, filename='synthetic-final-five-'+match[1]+'.json')
+                    except SessionSaveError:
+                        return self.send(503, {'error': 'experiment_restart_required'})
+                    except ValueError:
+                        return self.send(409, {'error': 'completed_experiment_required'})
+                if self.path == '/api/final-five-experiments':
+                    try:
+                        return self.send(200, app.experiment_control.audit() if app.experiment_control else app.experiment_audit.view())
+                    except SessionSaveError as exc:
+                        return self.send(503, {'error': str(exc)})
+                match = re.fullmatch(r'/final-five-experiments(?:/(model|attempt)/([0-9a-f]+))?', self.path)
+                if match:
+                    try:
+                        html, digest = render_experiment_preview(match[1] or 'all', match[2])
+                        return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
+                    except ValueError:
+                        return self.send(404, {'error': 'experiment_audit_filter_invalid'})
+                match = re.fullmatch(r'/api/final-five-selection/([0-9a-f]{32})', self.path)
+                if match:
+                    try:
+                        return self.send(200, app.selection_receipt(match[1]))
+                    except SessionSaveError as exc:
+                        return self.send(503, {'error': str(exc)})
+                    except (ValueError, TypeError, KeyError) as exc:
+                        return self.send(404, {'error': str(exc)})
+                match = re.fullmatch(r'/(api/final-five-challenger|final-five-challenger)/([0-9a-f]{32})', self.path)
+                if match and match[2] in app.snapshots:
+                    try:
+                        if match[1] == 'api/final-five-challenger':
+                            return self.send(200, app.challenger_view(match[2]))
+                        html, digest = render_challenger_preview(match[2])
+                        return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
+                    except (ValueError, KeyError, TypeError):
+                        return self.send(409, {'error': 'challenger_display_contract_invalid'})
+                if self.path == '/final-five-review':
+                    html, digest = render_final_five_review()
+                    return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
+                if self.path in ('/api/final-five-review', '/export/final-five-review'):
+                    result = app.final_five_report()
+                    return self.send(200, result, filename='synthetic-final-five-review.json' if self.path.startswith('/export/') else None)
+                match = re.fullmatch(r'/(api/final-five-view|final-five-view)/([0-9a-f]{32})', self.path)
+                if match and match[2] in app.snapshots:
+                    try:
+                        if match[1] == 'api/final-five-view':
+                            return self.send(200, final_five_view(app.snapshots[match[2]], match[2]))
+                        html, digest = render_final_five_preview(match[2])
+                        return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
+                    except (ValueError, KeyError, TypeError):
+                        return self.send(409, {'error': 'final_five_display_contract_invalid'})
+                match = re.fullmatch(r'/api/category-view/([0-9a-f]{32})/([a-z-]+)', self.path)
+                if match and match[1] in app.snapshots:
+                    try:
+                        result = fixture_view(app.snapshots[match[1]], match[1], match[2], now=datetime.now(timezone.utc))
+                        return self.send(200, result)
+                    except (ValueError, KeyError, TypeError):
+                        return self.send(409, {'error': 'category_display_contract_invalid'})
+                match = re.fullmatch(r'/category-view/([0-9a-f]{32})', self.path)
+                if match and match[1] in app.snapshots:
+                    html, digest = render_category_preview(match[1])
+                    return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
+                if self.path == '/api/session-v1-backup':
+                    return self.send(200, app.migration_backup()[0])
+                match = re.fullmatch(r'/export/session-v1/([0-9a-f]{64})', self.path)
+                if match:
+                    info, raw = app.migration_backup()
+                    if info['status'] != 'available' or info['sha256'] != match[1]:
+                        return self.send(409, {'error': 'migration_backup_changed_or_unavailable'})
+                    return self.send(200, raw, filename='synthetic-session-v1-before-migration.json')
+                if self.path == '/held-review':
+                    return self.send(200, review_page, 'text/html; charset=utf-8', page_script_hash=review_hash)
+                if self.path == '/api/held-review':
+                    return self.send(200, app.held_review.state())
+                if self.path == '/api/held-review/session-source':
+                    try:
+                        return self.send(200, app.review_session_source())
+                    except (ValueError, TypeError, KeyError) as exc:
+                        return self.send(400, {'error': str(exc)})
+                if self.path == '/export/held-review':
+                    return self.send(200, app.held_review.bundle(), filename='synthetic-held-review-bundle.json')
+                if self.path == '/export/held-review-report':
+                    return self.send(200, app.held_review.report, filename='synthetic-held-review-report.json')
                 match = re.fullmatch(r'/(api/model-view|web-view)/([0-9a-f]{32})', self.path)
                 if match and match[2] in app.snapshots:
                     try:
@@ -241,12 +469,32 @@ def make_server(app: Workbench, port: int = 0):
                 if self.headers.get('Transfer-Encoding') or len(self.headers.get_all('Content-Length', [])) != 1:
                     raise ValueError('invalid_body_length')
                 length = int(self.headers['Content-Length'])
-                if not 0 < length <= 4096 or self.headers.get('Content-Type','').split(';')[0] != 'application/json':
+                limit = 2 * REVIEW_MAX_BYTES + 1024 if self.path == '/api/held-review/import' else 8192 if self.path == '/api/held-review/decision' else 4096
+                if not 0 < length <= limit or self.headers.get('Content-Type','').split(';')[0] != 'application/json':
                     raise ValueError('small_json_body_required')
                 payload = json.loads(self.rfile.read(length))
                 if not isinstance(payload, dict): raise ValueError('json_object_required')
                 with app.lock:
-                    if self.path == '/api/predict' and set(payload) == {'rider_count'}:
+                    if self.path.startswith('/api/final-five-training/'):
+                        if app.experiment_control is None:
+                            raise ValueError('experiment_control_not_configured')
+                        action = self.path.removeprefix('/api/final-five-training/')
+                        fields = {'register': {'attempt_id','reason','cutoff','retry_of','source_revision','revision'},
+                                  'run': {'attempt_id','revision'}, 'abandon': {'attempt_id','reason','revision'}}
+                        if action not in fields or set(payload) != fields[action]:
+                            raise ValueError('unsupported_experiment_action_or_fields')
+                        result = getattr(app.experiment_control, action)(**payload)
+                    elif self.path == '/api/final-five-selection' and set(payload) == {
+                            'snapshot_id', 'snapshot_sha256', 'model_sha256', 'request_id', 'reason'}:
+                        result = app.record_challenger(payload['snapshot_id'], payload['snapshot_sha256'],
+                            payload['model_sha256'], payload['request_id'], payload['reason'])
+                    elif self.path == '/api/held-review/import' and set(payload) == {'json_text', 'revision'}:
+                        result = app.held_review.load(parse_json_file(payload['json_text']), payload['revision'])
+                    elif self.path == '/api/held-review/import-session' and set(payload) == {'source_revision', 'revision'}:
+                        result = app.import_review_session(payload['source_revision'], payload['revision'])
+                    elif self.path == '/api/held-review/decision' and set(payload) == {'source_sha256', 'evidence_json', 'decision', 'revision'}:
+                        result = app.held_review.review(payload['source_sha256'], parse_json_file(payload['evidence_json'], 3072), payload['decision'], payload['revision'])
+                    elif self.path == '/api/predict' and set(payload) == {'rider_count'}:
                         result = app.predict(payload['rider_count'])
                     elif self.path == '/api/select' and set(payload) == {'snapshot_id'}:
                         result = app.select(payload['snapshot_id'])
@@ -260,8 +508,15 @@ def make_server(app: Workbench, port: int = 0):
                     else:
                         raise ValueError('unsupported_action_or_fields')
                 self.send(200, result)
+            except ExperimentConflict as exc:
+                self.send(409, {'error': str(exc)})
+            except ReviewConflict as exc:
+                with app.lock:
+                    self.send(409, {'error':str(exc), 'state':app.held_review.state()})
             except SessionSaveError as exc:
-                self.send(503, {'error':str(exc), 'state':app.state()})
+                with app.lock:
+                    state = app.held_review.state() if self.path.startswith('/api/held-review/') else app.state()
+                    self.send(503, {'error':str(exc), 'state':state})
             except (ValueError, TypeError, KeyError) as exc:
                 self.send(400, {'error':str(exc)})
             except Exception:
@@ -275,9 +530,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--synthetic', action='store_true', required=True)
     parser.add_argument('--port', type=int, default=8765)
-    parser.add_argument('--state-dir', type=Path, help='Optional local POSIX directory outside the checkout for synthetic records only.')
+    parser.add_argument('--state-dir', type=Path, help='Optional local POSIX directory outside the checkout for synthetic predictions and held-review checkpoints.')
+    parser.add_argument('--final-five-experiment', type=Path, help='Optional saved synthetic FINAL 5 experiment; read once at startup, never trained or replaced by the UI.')
+    parser.add_argument('--final-five-selection-dir', type=Path, help='Optional separate local synthetic selection ledger outside the checkout. Only explicit save requests append receipts.')
+    parser.add_argument('--final-five-experiment-ledger', type=Path, help='Optional existing synthetic experiment checkpoint outside the checkout, read-only. Changes require restart; no training or ledger writes from the UI.')
+    parser.add_argument('--final-five-experiment-dir', type=Path, help='Optional separate local synthetic experiment ledger directory. Enables explicit registration/run/abandon from current generated session histories; mutually exclusive with the read-only checkpoint flag.')
     args = parser.parse_args()
-    app = Workbench(args.state_dir)
+    app = Workbench(args.state_dir, args.final_five_experiment, args.final_five_selection_dir,
+                    args.final_five_experiment_ledger, args.final_five_experiment_dir)
     server = None
     try:
         server = make_server(app, args.port)

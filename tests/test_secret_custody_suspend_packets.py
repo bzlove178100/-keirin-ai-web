@@ -24,6 +24,7 @@ HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('vm', HERE / 'test_secret_custody_suspend_vm.py')
 vm = importlib.util.module_from_spec(spec); spec.loader.exec_module(vm)
 MODULES = ('ipv6', 'veth', 'nf_tables')
+PACKET_GUEST_MEMORY = '1024M'
 
 
 def guard():
@@ -170,9 +171,15 @@ def payload(path, boottime_guard=False, startup=False, authenticated=False, syst
             manifest.append({'name': source.name, 'sha256': hashlib.sha256(source.read_bytes()).hexdigest()})
     for metadata in root.glob('modules.*'):
         if metadata.is_file() and metadata.suffix != '.ko': add(metadata)
+    codecs = [str(stdlib / 'encodings' / name).lstrip('/') for name in ('__init__.py', 'utf_8.py')]
+    if any(name not in files or not files[name][0] for name in codecs):
+        raise RuntimeError('GUEST_PYTHON_CODECS_REQUIRED')
     image = archive(files)
     (path / 'initramfs').write_bytes(image)
     print('PACKET_PAYLOAD', json.dumps({'initramfs_sha256': hashlib.sha256(image).hexdigest(),
+          'initramfs_compressed_bytes': len(image),
+          'payload_file_bytes': sum(len(data) for data, _ in files.values()),
+          'python_codecs': {name: hashlib.sha256(files[name][0]).hexdigest() for name in codecs},
           'file_count': len(files), 'modules': manifest}), flush=True)
     return files
 
@@ -181,7 +188,9 @@ def command(path, boottime_guard=False, integrated=False, authenticated=False):
     if integrated and not boottime_guard:
         raise ValueError('INTEGRATED_BOOTTIME_REQUIRED')
     args = vm.command(path)
-    args[args.index('-m') + 1] = '512M'
+    # Keep the compressed archive, Python/SSH payload and kernel within a fixed
+    # disposable guest budget. No host configuration or isolation guards change.
+    args[args.index('-m') + 1] = PACKET_GUEST_MEMORY
     args[args.index('-append') + 1] += ' kc_packet_probe=1 end=2'
     if boottime_guard:
         args[args.index('-append') + 1] += ' kc_boottime_guard=1 end=3'
@@ -365,6 +374,7 @@ def run_vm(boottime_guard=False, integrated=False, authenticated=False):
         (path / 'vmlinuz').write_bytes(kernel)
         payload(path, boottime_guard, authenticated=authenticated)
         print('PACKET_VM_PROVENANCE', json.dumps({'kernel_release': os.uname().release,
+              'guest_memory': PACKET_GUEST_MEMORY,
               'kernel_sha256': hashlib.sha256(kernel).hexdigest(), 'qemu_sha256': hashlib.sha256(Path(vm.QEMU).read_bytes()).hexdigest()}), flush=True)
         awake_boot, _ = case(path, 'awake', host_boot, boottime_guard, integrated, authenticated)
         suspend_boot, measured = case(path, 'suspend', host_boot, boottime_guard, integrated, authenticated)

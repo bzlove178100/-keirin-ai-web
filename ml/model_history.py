@@ -169,7 +169,8 @@ def _validate_history(record: Any) -> None:
         raise ValueError('history_does_not_match_snapshot')
 
 
-def evaluate_histories(records: list[dict], *, synthetic: bool = False) -> dict:
+def _select_review_histories(records: list[dict], *, synthetic: bool = False):
+    """Shared frozen-record selection; callers must not mutate returned records."""
     _synthetic(synthetic)
     groups: dict[str, list[dict]] = {}
     excluded: Counter = Counter()
@@ -202,6 +203,11 @@ def evaluate_histories(records: list[dict], *, synthetic: bool = False) -> dict:
             continue
         selected.append(tied[0]); duplicates += len(group) - 1
     selected.sort(key=lambda r: (_iso(r['prediction_timestamp'], 'prediction_timestamp'), r['race_id']))
+    return selected, held, dict(excluded), duplicates
+
+
+def evaluate_histories(records: list[dict], *, synthetic: bool = False) -> dict:
+    selected, held, excluded, duplicates = _select_review_histories(records, synthetic=synthetic)
     per_race = []
     for record in selected:
         prediction, outcome = record['snapshot']['prediction'], record['settlement']['outcome_combo']
