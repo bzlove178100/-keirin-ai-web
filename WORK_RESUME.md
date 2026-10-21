@@ -1,5 +1,17 @@
 # Work resume handoff
 
+## Experiment history narrow-screen correction — 2026-10-21
+
+#267 928e2812dbf33c39ccd3572452de17e542f36149のML39592400939/job119196360094がfailure。
+保存ログ2026-10-21T11:35:43.2385400Z：test_synthetic_workbench_experiments_ui.cjs:41、
+同じモデルIDの実験#2を開いた後、390pxでscrollWidth <= innerWidthがfalse。
+一覧/再試行元/各状態/XSS文字表示/モデルリンクまで通過。後続の選定リンク/障害/再起動は未確定。
+重複欄のliの長い実験IDへoverflow-wrap:anywhereを追加。幅検査/待機/CI条件は緩めない。
+Workbench98（新規6含む）、ranker/両台帳30、既存比較/選定Chromeは成功。新画面全体を成功とは扱わない。
+JS構文/diff check成功。修正後の実Chromeと全CIは新headで確認し、確定結果はPR本文へ保存する。
+旧失敗runの無条件再実行/取消しなし。旧回帰/runtimeも完了を観測して記録を保持する。
+API20/12/11/7記録値・HOLD/OFF・未承認のマージ/公開/配備・#266原本/段階受入/復元条件を維持。
+
 ## FINAL 5 synthetic experiment history UI — 2026-10-21
 
 再開照合：main d069ab9b6adcf9585954a5bae7be7df0546e473c、#267 2f0e2ad98bdf1a6e8c9010cce596cd3be8a99684。
