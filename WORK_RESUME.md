@@ -1,5 +1,39 @@
 # Work resume handoff
 
+## FINAL 5 explicit synthetic experiment controls — 2026-10-21
+
+再開照合：main d069ab9b6adcf9585954a5bae7be7df0546e473c、#267 b51c57dc05dfbaacaa68cff31d4291cf6c661b24。
+直前headは全7CI/回帰39593335549の47件/ML39593335528のWorkbench98・ranker/両台帳30・新規実Chrome2/既存Chrome成功。
+runtime39593335485/job119199474378の2026-10-21T11:51:34.3408808Zログで同一40桁head verified=true。
+#266 ae2658f7acadb597bf67217c165afe722a651587、main、#250/#257は不変。非公開/未push Workは未確認。
+PR冒頭/末尾・#266配備条件・AGENTS/SOURCE/要件/WORK/第二段階AI/保留契約を照合。成功済みCIの手動再実行なし。
+
+次の許可済み合成開発として、実験の条件登録→明示1回実行→結果/モデル取得、理由付き中断記録→別ID再試行を画面へ接続。
+--final-five-experiment-dirを明示した時だけ有効。旧read-only checkpoint指定とは排他で、旧動作を維持する。
+元入力は現在の検証済み生成session内の全履歴（保留含む）。任意履歴/path/URLをPOSTで受けない。
+元保存物/履歴digest/台帳revisionを登録・実行前に照合。後発保留・履歴変更は409で拒否。
+既存ExperimentLedgerの事前登録/running保存/失敗/保存不確実/復元/上限/同ID冪等・再試行参照を再利用。
+ブラウザーは登録IDと条件を送信前に保持。応答喪失は未確認、再確認/再読込で同ID照会。自動runなし。
+同terminal run再送は再学習なし。不正控えは登録停止。台帳確認後の明示入力切替だけを提供。
+同期直列実行で学習中の他HTTPは待機。live fit取消しではなく、未実行またはprocess中断後のrunningへabandonを記録する。
+process中断後は完了未確認のまま、自動再学習せず、理由付き中断→別ID明示再試行が必要。
+completedだけ既存model/report形式を取得。現在の比較モデル/予測/保留/選定台帳は変更しない。
+操作用台帳の履歴GETはowned_ledger_current_checkpoint、元frozen readerはpinned_checkpoint_with_change_refusalで区別。
+両画面の実JS検証を共有。不正/遅い旧応答で古い詳細や操作ボタンを残さない。
+
+ローカル新規Python/API8＋影響する既存履歴表示6＝14試験成功。要求控えの不正ケース追加1試験再確認も成功。
+単回fit/登録冪等/元履歴不変/取得互換、revision/source競合・後発保留、例外/KeyboardInterrupt/復元、
+保存不確実/外部変更/起動失敗lock解放、並行run2要求とlive abandon、HTTP/CSP/入力上限・実JSを確認。
+新Chrome2（390/1280px）をML CIへ追加。登録/run応答喪失・再読込、モデル取得/履歴連携、
+中断/再試行、HTTP学習中の実SIGKILL→未完復元、後発保留、不正/旧応答、控え破損/未指定を確認する。
+この変更の実Chromeはローカル未実施。新headのCIで確認し、確定結果は#267本文だけへ保存。
+記録だけのcommit/手動再実行/取消しなし。契約はranker文書「合成実験の登録・実行・中断記録を画面へ接続」。
+
+残件：画面からの明示モデル切替、第一段階を含む独立評価/実用特徴、商品目的変数/受入、DREAM、会員/課金/許諾済み実データ受入。
+旧fit/別台帳/人間の事前閲覧/外部保留の横断追跡なし。合成成功を実精度/利益/商品完成と扱わない。
+API20/12/11/7は記録値。KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF。
+#266/#267マージ・公開・Function配備未承認。#266現行原本保存/段階backend受入/復元・旧承認/旧ZIP不流用を維持。
+
 ## Experiment history narrow-screen correction — 2026-10-21
 
 #267 928e2812dbf33c39ccd3572452de17e542f36149のML39592400939/job119196360094がfailure。

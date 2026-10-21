@@ -2,6 +2,21 @@
 
 ## Synthetic FINAL 5 experiment registration
 
+Workbench can enable explicit experiment operations with
+`--final-five-experiment-dir /outside/repo/experiment-state`. This is mutually
+exclusive with the read-only `--final-five-experiment-ledger` checkpoint flag.
+The registration page uses only current validated generated-session histories,
+with a chosen cutoff, reason, stable request ID and explicit retry parent.
+Registration saves conditions without training; a separate action executes the
+existing ledger once. Changed histories (including a new hold) or stale ledger
+revisions refuse execution. Lost responses are checked by the same ID; terminal
+attempts never fit again. An interrupted server restores `running` as unknown
+until explicit abandonment with a reason. Operations are synchronous and
+serialized: no live-fit cancel, automatic retry or automatic model switch.
+Completed models can be downloaded in the existing comparison format. The
+audit page reads the owned ledger's current checkpoint; frozen read-only mode
+retains its restart-on-change behavior.
+
 `python -m ml.final_five_experiment_ledger register` freezes synthetic histories,
 cutoff, fixed training recipe and train/validation manifests before any fit.
 `run` commits a running checkpoint before training; terminal IDs never refit.
@@ -23,8 +38,8 @@ this match does not establish training provenance or independent evaluation.
 The reader validates and pins the checkpoint at startup; any later change or
 missing file stops display until restart. Unconfigured, no matching record,
 and read failure remain distinct. Requests never train, register, retry,
-abandon, switch models or change selection receipts. Those operations retain
-their existing explicit CLI contracts; the UI is read-only for experiments.
+abandon, switch models or change selection receipts in this frozen mode.
+Explicit operations require the separate directory option described above.
 
 ## Synthetic FINAL 5 selection receipts
 

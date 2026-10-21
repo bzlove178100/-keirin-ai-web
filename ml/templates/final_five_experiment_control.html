@@ -1,0 +1,67 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FINAL 5 · 合成実験の操作</title>
+<style>
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:#f3f6f8;color:#172d43;font:16px/1.6 system-ui,sans-serif}main{max-width:920px;margin:auto;padding:24px 16px}h1{font-size:26px}h2{font-size:21px}a{color:#156b63}p,li,dd,button,a{overflow-wrap:anywhere}.notice{padding:16px;background:#fff4d9;border-left:4px solid #c7972c}.card{padding:16px;background:white;border:1px solid #dbe3e9;border-radius:12px;margin:16px 0}.muted{font-size:13px;color:#53697d}label{display:block;margin:12px 0 4px}input,select,button{font:inherit;max-width:100%}input,select{width:100%;padding:9px;border:1px solid #8092aa;border-radius:6px}button{padding:10px 14px;margin:8px 8px 4px 0;border:1px solid #8092aa;border-radius:7px;background:white;cursor:pointer}button:disabled{opacity:.55;cursor:default}input[type=checkbox]{width:auto}#status{min-height:2em}.actions{display:flex;flex-wrap:wrap;gap:6px}.actions button{margin:0}.attempt-id{font-size:13px}fieldset{border:0;padding:0;margin:0;min-width:0}
+</style></head><body><main>
+<a href="/">合成予測の画面へ戻る</a> · <a href="/final-five-experiments">実験履歴を確認</a>
+<h1>FINAL 5 · 合成実験の操作</h1>
+<div class="notice"><strong>現在の合成履歴だけを使います</strong><p>① 条件を登録 → ② 登録内容を確認 → ③ 合成学習を1回実行、の順です。閲覧・再確認だけでは学習しません。実レース精度・利益・商品受入の証明にはなりません。</p></div>
+<p class="muted">実取得・実学習・予想DB書込・本番予想 OFF。既存の予測・保留・比較モデルは変更しません。</p>
+<button id="refresh">保存状態を再確認</button><p id="status" role="status" aria-live="polite">確認しています。</p>
+<p id="pending-note" class="muted"></p><p id="source-note" class="muted"></p>
+<section id="registration" class="card" hidden><h2>実験を登録</h2><fieldset id="form-fields">
+<label for="cutoff">学習と検証の境界</label><select id="cutoff"><option value="">日時を選択してください</option></select>
+<p class="muted">境界より前に予測・結果がそろった履歴を学習に使います。固定条件で分ける試作であり、日時を選んだだけで独立評価が成立するわけではありません。</p>
+<label for="reason">今回の登録・再試行の理由</label><input id="reason" maxlength="500" autocomplete="off">
+<label for="retry">同じ条件を再試行する場合の元実験</label><select id="retry"><option value="">新しい条件で登録</option></select>
+<label><input id="synthetic-confirm" type="checkbox">合成実験として登録する</label>
+</fieldset><button id="register" disabled>条件を保存して登録</button><button id="reset-request" hidden>未確認IDを確認して新しい入力へ</button></section>
+<section><h2>保存した実験</h2><div id="attempts"></div></section>
+<p class="muted">学習中はこのローカルサーバーの他の操作が待機します。ブラウザーを閉じても処理の取消しにはなりません。実行中の強制停止ボタンはありません。サーバー中断後に「完了未確認」となった記録は、理由を付けて中断を記録してから別IDで再試行します。自動再試行・自動モデル切替は行いません。</p>
+</main><script>
+'use strict';const $=id=>document.getElementById(id);
+/* SHARED_VALIDATION */
+let current=null,busy=false,generation=0,pending=null,pendingError=false;
+const pendingKey='keirin-final-five-experiment-registration-v1';
+function checkPending(p){keys(p,'attempt_id,reason,cutoff,retry_of,source_revision,revision');if(!hex(p.attempt_id,32)||!text(p.reason)||!time(p.cutoff)||(p.retry_of!==null&&!hex(p.retry_of,32))||!hex(p.source_revision,64)||!hex(p.revision,64))fail();}
+try{const raw=localStorage.getItem(pendingKey);if(raw!==null){pending=JSON.parse(raw);checkPending(pending);}}catch{pendingError=true;}
+function checkState(v){
+ if(!v||v.schema_version!=='synthetic-final-five-experiment-control-v1'||v.synthetic_only!==true||v.evidence_scope!=='synthetic_test_only'||v.clock_source!=='local_unverified'||v.tracking_scope!=='this_local_ledger_only'||v.hold_status!=='provided_histories_only'||v.execution_mode!=='synchronous_serialized_no_live_cancel'||typeof v.configured!=='boolean'||v.explicit_synthetic_training_enabled!==v.configured||v.model_switch_enabled!==false)fail();
+ for(const k of ['production_prediction_enabled','external_fetch_enabled','db_write_enabled','real_data_training_enabled','monetary_ev_enabled','promotion_eligible','provenance_independently_verified','product_acceptance','evaluation_eligible','independent_evaluation_established','automatic_retry_enabled'])if(v[k]!==false)fail();
+ if(!v.configured){if(v.source!==null||v.audit!==null)fail();return;}
+ validate(v.audit);if(!v.audit.configured||v.audit.loading_policy!=='owned_ledger_current_checkpoint')fail();
+ const s=v.source;keys(s,'revision,histories,cutoffs');if(!hex(s.revision,64)||!Number.isInteger(s.histories)||s.histories<0||s.histories>20||!Array.isArray(s.cutoffs)||s.cutoffs.length>s.histories||s.cutoffs.some(x=>!time(x))||new Set(s.cutoffs).size!==s.cutoffs.length||(s.histories===0)!==(s.cutoffs.length===0))fail();
+}
+function clear(){current=null;$('attempts').replaceChildren();$('source-note').textContent='';$('registration').hidden=true;$('register').disabled=true;}
+function note(){
+ $('pending-note').textContent=pendingError?'ブラウザーの未確認要求を読めません。保存成功とは扱いません。台帳のIDを確認してから新しい入力に切り替えてください。':pending?'確認する登録ID：'+pending.attempt_id:'未確認の登録要求はありません。';
+ $('reset-request').hidden=!pending&&!pendingError;
+}
+function form(){const unfinished=current?.audit.attempts.some(r=>['registered','running'].includes(r.status));$('form-fields').disabled=busy||Boolean(pending)||pendingError||Boolean(unfinished);$('register').disabled=busy||!current||pendingError||(!pending&&(unfinished||!$('cutoff').value||!$('reason').value.trim()||!$('synthetic-confirm').checked));$('register').textContent=pending?'同じIDで登録結果を確認・再送':'条件を保存して登録';$('reset-request').disabled=busy;note();}
+function retryOptions(){const old=$('retry').value;$('retry').replaceChildren(new Option('新しい条件で登録',''));if(current){const matches=current.audit.attempts.filter(r=>r.input_sha256===current.source.revision&&Date.parse(r.cutoff)===Date.parse($('cutoff').value));const last=matches.at(-1);if(last&&!['registered','running'].includes(last.status))$('retry').append(new Option('実験 #'+last.sequence+' を元に再試行',last.attempt_id));}if([...$('retry').options].some(o=>o.value===old))$('retry').value=old;}
+function paragraph(parent,value,cls){const p=document.createElement('p');p.textContent=value;if(cls)p.className=cls;parent.append(p);}
+function render(v){
+ checkState(v);if(!v.configured){$('status').textContent='操作用の実験台帳が指定されていません。起動時に保存先を指定してください。';note();return;}
+ current=v;$('registration').hidden=false;$('source-note').textContent=`現在の合成履歴 ${v.source.histories}件 · 登録済み ${v.audit.attempts.length}件`;
+ const old=$('cutoff').value;$('cutoff').replaceChildren(new Option('日時を選択してください',''));for(const t of v.source.cutoffs)$('cutoff').append(new Option(new Date(t).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})+' JST',t));if(v.source.cutoffs.includes(old))$('cutoff').value=old;retryOptions();
+ if(pending){const r=v.audit.attempts.find(r=>r.attempt_id===pending.attempt_id);if(r){if(r.reason!==pending.reason||r.input_sha256!==pending.source_revision||Date.parse(r.cutoff)!==Date.parse(pending.cutoff)||r.retry_of!==pending.retry_of)fail();localStorage.removeItem(pendingKey);pending=null;}}
+ for(const r of v.audit.attempts){
+  const card=document.createElement('section');card.className='card';card.dataset.id=r.attempt_id;const h=document.createElement('h3');h.textContent=`実験 #${r.sequence} · ${states[r.status]}`;card.append(h);paragraph(card,r.attempt_id,'attempt-id');paragraph(card,r.reason);paragraph(card,`${eligibility[r.eligibility]} · 学習 ${r.counts.training_races} / 検証 ${r.counts.test_races} / 保留 ${r.counts.held_races}`);
+  if(r.status==='running')paragraph(card,'完了未確認です。自動再実行はしません。');if(r.terminal_reason)paragraph(card,r.terminal_reason==='execution_exception'?'実行失敗。元のサーバーログを確認してください。':r.terminal_reason);
+  const actions=document.createElement('div');actions.className='actions';const link=document.createElement('a');link.href='/final-five-experiments/attempt/'+r.attempt_id;link.textContent='条件・重複・結果の詳細';actions.append(link);
+  if(r.status==='completed'){const dl=document.createElement('a');dl.href='/export/final-five-experiment/'+r.attempt_id;dl.textContent='保存モデルを取得';dl.setAttribute('download','');actions.append(dl);}
+  if(r.status==='registered'){const run=document.createElement('button');run.textContent=r.eligibility==='ready'?'この条件で合成学習を1回実行':'条件不足を記録（学習なし）';run.disabled=r.input_sha256!==v.source.revision;if(run.disabled)paragraph(card,'登録後に元の履歴が変わったため実行できません。中断理由を記録してから現在の履歴で登録し直してください。');run.dataset.action='run';run.onclick=()=>act('run',{attempt_id:r.attempt_id,revision:v.audit.revision});actions.append(run);}
+  if(['registered','running'].includes(r.status)){const label=document.createElement('label'),reason=document.createElement('input');reason.id='abandon-'+r.attempt_id;reason.maxLength=500;label.htmlFor=reason.id;label.textContent='中断を記録する理由';card.append(label,reason);const cancel=document.createElement('button');cancel.textContent='理由を付けて中断を記録';cancel.dataset.action='abandon';cancel.onclick=()=>{if(!text(reason.value)){$('status').textContent='中断理由を入力してください。';return;}act('abandon',{attempt_id:r.attempt_id,reason:reason.value,revision:v.audit.revision});};actions.append(cancel);}
+  card.append(actions);$('attempts').append(card);
+ }
+ $('status').textContent='保存状態を確認しました。登録と学習は別の操作です。';form();
+}
+async function load(){if(busy)return;const request=++generation;clear();$('status').textContent='確認しています。';try{const response=await fetch('/api/final-five-training');if(!response.ok)fail();const v=await response.json();if(request!==generation)return;render(v);}catch{if(request!==generation)return;clear();note();$('status').textContent='保存状態を確認できませんでした。成功とは扱いません。保存物が変わった場合は再起動後に確認してください。';}}
+async function act(action,body){if(busy)return;busy=true;++generation;clear();note();$('refresh').disabled=true;$('status').textContent=action==='run'?'合成学習の結果を待っています。画面を閉じても取消しにはなりません。':'保存結果を確認しています。';
+ try{const response=await fetch('/api/final-five-training/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Keirin-Local':'synthetic-only'},body:JSON.stringify(body)});if(!response.ok)throw Error('unconfirmed');const v=await response.json();render(v);$('status').textContent=action==='register'?'条件の登録を確認しました。内容を確認してから実行してください。':action==='abandon'?'中断の保存を確認しました。':'実行結果の保存状態を確認しました。';}
+ catch{clear();note();$('status').textContent='操作結果は未確認です。保存状態を再確認してください。同じIDの確認で学習を繰り返しません。';}
+ finally{busy=false;$('refresh').disabled=false;if(current)form();}}
+$('register').onclick=()=>{if(!current||busy||pendingError)return;try{if(!pending){const p={attempt_id:crypto.randomUUID().replaceAll('-',''),reason:$('reason').value,cutoff:$('cutoff').value,retry_of:$('retry').value||null,source_revision:current.source.revision,revision:current.audit.revision};if(!$('synthetic-confirm').checked)fail();checkPending(p);localStorage.setItem(pendingKey,JSON.stringify(p));pending=p;}act('register',{...pending});}catch{$('status').textContent='登録要求を保持できませんでした。入力とブラウザーの保存設定を確認してください。';}};
+$('reset-request').onclick=()=>{if(busy)return;const id=pending?.attempt_id||'読取不可';try{localStorage.removeItem(pendingKey);pending=null;pendingError=false;form();$('status').textContent='以前の要求ID '+id+' の保存有無は台帳で確認してください。新しい入力へ切り替えました。';}catch{$('status').textContent='未確認要求を変更できませんでした。';}};
+$('refresh').onclick=()=>load();$('cutoff').onchange=()=>{retryOptions();form();};for(const id of ['reason','synthetic-confirm'])$(id).oninput=form;
+note();load();
+</script></body></html>

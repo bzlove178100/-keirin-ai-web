@@ -25,6 +25,7 @@ from ml.final_five_review import evaluate_final_five, render_final_five_review
 from ml.final_five_challenger_preview import FrozenChallenger, render_challenger_preview
 from ml.final_five_selection_ledger import SelectionLedger
 from ml.final_five_experiment_preview import FrozenExperimentAudit, render_experiment_preview
+from ml.final_five_experiment_control import ExperimentControl, ExperimentConflict, render_experiment_control, unconfigured_state
 from ml.synthetic_demo import make_record
 from ml.synthetic_session import SCHEMA, LEGACY_SCHEMA, JST, MAX_SNAPSHOTS, SessionStore, SessionSaveError, validate_session
 from ml.settle_snapshot import _iso
@@ -34,7 +35,9 @@ from ml.held_history_review import evaluate_reviews
 
 class Workbench:
     def __init__(self, state_dir=None, final_five_experiment=None, final_five_selection_dir=None,
-                 final_five_experiment_ledger=None):
+                 final_five_experiment_ledger=None, final_five_experiment_dir=None):
+        if final_five_experiment_ledger is not None and final_five_experiment_dir is not None:
+            raise ValueError('choose_readonly_or_managed_experiment_ledger')
         # Validate an explicitly selected saved model before creating state/locks.
         self.challenger = FrozenChallenger(final_five_experiment)
         self.experiment_audit = FrozenExperimentAudit(final_five_experiment_ledger)
@@ -52,6 +55,7 @@ class Workbench:
         self.store = None
         self.restored = False
         self.selection_ledger = None
+        self.experiment_control = None
         self.held_review = ReviewWorkspace()
         try:
             if state_dir is not None:
@@ -64,11 +68,15 @@ class Workbench:
                 self.held_review = ReviewWorkspace(Path(state_dir) / 'held-review')
             if final_five_selection_dir is not None:
                 self.selection_ledger = SelectionLedger(final_five_selection_dir, synthetic=True)
+            if final_five_experiment_dir is not None:
+                self.experiment_control = ExperimentControl(self, final_five_experiment_dir)
         except BaseException:
             self.close()
             raise
 
     def close(self):
+        if self.experiment_control is not None:
+            self.experiment_control.close()
         if self.selection_ledger is not None:
             self.selection_ledger.close()
         self.held_review.close()
@@ -333,9 +341,28 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, page, 'text/html; charset=utf-8')
                 if self.path == '/api/state':
                     return self.send(200, app.state())
+                if self.path == '/final-five-training':
+                    html, digest = render_experiment_control()
+                    return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
+                if self.path == '/api/final-five-training':
+                    try:
+                        return self.send(200, app.experiment_control.state() if app.experiment_control else unconfigured_state())
+                    except (SessionSaveError, ValueError):
+                        return self.send(503, {'error': 'experiment_state_unavailable_restart_required'})
+                match = re.fullmatch(r'/export/final-five-experiment/([0-9a-f]{32})', self.path)
+                if match:
+                    try:
+                        if app.experiment_control is None:
+                            raise ValueError('experiment_control_not_configured')
+                        result = app.experiment_control.ledger.export(match[1])
+                        return self.send(200, result, filename='synthetic-final-five-'+match[1]+'.json')
+                    except SessionSaveError:
+                        return self.send(503, {'error': 'experiment_restart_required'})
+                    except ValueError:
+                        return self.send(409, {'error': 'completed_experiment_required'})
                 if self.path == '/api/final-five-experiments':
                     try:
-                        return self.send(200, app.experiment_audit.view())
+                        return self.send(200, app.experiment_control.audit() if app.experiment_control else app.experiment_audit.view())
                     except SessionSaveError as exc:
                         return self.send(503, {'error': str(exc)})
                 match = re.fullmatch(r'/final-five-experiments(?:/(model|attempt)/([0-9a-f]+))?', self.path)
@@ -448,7 +475,16 @@ def make_server(app: Workbench, port: int = 0):
                 payload = json.loads(self.rfile.read(length))
                 if not isinstance(payload, dict): raise ValueError('json_object_required')
                 with app.lock:
-                    if self.path == '/api/final-five-selection' and set(payload) == {
+                    if self.path.startswith('/api/final-five-training/'):
+                        if app.experiment_control is None:
+                            raise ValueError('experiment_control_not_configured')
+                        action = self.path.removeprefix('/api/final-five-training/')
+                        fields = {'register': {'attempt_id','reason','cutoff','retry_of','source_revision','revision'},
+                                  'run': {'attempt_id','revision'}, 'abandon': {'attempt_id','reason','revision'}}
+                        if action not in fields or set(payload) != fields[action]:
+                            raise ValueError('unsupported_experiment_action_or_fields')
+                        result = getattr(app.experiment_control, action)(**payload)
+                    elif self.path == '/api/final-five-selection' and set(payload) == {
                             'snapshot_id', 'snapshot_sha256', 'model_sha256', 'request_id', 'reason'}:
                         result = app.record_challenger(payload['snapshot_id'], payload['snapshot_sha256'],
                             payload['model_sha256'], payload['request_id'], payload['reason'])
@@ -472,6 +508,8 @@ def make_server(app: Workbench, port: int = 0):
                     else:
                         raise ValueError('unsupported_action_or_fields')
                 self.send(200, result)
+            except ExperimentConflict as exc:
+                self.send(409, {'error': str(exc)})
             except ReviewConflict as exc:
                 with app.lock:
                     self.send(409, {'error':str(exc), 'state':app.held_review.state()})
@@ -496,9 +534,10 @@ def main():
     parser.add_argument('--final-five-experiment', type=Path, help='Optional saved synthetic FINAL 5 experiment; read once at startup, never trained or replaced by the UI.')
     parser.add_argument('--final-five-selection-dir', type=Path, help='Optional separate local synthetic selection ledger outside the checkout. Only explicit save requests append receipts.')
     parser.add_argument('--final-five-experiment-ledger', type=Path, help='Optional existing synthetic experiment checkpoint outside the checkout, read-only. Changes require restart; no training or ledger writes from the UI.')
+    parser.add_argument('--final-five-experiment-dir', type=Path, help='Optional separate local synthetic experiment ledger directory. Enables explicit registration/run/abandon from current generated session histories; mutually exclusive with the read-only checkpoint flag.')
     args = parser.parse_args()
     app = Workbench(args.state_dir, args.final_five_experiment, args.final_five_selection_dir,
-                    args.final_five_experiment_ledger)
+                    args.final_five_experiment_ledger, args.final_five_experiment_dir)
     server = None
     try:
         server = make_server(app, args.port)

@@ -378,3 +378,59 @@ APIの安全フラグ/型/状態関係/参照/件数/比較合計を実JSで検�
 次の残件はそれらの画面操作、第一段階を含む独立評価/実用特徴、商品目的変数/受入基準、DREAM、
 会員/課金/許諾済み実データ受入。別台帳/旧fit/人間の事前知識/未提供の保留の横断検知は未対応。
 合成閲覧の成功は実精度・利益・商品完成ではない。API20/12/11/7記録値・HOLD/OFF・未マージ/未公開/未配備を維持する。
+
+## 合成実験の登録・実行・中断記録を画面へ接続（2026-10-21）
+
+操作用の台帳ディレクトリを明示した場合だけ、現在のWorkbench内の検証済み合成履歴を
+登録・実行できる。閲覧専用のcheckpoint指定とは排他で、既存のread-only動作は維持する。
+
+```sh
+python -m ml.synthetic_workbench --synthetic --state-dir /outside/repo/workbench-state \
+  --final-five-experiment-dir /outside/repo/experiment-state
+```
+
+`/final-five-training`へ通常画面から移動する。
+操作順は日時境界・理由・同条件再試行元・合成指定の確認→条件保存→登録内容確認→明示実行。
+登録では学習せず、runは既存台帳のrunning事前保存が成功した後に1回だけ学習する。
+既存の固定特徴/学習方式/parameters/同点数比較/5時刻最低条件/ラベル時刻purgeは変更しない。
+条件不足はblockedとして保存し学習なし。completedからのみ既存{model,report}形式を取得できる。
+取得はブラウザーへの応答であり、端末保存完了やモデル切替を意味しない。現行比較モデルは起動時固定のまま。
+
+元履歴はsession検証済みの生成履歴だけ。ファイルpath・外部URL・任意履歴をPOSTで受けない。
+保留も含む全履歴を固定順でdigest化し、登録時にsource_revisionと台帳revisionを照合する。
+実行直前にも現行元ファイル/履歴digestと登録条件を照合。追加保留・新結果・履歴追加等は409で拒否。
+条件を変える場合は旧登録を理由付きで中断し、別IDで再登録する。元予測・履歴・保留・選定台帳は不変。
+同条件の別ID再試行は最新のterminal元IDが必要。旧記録は削除・上書きしない。
+
+登録要求IDと条件を送信前にブラウザーへ保持する。応答喪失時は成功未確認と表示し、
+再確認/再読込で同IDを照会する。一致する登録があれば控えを解消し、自動でrunしない。
+不正な控えは登録を止め、台帳のID確認後の明示的な入力切替だけを用意する。
+異なるorigin/端末では控えを共有せず、台帳の全件表示でID/理由/状態を確認する。
+同じ登録IDの再送は元条件を照合し、同じterminal run要求の再送は再学習なし。
+古い画面の新規変更はrevision不一致で409。入力欄と台帳を更新してから次の明示操作へ進む。
+
+操作は既存Workbench lock内で同期直列実行する。学習中は他のHTTP操作が待機する。
+ブラウザーを閉じても取消しにはならず、live fitの強制中断機能ではない。
+未実行registered、またはprocess中断後の完了未確認runningだけに理由付きabandonを記録できる。
+並行abandonは実行完了を待ち、既にterminalなら拒否する。失敗は汎用execution_exceptionだけを台帳へ保存、
+私有例外詳細はHTTPへ返さない。保存失敗/不確実時は503で止まり、再起動後のcheckpointを正とする。
+再起動後のrunningを自動継続/再学習しない。abandon後の別ID再試行は明示操作のみ。
+
+GET /api/final-five-trainingは条件・件数・履歴要約だけを返す。POSTはregister/run/abandonの固定fieldsのみ。
+localhost/Host/Origin/X-Keirin-Local/JSON4096byte上限を維持。保存先未指定では操作を拒否する。
+操作中の台帳を履歴画面で読む場合はloading_policy=owned_ledger_current_checkpointを明示する。
+GETのread_only=true/training_on_request=falseは閲覧APIの性質であり、別POSTでの合成実行許可とは区別する。
+元のfrozen checkpoint表示はpinned_checkpoint_with_change_refusalのまま。外部変更の自動採用はどちらもない。
+両画面で安全フラグ/状態/参照/比較値の実JS検証を共有し、不正/旧応答で以前の詳細や操作ボタンを復活させない。
+
+新規Python/API8試験：登録/重複ID、1回fit/terminal再送、モデル取得、source/revision競合・後発保留、
+例外/KeyboardInterrupt/未完復元、保存不確実、外部変更/起動失敗後のlock解放、HTTP制限、
+並行run2要求とlive abandon、実JSによる不正状態/要求控えの拒否。既存履歴表示6も成功。
+新Chromeは390/1280pxで登録/run応答喪失→再読込、モデル取得、履歴連携、再試行と中断理由、
+HTTP学習中の実SIGKILL→running復元→明示abandon、後発保留拒否、旧/不正状態の消去、
+控え破損・未指定、元保存物/比較モデル不変・外部通信なしを検証する。実Chrome確定は新head CIを参照。
+結果だけのcommitを作らずPR本文へ確定証拠を保存する。
+
+残件は画面での明示モデル切替、第一段階を含む独立評価/実用特徴、商品目的変数/受入、DREAM、会員/課金/許諾済み実データ受入。
+合成成功は実精度/利益/商品完成ではない。API20/12/11/7記録値・KEIRIN.JP HOLD・実取得/実学習/予想DB書込/本番予想OFF、
+#266/#267マージ・公開・Function配備未承認、#266の原本保存/段階受入/復元・旧承認/旧ZIP不流用を維持する。

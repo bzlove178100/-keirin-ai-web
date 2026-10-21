@@ -1,4 +1,4 @@
-"""Bounded, local-only synthetic workbench checkpoints; never a training source."""
+"""Bounded, local-only generated-session checkpoints; real-data training stays off."""
 from __future__ import annotations
 
 import hashlib

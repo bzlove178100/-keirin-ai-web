@@ -18,6 +18,19 @@ DISPLAY_LIMITS = {**LIMITATIONS, 'read_only': True, 'training_on_request': False
                   'loading_policy': 'pinned_checkpoint_with_change_refusal'}
 
 
+def audit_view(payload):
+    """Summarize a validated checkpoint; no input/model text escapes the view."""
+    summary = summarize_payload(payload, True)
+    rows = []
+    for row, source in zip(summary['attempts'], payload['attempts']):
+        rows.append({**row, **{k: source[k] for k in ('started_at', 'finished_at', 'terminal_reason')},
+                     'eligibility': source['plan']['eligibility'], 'counts': source['plan']['counts'],
+                     'strata': source['result']['report']['strata'] if source['status'] == 'completed' else None})
+    return deepcopy({'schema_version': SCHEMA, **DISPLAY_LIMITS, 'configured': True,
+                     'revision': summary['revision'], 'attempts': rows,
+                     'overlap_basis': 'all_prior_registrations_including_failed_or_unrun'})
+
+
 class FrozenExperimentAudit:
     """No lock creation or writes. Checkpoint replacement requires a new reader."""
     def __init__(self, path=None):
@@ -61,17 +74,7 @@ class FrozenExperimentAudit:
         except (ValueError, OSError) as exc:
             self.failed = True
             raise SessionSaveError('experiment_audit_changed_restart_required') from exc
-        summary = summarize_payload(self.payload, True)
-        rows = []
-        for row, source in zip(summary['attempts'], self.payload['attempts']):
-            rows.append({**row, **{k: source[k] for k in ('started_at', 'finished_at', 'terminal_reason')},
-                         'eligibility': source['plan']['eligibility'],
-                         'counts': source['plan']['counts'],
-                         'strata': source['result']['report']['strata'] if source['status'] == 'completed' else None})
-        # Never expose raw histories, native model text, per-race outcomes or
-        # arbitrarily trusted report fields; all data was validated on startup.
-        response.update(revision=summary['revision'], attempts=rows)
-        return deepcopy(response)
+        return audit_view(self.payload)
 
 
 def render_experiment_preview(mode='all', key=None):
@@ -84,5 +87,6 @@ def render_experiment_preview(mode='all', key=None):
         raise ValueError('experiment_audit_filter_invalid')
     html = (Path(__file__).parent/'templates'/'final_five_experiments.html').read_text(encoding='utf-8')
     html = html.replace('/* INITIAL_FILTER */', json.dumps({'mode': mode, 'key': key}))
+    html = html.replace('/* SHARED_VALIDATION */', (Path(__file__).parent/'templates'/'final_five_experiment_validation.js').read_text())
     script = re.search(r'<script>(.*?)</script>', html, re.S).group(1)
     return html, base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
