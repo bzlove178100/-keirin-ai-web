@@ -1,5 +1,18 @@
 # keirin-ai ML pipeline
 
+## Synthetic FINAL 5 selection receipts
+
+`python -m ml.final_five_selection_ledger` records the explicitly chosen saved
+model, frozen snapshot, same-budget comparison and a reason in a bounded local
+checkpoint outside this repository. `inspect` lists reselections; `show` returns
+one receipt. Restoration revalidates models/snapshots and recomputes selections
+without training. Request IDs make interrupted retries idempotent; a new ID
+preserves a new selection, even for the same model/snapshot.
+This is a retrospective synthetic receipt, not a prospective prediction record,
+an evaluation source, a training-attempt ledger or a model promotion mechanism.
+Standalone receipts cannot check holds in other workspaces. See
+`../docs/KEIRIN_FINAL_FIVE_RANKER_20261021.md` for commands, limits and recovery.
+
 ## Synthetic FINAL 5 learned challenger
 
 `python -m ml.final_five_ranker` trains, saves and reloads an offline synthetic

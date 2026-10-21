@@ -136,3 +136,65 @@ ML保留と一致するレースはblockedでAI候補なし。確率順基準は
 実データ受入は未完。本比較画面は合成専用で、商品受入・実精度/利益・本番完成を意味しない。
 API20/12/11/7記録値、HOLD/OFF、#266の将来の現行原本保存/段階backend受入/復元条件を維持。
 #266/#267のマージ・Web公開・Function配備は未承認。
+
+## モデルと選定の永続台帳（2026-10-21、合成専用CLI）
+
+直前cb632bed30666eec361df61019b85c7f1a8db3c7の比較画面は全7CI/回帰47件成功。
+runtime39546345822/job119045279911は同一head verified=true。確定証拠は#267本文。
+次の残件として `ml.final_five_selection_ledger` を追加。既存fit/Workbench/画面/APIは変更しない。
+
+```sh
+python -m ml.final_five_selection_ledger record experiment.json synthetic-snapshot.json \
+  --synthetic --state-dir /absolute/path/outside/repository/selection-state \
+  --request-id 11111111111111111111111111111111 --reason '合成比較の選定を保存'
+python -m ml.final_five_selection_ledger inspect --synthetic \
+  --state-dir /absolute/path/outside/repository/selection-state
+python -m ml.final_five_selection_ledger show 11111111111111111111111111111111 \
+  --synthetic --state-dir /absolute/path/outside/repository/selection-state
+```
+
+recordは明示指定した既存experimentのmodelとML snapshotを検証し、同一候補・同点数の
+基準/第二段階選定、モデルhash、snapshot hash、順序、理由、未検証のローカル保存時刻を保存する。
+モデル本体と元snapshotも台帳に保持するため、元ファイルを変更/削除しても保存済み選定を検証できる。
+experimentのreportは信用/表示/保存/選定に使用しない。学習済みrace、cutoff前、不正モデル/予測は拒否。
+実データと認定する機能はなく、明示syntheticと既存合成契約の両方を要求する。
+モデル管理は保存した選定に結び付くモデルの保持まで。active/bestモデルの自動選択・昇格・配備はない。
+
+request-idは32桁の小文字hex。通信/出力や保存中断後の同じ要求は同じIDで再試行する。
+同一ID/モデル/snapshot/理由は元の時刻と選定を返してファイルも増やさない。IDの別内容利用は拒否。
+新IDは同じ組合せでも別の選定として追記する。理由は空白のみ不可、500文字以内、制御文字不可。
+inspectは同じraceの先行記録数、同じモデル/snapshotの先行記録数、別モデルの先行使用を表示。
+異なるsnapshotでも同じraceなら選び直しの数へ含める。以前の選定を最新/都合のよい結果で置換しない。
+showは1件の表示用選定とhashを返す。inspect/showはモデル本文/manifest/元全確率表を出力しない。
+
+本台帳は `retrospective_synthetic_receipt`、evaluation_eligible=false、product_acceptance=false。
+発走前に記録した証明ではなく、保存時刻をcaptured_atへ移したり前向き実績にしない。
+結果/払戻/的中率を収集・集計せず、同じレースの記録数を評価サンプル数へ変換しない。
+training_attempts_tracked=false。実験を学習前に登録する機能はなく、cutoff/目的変数/学習の再試行や
+別台帳/未提供履歴の選択汚染は検出できない。この未完範囲を本台帳で解消済みとしない。
+standalone入力には保留履歴が含まれないためhold_status=not_checked_in_standalone_ledger。
+別Workbench等の保留を検知/解除せず、評価適格性も付与しない。既存画面の保留停止は維持する。
+
+保存先はrepo外に限定。最大5モデル/20snapshot/100選定/32 MiB。上限到達時は拒否し、古い記録を
+削除/間引きしない。APIによる書換/削除/import/mergeはない。新しい台帳への分割で横断追跡はされない。
+入力ファイルは通常ファイル/単一link/8 MiB以下、symlink/FIFO拒否。モデルとsnapshotの入力原本は不変。
+保存は既存SessionStoreの別固定ファイルとlockを再利用。予測セッション/保留確認一式とは分離する。
+排他lock・一時書込→file fsync→replace→directory fsyncが成功してからメモリと応答を更新。
+失敗時は前のメモリを保持し、inspect/showを含め再起動まで停止。replace後のfsync失敗は保存不確実。
+再起動時は採用された完全checkpointを検証し、同一IDの再試行で二重登録しない。
+途中の.partialを完成保存物と扱わず、自動で復元/削除しない。他processの変更を上書きせず停止する。
+復元時に全モデル/元snapshot/参照/順序/停止条件を検証し、基準と推論を再計算して保存値と完全照合する。
+現在の依存環境で推論値が一致しない場合も拒否し、保存値を再計算結果で書き換えない。
+破損は拒否し原本を保持。hashは署名・来歴/権利証明ではなく、有効な古い台帳への差戻し検知は保証しない。
+ローカルPOSIXの検証であり、任意ホストの電源断耐久性や本番の保存基盤受入を意味しない。
+
+新規Python9試験：7/9車×3/4/5点・再読込照合/学習なし、重複/別内容ID/モデル変更履歴、
+gate/不正入力/既知race拒否、hash再計算後の内容破損、上限/原本不変、保存前後fsync障害、
+実SIGKILL前後2境界、lock/外部変更/入力link/FIFO/サイズ、別processのrecord/inspect/showを検証。
+ローカル9/9成功。画面変更なし、新規Chromeは追加しない。ML CIへ新規9試験を追加し、
+新headのCIは#267本文へ確定保存する。結果記録だけのcommit/旧成功CIの手動再実行なし。
+
+残件：画面保存接続、学習前の実験登録/失敗/再試行/検証集合の再使用記録、商品目的変数/受入基準、
+第一段階を含む独立評価、DREAM、会員/課金/実データ受入。実精度・利益・商品完成とは扱わない。
+API20/12/11/7記録値、KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFFを維持。
+#266/#267マージ・公開・Function配備未承認。将来の現行原本保存・段階受入・復元は#266本文を厳守。

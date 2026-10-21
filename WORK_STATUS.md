@@ -1,5 +1,31 @@
 # Work status
 
+## FINAL 5 persistent synthetic selection ledger — 2026-10-21
+
+再開時照合：main d069ab9b6adcf9585954a5bae7be7df0546e473c、#267 cb632bed30666eec361df61019b85c7f1a8db3c7。
+直前は全7CI/回帰39546345773の47件/ML39546345784のPython86・ranker9・実Chrome2成功。
+runtime39546345822/job119045279911で同一head verified=true。#267本文の確定結果を再利用。
+#266 ae2658f7acadb597bf67217c165afe722a651587、#250/#257とmainは不変。非公開/未push作業は未確認。
+
+残件のモデル管理/選定保存として、合成専用ml.final_five_selection_ledger CLIを追加。
+モデル本体・元snapshot・同点数の基準/AI選定・理由・順序・保存時刻をrepo外へ保存。
+復元時にモデル/入力/選定を再計算照合し、不一致は拒否。実行/復元で学習なし、元ファイル不変。
+同一request-idの同内容再試行は重複なし、別内容は拒否。新IDでの選び直しは以前の記録を保持。
+inspect/showで選び直しと1件の選定を確認できる。最大5モデル/20snapshot/100選定/32 MiB、超過時は削除せず停止。
+既存SessionStoreのlock/atomic replace/fsyncを別ファイルで再利用。保存不確実時は全操作を再起動まで停止。
+新規9試験がローカル成功：7/9×3/4/5、別process再読込、重複/モデル変更、破損/上限、
+fsync障害、実SIGKILL前後2境界、lock/外部変更/入力link/FIFO/サイズ、CLIと原本不変。
+ML CIへ新規9試験を追加。既存Web/UI/API変更なし、新規Chromeなし。新headのCI確定結果は#267本文へ保存する。
+記録だけのcommit・旧成功CIの手動再実行/取消しなし。
+契約/CLI/保存と復元：docs/KEIRIN_FINAL_FIVE_RANKER_20261021.md「モデルと選定の永続台帳」。
+
+本記録は後からの合成選定でevaluation_eligible=false。発走前実績/実精度/利益/商品受入ではない。
+保留入力を持たないstandalone台帳で横断hold検知/解除なし。学習再試行の追跡も未実装と明記。
+次の残件：画面からの保存、学習前の実験登録/失敗/再試行/検証集合の再使用記録、商品評価軸と受入、
+第一段階を含む独立評価、DREAM、会員/課金/実データ受入。商品仕様/価格を推測で決定しない。
+KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF、API20/12/11/7は記録値。
+#266/#267マージ・公開・Function配備未承認。将来の現行原本保存/段階backend受入/復元は#266本文を維持。
+
 ## FINAL 5 saved-model comparison display — 2026-10-21
 
 再開照合：main d069ab9b6adcf9585954a5bae7be7df0546e473c、#267 c3395104cab7debc6c6b77f2096a1327024c1f5b。
