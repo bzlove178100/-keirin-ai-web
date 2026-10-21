@@ -67,8 +67,10 @@ finally:store.close()
    await page.route(lookupPattern,async route=>{const response=await route.fetch();reached();await gate;await route.fulfill({response});});
    await page.locator('#lookup-receipt').click();await seen;await page.locator('#receipt-id').fill('f'.repeat(32));await page.locator('#lookup-receipt').click();
    await page.getByText('保存済み記録を確認できませんでした。保存成功とは扱いません。IDと保存先を確認してください。',{exact:true}).waitFor();
-   const late=page.waitForResponse(r=>r.url()===url+'/api/final-five-selection/'+secondRequest.request_id);release();await late;await page.waitForLoadState('networkidle');
+   const late=page.waitForResponse(r=>r.url()===url+'/api/final-five-selection/'+secondRequest.request_id);release();const lateResponse=await late;await lateResponse.finished();
+   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
    assert.equal(await page.locator('#receipt-detail').textContent(),'');await page.unroute(lookupPattern);
+   console.log(`${width}px: response-loss retry, reload, reselection and stale/malformed receipt checks passed`);
    // A hold arriving after the comparison was displayed is checked at submit.
    await page.locator('#new-selection').click();await page.locator('#selection-reason').fill('保留直前の合成要求');
    let send,reachedPost;const postGate=new Promise(r=>send=r),postSeen=new Promise(r=>reachedPost=r);

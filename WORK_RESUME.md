@@ -1,5 +1,17 @@
 # Work resume handoff
 
+## Selection UI Chrome wait correction — 2026-10-21
+
+#267 0301a60fc7f080d7a649ae8888a8b7e14d05da58のML39550765017/job119059187705がfailure。
+保存ログ2026-10-21T05:43:17.6192292Z：新規Chrome試験70行のpage.waitForLoadState('networkidle')が30秒timeout。
+遅い対象応答の受信後に、先行する意図的な応答喪失も含むページ全体の通信停止を待っていた。
+その前の応答喪失→同ID再送/reload/選び直し/不正照会はassertion通過、後続の保留/再起動ケースは未確認。
+Python Workbench92（新規6含む）とranker＋台帳18、既存Chromeは成功。旧成功分を失敗とは扱わない。
+修正は新規試験だけ：対象response.finished＋描画サイクルで処理を待ち、旧応答で詳細が復活しないassertionを維持。
+製品コード/待機期限/CI条件は変更しない。JS構文/diff check成功。修正後の実Chrome/全CIはPR本文で確定する。
+失敗runの無条件再実行/取消しなし。0301a60の回帰/runtimeは取り消さず結果を保存する。
+API20/12/11/7記録値、HOLD/OFF、マージ/公開/Function配備未承認・#266原本/段階受入/復元条件を維持。
+
 ## FINAL 5 selection saving from synthetic comparison UI — 2026-10-21
 
 直前#267 07ef97b8ec961b5d66539cc6431a0723f8a65a34の選定台帳CLIは全7CI/回帰39549344298の47件成功。
