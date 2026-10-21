@@ -333,3 +333,48 @@ ML CIの既存test_final_five*.py対象へ自動で含まれる。画面変更/�
 残件：実験台帳の画面操作/選定との追跡接続、第一段階を含む独立評価・実用特徴、
 商品目的変数/受入基準、DREAM、会員/課金/許諾済み実データ受入。
 合成試験を実精度/利益/商品完成の証拠にしない。API20/12/11/7記録値・HOLD/OFF・未マージ/未公開/未配備を維持する。
+
+## 合成実験の閲覧とモデルIDからの照合（2026-10-21）
+
+既存の実験checkpointを明示指定すると、Workbenchの実験記録画面で登録条件・状態・再試行元・
+先行登録とのレース重複を確認できる。通常の合成画面から一覧、比較画面のモデルと保存済み選定から
+同じ保存モデルIDの完了記録へ移動する。同一モデルを複数の実験で生成した場合はすべて表示する。
+モデルhash一致は学習の出所・一意の実験・結果未閲覧の証明ではない。選定台帳のschemaや
+training_attempts_tracked=false/evaluation_eligible=falseは変えず、独立評価資格を付与しない。
+
+```sh
+python -m ml.synthetic_workbench --synthetic --state-dir /outside/repo/workbench-state \
+  --final-five-experiment /outside/repo/experiment.json \
+  --final-five-selection-dir /outside/repo/selection-state \
+  --final-five-experiment-ledger /outside/repo/experiment-state/final-five-experiments.json
+```
+
+最終引数は既存のrepo外checkpointファイル。省略時は「未指定・記録有無不明」を表示し、
+指定した空台帳の0件、モデルID一致なし、実験ID不明、読込失敗と区別する。
+指定ファイルが不正/欠落ならWorkbenchの状態やロックを作る前に起動を拒否する。
+regular/single-link/nofollow/32 MiB上限で読み、元台帳の計画/モデル/report再推論検証を再利用する。
+読者は実験台帳のロックも作らず、ファイル/元入力/選定を書き換えない。復元時の学習なし。
+起動時バイト列を固定し、GETごとに現物を照合する。更新/欠落/unsafe fileは503で表示停止、
+元バイト列へ戻しても同じprocessでは再採用せず、再起動後に検証する。自動hot reloadはない。
+これは読み取り時点の一致確認であり、その後の変更や有効な古いcheckpointへの差戻しの証明ではない。
+
+GET /api/final-five-experimentsは要約だけを返す。raw履歴/モデルtext/学習manifest/レース別結果/
+私有例外内容を返さない。既存localhost/Host/Origin制限・CSP・no-storeを使う。
+登録理由/状態/開始終了時刻（未検証ローカル時計）/条件不足/入力件数/除外理由、
+7/9車×3/4/5点の6層比較を表示し、異なる点数の的中率を混合しない。
+未実行/失敗/中断も含む先行登録との検証再使用と学習/検証移動を表示する。
+APIの安全フラグ/型/状態関係/参照/件数/比較合計を実JSで検証。理由はtextContentで描画する。
+読込開始/失敗時に以前の一覧/詳細を消し、遅れて届く旧応答で復活させない。
+比較・選定照会に失敗した場合は、そのモデル履歴リンクも消す。
+
+新規Python/API6試験：全状態/同一モデル複数一致、未指定/空/不正/外部変更、リンク/FIFO/上限/
+再hash破損、HTTP/CSP/Origin、実JS検証と不正主張拒否、元ファイル不変・学習/書込なしを確認。
+新規実Chromeは390/1280pxで一覧・再試行元・重複・両モデルリンク・理由の文字描画、
+不正/遅い旧応答の消去、未知ID、外部更新後の停止、実SIGKILL再起動、未完runningを学習せず表示、
+未指定との区別、閲覧中の外部通信/POSTなし・元保存物不変をML CIで確認する。
+新headの実Chromeと全CI結果は#267本文に保存し、結果だけのcommitは作らない。
+
+実験の登録/実行/abandon/モデル切替はこの画面に追加しない。明示的な既存CLIの契約を維持する。
+次の残件はそれらの画面操作、第一段階を含む独立評価/実用特徴、商品目的変数/受入基準、DREAM、
+会員/課金/許諾済み実データ受入。別台帳/旧fit/人間の事前知識/未提供の保留の横断検知は未対応。
+合成閲覧の成功は実精度・利益・商品完成ではない。API20/12/11/7記録値・HOLD/OFF・未マージ/未公開/未配備を維持する。

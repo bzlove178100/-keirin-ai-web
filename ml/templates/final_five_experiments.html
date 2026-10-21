@@ -1,0 +1,100 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FINAL 5 · 合成実験の記録</title>
+<style>
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:#f3f6f8;color:#172d43;font:16px/1.6 system-ui,sans-serif}main{max-width:1040px;margin:auto;padding:24px 16px}h1{font-size:28px}h2{font-size:21px}a{color:#156b63}p,dd,button{overflow-wrap:anywhere}.notice{padding:16px;background:#fff4d9;border-left:4px solid #c7972c}.muted{font-size:13px;color:#53697d}.layout{display:grid;grid-template-columns:minmax(230px,1fr) minmax(0,2fr);gap:18px}.card{padding:16px;background:white;border:1px solid #dbe3e9;border-radius:12px;margin:12px 0}button{font:inherit;padding:10px;border:1px solid #8092aa;border-radius:7px;background:white;cursor:pointer}.attempt{display:block;width:100%;text-align:left;margin:10px 0}.attempt[aria-pressed=true]{border:2px solid #156b63;background:#e9f5f1}.attempt span{display:block}dl{margin:0}dt{font-size:13px;color:#53697d;margin-top:14px}dd{margin:0}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px 4px;text-align:right;border-bottom:1px solid #dbe3e9}th:first-child,td:first-child{text-align:left}ul{padding-left:20px}#status{min-height:2em}@media(max-width:720px){.layout{grid-template-columns:1fr}h1{font-size:24px}}
+</style></head><body><main>
+<a href="/">合成予測の画面へ戻る</a><h1>FINAL 5 · 合成実験の記録</h1>
+<div class="notice"><strong>保存した合成実験を確認する画面</strong><p>登録条件、完了・失敗・中断、再試行元、検証レースの重複を確認できます。閲覧や再確認で学習は実行しません。</p><p>実レース精度・利益・商品としての受入は未確認です。登録時刻やモデルIDの一致は、結果を見ていないことや学習の出所を証明しません。</p></div>
+<p class="muted">合成専用 · 実取得・実学習・DB書込・本番予想 OFF · この台帳内だけを確認</p>
+<p><button id="refresh">保存記録を再確認</button> <a id="all-link" href="/final-five-experiments">全登録を見る</a></p>
+<p id="filter" class="muted"></p><p id="status" role="status" aria-live="polite">確認しています。</p><p id="revision" class="muted"></p>
+<div class="layout"><section><h2>登録した実験</h2><div id="attempts"></div></section><section id="detail" class="card" hidden>
+<h2 id="detail-title"></h2><p id="state-note"></p><dl id="fields"></dl>
+<h3>以前の登録との重複</h3><p class="muted">未実行・失敗・中断の登録も含めます。重複がなくても独立評価の合格ではありません。</p><ul id="overlap"></ul>
+<section id="comparison" hidden><h3>同じ点数での合成比較</h3><p class="muted">車数と点数ごとに表示します。異なる点数の的中率は混ぜません。</p>
+<table><thead><tr><th>車数/点数</th><th>対象</th><th>基準的中</th><th>AI的中</th></tr></thead><tbody id="strata"></tbody></table></section>
+</section></div>
+<p class="muted">記録は起動時の保存物と照合します。保存物が更新・欠落した場合は表示を止め、再起動後に再確認します。別台帳や従来の学習経路、未提供の保留は横断検知しません。ここから実験の登録・学習・中断処理・モデル切替は行いません。</p>
+<script>
+'use strict';
+const initial=/* INITIAL_FILTER */,$=id=>document.getElementById(id);
+const states={registered:'登録済み・未実行',running:'実行開始済み・完了未確認',completed:'合成比較完了',blocked:'条件不足・学習なし',failed:'実行失敗',interrupted:'中断を記録済み'};
+const eligibility={ready:'固定条件を満たす',blocked_fewer_than_five_training_times:'異なる学習時刻が5件未満',blocked_no_test_races:'検証対象がない',blocked_training_requires_both_labels:'学習に正負両方のラベルがない'};
+let generation=0,selected=initial.mode==='attempt'?initial.key:null;
+const hex=(v,n)=>typeof v==='string'&&new RegExp('^[0-9a-f]{'+n+'}$').test(v);
+const integer=v=>Number.isInteger(v)&&v>=0&&v<=200;
+const time=v=>typeof v==='string'&&/(?:Z|[+-]\d\d:\d\d)$/.test(v)&&Number.isFinite(Date.parse(v));
+const text=v=>typeof v==='string'&&v.trim().length>0&&[...v].length<=500&&!/[\x00-\x1f\x7f]/.test(v);
+function fail(){throw new Error('invalid_experiment_response');}
+function keys(v,expected){if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).sort().join(',')!==expected.split(',').sort().join(','))fail();}
+function validate(v){
+ if(!v||v.schema_version!=='synthetic-final-five-experiment-audit-view-v1'||v.synthetic_only!==true||v.read_only!==true||v.evidence_scope!=='synthetic_test_only'||v.clock_source!=='local_unverified'||v.tracking_scope!=='this_local_ledger_only'||v.hold_status!=='provided_histories_only'||v.loading_policy!=='pinned_checkpoint_with_change_refusal'||v.model_match_basis!=='saved_model_sha256_only_not_provenance'||v.overlap_basis!=='all_prior_registrations_including_failed_or_unrun'||typeof v.configured!=='boolean')fail();
+ for(const k of ['production_prediction_enabled','external_fetch_enabled','db_write_enabled','real_data_training_enabled','monetary_ev_enabled','promotion_eligible','provenance_independently_verified','product_acceptance','evaluation_eligible','independent_evaluation_established','automatic_retry_enabled','training_on_request'])if(v[k]!==false)fail();
+ if(!Array.isArray(v.attempts)||v.attempts.length>20||(v.configured?!hex(v.revision,64):v.revision!==null||v.attempts.length!==0))fail();
+ const seen=new Map();
+ for(const [i,r] of v.attempts.entries()){
+  keys(r,'attempt_id,sequence,status,retry_of,input_sha256,registered_at,reason,cutoff,plan_sha256,previous_registered_overlap,model_sha256,started_at,finished_at,terminal_reason,eligibility,counts,strata');
+  if(!hex(r.attempt_id,32)||seen.has(r.attempt_id)||r.sequence!==i+1||!Object.hasOwn(states,r.status)||!text(r.reason)||!time(r.registered_at)||!time(r.cutoff)||!hex(r.input_sha256,64)||!hex(r.plan_sha256,64)||!Object.hasOwn(eligibility,r.eligibility))fail();
+  if(r.retry_of!==null&&(!hex(r.retry_of,32)||!seen.has(r.retry_of)||['registered','running'].includes(seen.get(r.retry_of).status)||seen.get(r.retry_of).input_sha256!==r.input_sha256||seen.get(r.retry_of).plan_sha256!==r.plan_sha256))fail();
+  if(r.started_at!==null&&!time(r.started_at)||r.finished_at!==null&&!time(r.finished_at))fail();
+  const terminal=!['registered','running'].includes(r.status);
+  if(terminal!==Boolean(r.finished_at)||(r.status==='registered'&&r.started_at!==null)||(r.status!=='registered'&&r.status!=='interrupted'&&r.started_at===null)||(!terminal&&i!==v.attempts.length-1))fail();
+  if(['failed','interrupted'].includes(r.status)?!text(r.terminal_reason):r.terminal_reason!==null)fail();
+  if(r.status==='failed'&&r.terminal_reason!=='execution_exception')fail();
+  if(r.status==='completed'?(r.eligibility!=='ready'||!hex(r.model_sha256,64)):r.model_sha256!==null||r.strata!==null)fail();
+  if(r.status==='blocked'&&r.eligibility==='ready')fail();
+  const c=r.counts;keys(c,'input_records,training_races,test_races,held_races,duplicate_snapshots_removed,excluded');
+  for(const k of ['input_records','training_races','test_races','held_races','duplicate_snapshots_removed'])if(!integer(c[k])||c[k]>c.input_records)fail();
+  if(c.training_races+c.test_races>c.input_records||!c.excluded||typeof c.excluded!=='object'||Array.isArray(c.excluded)||Object.entries(c.excluded).some(([k,n])=>!text(k)||!integer(n)||n>c.input_records))fail();
+  if(!Array.isArray(r.previous_registered_overlap)||r.previous_registered_overlap.length>i)fail();
+  const overlaps=new Set();for(const o of r.previous_registered_overlap){
+   keys(o,'attempt_id,validation_reused,validation_previously_training,training_previously_validation');
+   if(!seen.has(o.attempt_id)||overlaps.has(o.attempt_id))fail();overlaps.add(o.attempt_id);
+   for(const k of ['validation_reused','validation_previously_training','training_previously_validation'])if(!integer(o[k]))fail();
+   const p=seen.get(o.attempt_id).counts;
+   if(o.validation_reused>Math.min(c.test_races,p.test_races)||o.validation_previously_training>Math.min(c.test_races,p.training_races)||o.training_previously_validation>Math.min(c.training_races,p.test_races)||o.validation_reused+o.validation_previously_training+o.training_previously_validation===0)fail();
+  }
+  if(r.status==='completed'){
+   if(!Array.isArray(r.strata)||r.strata.length!==6)fail();let total=0;
+   for(const [n,s] of r.strata.entries()){
+    keys(s,'rider_count,selected_count,races,baseline_hits,challenger_hits,baseline_hit_rate,challenger_hit_rate,challenger_only,baseline_only,both,neither,outside_pool');
+    if(s.rider_count!==[7,9][Math.floor(n/3)]||s.selected_count!==3+n%3||!integer(s.races))fail();total+=s.races;
+    for(const k of ['baseline_hits','challenger_hits','challenger_only','baseline_only','both','neither','outside_pool'])if(!integer(s[k])||s[k]>s.races)fail();
+    if(s.challenger_only+s.baseline_only+s.both+s.neither!==s.races||s.baseline_hits!==s.baseline_only+s.both||s.challenger_hits!==s.challenger_only+s.both||s.outside_pool>s.neither)fail();
+    if(s.baseline_hit_rate!==(s.races?s.baseline_hits/s.races:null)||s.challenger_hit_rate!==(s.races?s.challenger_hits/s.races:null))fail();
+   }if(total!==c.test_races)fail();
+  }
+  seen.set(r.attempt_id,r);
+ }
+}
+function clear(){for(const id of ['attempts','fields','overlap','strata'])$(id).replaceChildren();for(const id of ['revision','filter','detail-title','state-note'])$(id).textContent='';$('detail').hidden=true;$('comparison').hidden=true;}
+function field(label,value,href){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;if(href){const a=document.createElement('a');a.href=href;a.textContent=value;dd.append(a);}else dd.textContent=value;$('fields').append(dt,dd);}
+function detail(r){
+ $('detail').hidden=false;$('detail-title').textContent=`実験 #${r.sequence} · ${states[r.status]}`;
+ $('state-note').textContent=r.status==='running'?'学習が終わったかは未確認です。自動再実行はしません。中断後の再試行には、元の台帳で中断理由の記録が必要です。':r.status==='completed'?'保存済みの合成比較です。モデルの実力や商品としての受入を証明するものではありません。':r.status==='failed'?'実行時の例外を記録しています。診断内容は実行時のログで確認してください。':r.status==='interrupted'?'理由を付けて中断を記録しています。自動再試行は行いません。':'登録した条件と状態を表示しています。';
+ field('登録理由',r.reason);field('実験ID',r.attempt_id);field('再試行元',r.retry_of||'なし',r.retry_of?'/final-five-experiments/attempt/'+r.retry_of:null);
+ field('学習と検証の境界',r.cutoff);field('実行条件',eligibility[r.eligibility]);field('対象',`学習 ${r.counts.training_races} / 検証 ${r.counts.test_races} / 保留 ${r.counts.held_races} / 古い重複 ${r.counts.duplicate_snapshots_removed}`);
+ field('除外理由',Object.entries(r.counts.excluded).map(([k,n])=>`${k}: ${n}`).join(' · ')||'この入力に除外記録なし');
+ field('登録時刻（ローカル時計）',r.registered_at);field('実行開始 / 終了記録',`${r.started_at||'未実行'} / ${r.finished_at||'未確認'}`);if(r.terminal_reason)field('終了理由',r.terminal_reason==='execution_exception'?'実行時の例外':r.terminal_reason);
+ field('入力一式ID',r.input_sha256);field('登録条件ID',r.plan_sha256);field('保存モデルID',r.model_sha256||'保存済みモデルなし',r.model_sha256?'/final-five-experiments/model/'+r.model_sha256:null);
+ if(!r.previous_registered_overlap.length){const li=document.createElement('li');li.textContent='この台帳の先行登録に、対象レースの重複記録はありません。';$('overlap').append(li);}
+ for(const o of r.previous_registered_overlap){const li=document.createElement('li'),a=document.createElement('a');a.href='/final-five-experiments/attempt/'+o.attempt_id;a.textContent=o.attempt_id;li.append(a,document.createTextNode(`：検証の再使用 ${o.validation_reused} / 以前学習→今回検証 ${o.validation_previously_training} / 以前検証→今回学習 ${o.training_previously_validation}`));$('overlap').append(li);}
+ if(r.strata){$('comparison').hidden=false;for(const s of r.strata){const tr=document.createElement('tr');for(const value of [`${s.rider_count}車/${s.selected_count}点`,s.races,s.baseline_hits,s.challenger_hits]){const td=document.createElement('td');td.textContent=value;tr.append(td);}$('strata').append(tr);}}
+}
+function render(v,target){
+ validate(v);
+ if(!v.configured){$('status').textContent='実験台帳が指定されていません。記録の有無は判断できません。';return;}
+ $('revision').textContent='確認した保存記録ID：'+v.revision;
+ const rows=initial.mode==='model'?v.attempts.filter(r=>r.model_sha256===initial.key):v.attempts;
+ if(initial.mode==='model')$('filter').textContent='照合するモデルID：'+initial.key+'（保存モデルIDの一致だけを確認）';
+ if(initial.mode==='attempt'&&!v.attempts.some(r=>r.attempt_id===initial.key)){$('status').textContent='この台帳では指定した実験を確認できません。';return;}
+ if(!rows.length){$('status').textContent=initial.mode==='model'?'この台帳では同じモデルIDの完了記録が見つかりません。':'登録記録は0件です。';return;}
+ $('status').textContent=initial.mode==='model'?`同じモデルIDの完了記録 ${rows.length}件を確認しました。`:`${rows.length}件の登録を確認しました。`;
+ const active=rows.find(r=>r.attempt_id===target)||rows[0];selected=active.attempt_id;
+ for(const r of rows){const b=document.createElement('button');b.className='attempt';b.dataset.id=r.attempt_id;b.setAttribute('aria-pressed',String(r===active));const title=document.createElement('span'),reason=document.createElement('span');title.textContent=`#${r.sequence} ${states[r.status]}`;reason.className='muted';reason.textContent=r.reason;b.append(title,reason);b.onclick=()=>load(r.attempt_id);$('attempts').append(b);}
+ detail(active);
+}
+async function load(target=selected){const request=++generation;clear();$('status').textContent='確認しています。';
+ try{const response=await fetch('/api/final-five-experiments');if(!response.ok)throw new Error('unavailable');const v=await response.json();if(request!==generation)return;render(v,target);}
+ catch{if(request!==generation)return;clear();$('status').textContent='保存記録を確認できませんでした。保存物が変わった場合は画面用サーバーを再起動して確認してください。';}}
+$('refresh').onclick=()=>load();load();
+</script></main></body></html>

@@ -24,6 +24,7 @@ from ml.final_five_preview import final_five_view, render_final_five_preview
 from ml.final_five_review import evaluate_final_five, render_final_five_review
 from ml.final_five_challenger_preview import FrozenChallenger, render_challenger_preview
 from ml.final_five_selection_ledger import SelectionLedger
+from ml.final_five_experiment_preview import FrozenExperimentAudit, render_experiment_preview
 from ml.synthetic_demo import make_record
 from ml.synthetic_session import SCHEMA, LEGACY_SCHEMA, JST, MAX_SNAPSHOTS, SessionStore, SessionSaveError, validate_session
 from ml.settle_snapshot import _iso
@@ -32,9 +33,11 @@ from ml.held_history_review import evaluate_reviews
 
 
 class Workbench:
-    def __init__(self, state_dir=None, final_five_experiment=None, final_five_selection_dir=None):
+    def __init__(self, state_dir=None, final_five_experiment=None, final_five_selection_dir=None,
+                 final_five_experiment_ledger=None):
         # Validate an explicitly selected saved model before creating state/locks.
         self.challenger = FrozenChallenger(final_five_experiment)
+        self.experiment_audit = FrozenExperimentAudit(final_five_experiment_ledger)
         self._temporary = TemporaryDirectory(prefix='keirin-synthetic-')
         self.root = Path(self._temporary.name)
         self.ready = False
@@ -330,6 +333,18 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, page, 'text/html; charset=utf-8')
                 if self.path == '/api/state':
                     return self.send(200, app.state())
+                if self.path == '/api/final-five-experiments':
+                    try:
+                        return self.send(200, app.experiment_audit.view())
+                    except SessionSaveError as exc:
+                        return self.send(503, {'error': str(exc)})
+                match = re.fullmatch(r'/final-five-experiments(?:/(model|attempt)/([0-9a-f]+))?', self.path)
+                if match:
+                    try:
+                        html, digest = render_experiment_preview(match[1] or 'all', match[2])
+                        return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
+                    except ValueError:
+                        return self.send(404, {'error': 'experiment_audit_filter_invalid'})
                 match = re.fullmatch(r'/api/final-five-selection/([0-9a-f]{32})', self.path)
                 if match:
                     try:
@@ -480,8 +495,10 @@ def main():
     parser.add_argument('--state-dir', type=Path, help='Optional local POSIX directory outside the checkout for synthetic predictions and held-review checkpoints.')
     parser.add_argument('--final-five-experiment', type=Path, help='Optional saved synthetic FINAL 5 experiment; read once at startup, never trained or replaced by the UI.')
     parser.add_argument('--final-five-selection-dir', type=Path, help='Optional separate local synthetic selection ledger outside the checkout. Only explicit save requests append receipts.')
+    parser.add_argument('--final-five-experiment-ledger', type=Path, help='Optional existing synthetic experiment checkpoint outside the checkout, read-only. Changes require restart; no training or ledger writes from the UI.')
     args = parser.parse_args()
-    app = Workbench(args.state_dir, args.final_five_experiment, args.final_five_selection_dir)
+    app = Workbench(args.state_dir, args.final_five_experiment, args.final_five_selection_dir,
+                    args.final_five_experiment_ledger)
     server = None
     try:
         server = make_server(app, args.port)

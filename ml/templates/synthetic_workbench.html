@@ -12,6 +12,7 @@
 <div class="exports"><a href="/export/session">未照合分を含む全記録を保存</a><a href="/export/histories">照合済み履歴をまとめて保存</a></div>
 <section class="card"><h2>移行前の原本</h2><p class="muted">保存形式を更新する直前の予測記録です。移行後の予測・結果や、別画面の確認判断は含みません。</p><button id="backup-check">移行前原本を確認</button><p id="backup-status" role="status" aria-live="polite">確認すると、取得できる原本の有無を表示します。</p><p id="backup-details" class="pick muted" hidden></p><a id="backup-download" hidden>照合した移行前原本を取得</a><p class="muted">旧形式で再開するときはサーバーを停止し、現在の全記録と確認一式を保持したまま、原本を別の保存先の synthetic-session.json として開いてください。</p></section>
 <p><a id="held-review-link" href="/held-review">保留の確認・誤申告訂正へ</a>（合成データ専用・保存状態は確認画面に表示）</p>
+<p><a id="experiment-audit-link" href="/final-five-experiments">第二段階AIの合成実験記録を確認</a></p>
 <footer>この確認画面は同じ実行環境内だけで動作します。記録の保存方法は上の保存状態を確認してください。モデルは終了時に消去します。記録の上限は保存先ごとに20件です。</footer>
 <script>
 'use strict';

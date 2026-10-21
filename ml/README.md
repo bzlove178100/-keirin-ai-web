@@ -11,8 +11,20 @@ registrations, including failed, interrupted and unrun attempts. `show` reads
 one attempt; `export` writes a completed model in the existing comparison format.
 Restore recomputes the report without training. This bounded local ledger does
 not certify independent evaluation, track other ledgers/legacy fit calls, or
-promote models. The comparison/selection UI is unchanged. Commands, retry and
+promote models. Commands, retry and
 recovery details are in the FINAL 5 contract below.
+
+Workbench accepts `--final-five-experiment-ledger /outside/repo/final-five-experiments.json`
+to read an existing checkpoint without creating locks or writing to it. The
+experiment history page shows every attempt, retry parent, prior race overlap,
+and the six separate rider-count/budget comparisons. Current-model and saved
+selection links show **all** completed attempts with the same model digest;
+this match does not establish training provenance or independent evaluation.
+The reader validates and pins the checkpoint at startup; any later change or
+missing file stops display until restart. Unconfigured, no matching record,
+and read failure remain distinct. Requests never train, register, retry,
+abandon, switch models or change selection receipts. Those operations retain
+their existing explicit CLI contracts; the UI is read-only for experiments.
 
 ## Synthetic FINAL 5 selection receipts
 

@@ -262,29 +262,35 @@ class ExperimentLedger:
 
     def inspect(self):
         with self.lock:
-            self._current(); rows = []
-            previous = []
-            for row in self.payload['attempts']:
-                train = {r['race_id'] for r in row['plan']['training']}
-                test = {r['race_id'] for r in row['plan']['validation']}
-                overlap = []
-                for old, old_train, old_test in previous:
-                    counts = {'validation_reused': len(test & old_test),
-                              'validation_previously_training': len(test & old_train),
-                              'training_previously_validation': len(train & old_test)}
-                    if any(counts.values()):
-                        overlap.append({'attempt_id': old['attempt_id'], **counts})
-                rows.append({k: row[k] for k in ('attempt_id', 'sequence', 'status', 'retry_of',
-                                                 'input_sha256', 'registered_at', 'reason')})
-                rows[-1].update(cutoff=row['plan']['cutoff'], plan_sha256=_digest(row['plan']),
-                                previous_registered_overlap=overlap,
-                                model_sha256=row['result']['model']['sha256']
-                                if row['status'] == 'completed' else None)
-                previous.append((row, train, test))
-            return {'schema_version': SCHEMA, **LIMITATIONS, 'revision': _digest(self.payload),
-                    'attempt_count': len(rows), 'attempts': rows,
-                    'overlap_basis': 'all_prior_registrations_including_failed_or_unrun',
-                    'checkpoint_saved': self.store.expected is not None}
+            self._current()
+            return summarize_payload(self.payload, self.store.expected is not None)
+
+
+def summarize_payload(payload, checkpoint_saved):
+    """Project already-validated local history without reading, writing or fitting."""
+    rows = []
+    previous = []
+    for row in payload['attempts']:
+        train = {r['race_id'] for r in row['plan']['training']}
+        test = {r['race_id'] for r in row['plan']['validation']}
+        overlap = []
+        for old, old_train, old_test in previous:
+            counts = {'validation_reused': len(test & old_test),
+                      'validation_previously_training': len(test & old_train),
+                      'training_previously_validation': len(train & old_test)}
+            if any(counts.values()):
+                overlap.append({'attempt_id': old['attempt_id'], **counts})
+        rows.append({k: row[k] for k in ('attempt_id', 'sequence', 'status', 'retry_of',
+                                         'input_sha256', 'registered_at', 'reason')})
+        rows[-1].update(cutoff=row['plan']['cutoff'], plan_sha256=_digest(row['plan']),
+                        previous_registered_overlap=overlap,
+                        model_sha256=row['result']['model']['sha256']
+                        if row['status'] == 'completed' else None)
+        previous.append((row, train, test))
+    return {'schema_version': SCHEMA, **LIMITATIONS, 'revision': _digest(payload),
+            'attempt_count': len(rows), 'attempts': rows,
+            'overlap_basis': 'all_prior_registrations_including_failed_or_unrun',
+            'checkpoint_saved': checkpoint_saved}
 
 
 def main(argv=None):

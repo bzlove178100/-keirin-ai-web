@@ -1,5 +1,37 @@
 # Work resume handoff
 
+## FINAL 5 synthetic experiment history UI — 2026-10-21
+
+再開照合：main d069ab9b6adcf9585954a5bae7be7df0546e473c、#267 2f0e2ad98bdf1a6e8c9010cce596cd3be8a99684。
+直前headは全7CI/回帰39557798031の47件/ML39557798046のWorkbench92＋ranker/両台帳30＋既存実Chrome成功。
+runtime39557798016/job119081578588の2026-10-21T07:02:08.4016812Zログで同一40桁head verified=true。
+#266 ae2658f7acadb597bf67217c165afe722a651587、main、#250/#257は不変。非公開/未push Workは未確認。
+PR冒頭/末尾・#266配備条件・AGENTS/SOURCE/要件/WORK/第二段階AI/保留契約を照合。旧成功CIの再実行なし。
+
+次の許可済み合成開発として、既存実験台帳の閲覧画面を追加。
+--final-five-experiment-ledgerでrepo外の既存checkpointを明示指定する。省略は記録有無不明として表示。
+起動時に元台帳の計画/モデル/reportを検証して固定、GETごとに元バイト列を確認する。
+変更/欠落/unsafe fileは表示停止、元に戻してもprocess再起動まで再採用しない。台帳ロック/書込/学習なし。
+状態/条件/再試行元/失敗/中断/ローカル時刻/先行登録とのレース重複/6層の同点数比較を表示。
+raw履歴/native model/per-race結果/私有例外詳細はAPIに渡さない。未指定/0件/未知ID/失敗を区別する。
+比較モデルと保存済み選定から同じモデルIDの全完了記録へ接続。hash一致は来歴や独立評価の証明ではない。
+選定台帳schema/資格やtraining_attempts_tracked=falseは変えず、参照だけを追加。
+実JSで型/安全フラグ/状態/参照/比較合計を検証。失敗と遅い旧応答で以前の詳細やリンクを残さない。
+
+ローカル新規Python/API6＋影響する既存実験台帳12/比較6/選定6＝計30試験成功。JS構文/diff check成功。
+新規実Chrome2（390/1280px）は一覧/再試行元/モデル一致複数/比較・選定リンク/重複/XSS文字表示、
+不正・遅い旧応答、未知ID/保存物変更、SIGKILL再起動、未完runningを学習せず表示、未指定区別、
+元ファイル不変・GETのみ・外部通信なしを確認する。ML CIに追加し、実Chromeの確定はこれから。
+このWorkのローカルChrome実行環境は利用できず、既存CIの実Chromeを使用。依存導入の反復はしない。
+新headのCI確定結果は#267本文だけへ保存し、記録だけのcommit/手動再実行/取消しなし。
+契約：docs/KEIRIN_FINAL_FIVE_RANKER_20261021.md「合成実験の閲覧とモデルIDからの照合」。
+
+残件：実験登録/実行/abandon/モデル切替の画面操作、第一段階を含む独立評価/実用特徴、
+商品目的変数/受入、DREAM、会員/課金/許諾済み実データ受入。旧fit/別台帳/人間の閲覧/外部保留は未追跡。
+合成成功を実精度/利益/商品完成と扱わない。API20/12/11/7は記録値、KEIRIN.JP HOLD、
+実取得/実学習/予想DB書込/本番予想OFF。#266/#267マージ・公開・Function配備は未承認。
+#266の現行原本保存/段階backend受入/復元・旧承認/旧ZIP不流用を維持する。
+
 ## FINAL 5 preregistered synthetic experiment ledger — 2026-10-21
 
 再開照合：main d069ab9b6adcf9585954a5bae7be7df0546e473c、#267 b9a1568184eae043567f96e47165e139c2878b82。

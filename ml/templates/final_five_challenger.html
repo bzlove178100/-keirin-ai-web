@@ -6,7 +6,7 @@
 <div class="notice"><strong>保存済みモデルによる技術確認</strong><p>同じ予測の最大15候補から、確率順の基準と学習済み試作が同じ点数を選びます。候補不足は補いません。</p><p>AIの比較スコアは的中確率や確信度ではありません。実レース精度・利益・商品としての受入は未確認です。</p></div>
 <p class="muted">合成データ専用 · 実取得・実学習・DB書込・本番予想・課金 OFF</p>
 <button id="refresh">保存済みモデルで再確認</button><p id="status" role="status" aria-live="polite">確認しています。</p>
-<p id="race"></p><p id="shortfall"></p><p id="model" class="muted"></p><p id="storage" class="muted"></p><p id="blocked"></p>
+<p id="race"></p><p id="shortfall"></p><p id="model" class="muted"></p><p><a id="model-experiment-link" hidden>このモデルIDの実験記録を確認</a></p><p id="storage" class="muted"></p><p id="blocked"></p>
 <div class="columns"><section><h2>確率順の比較基準</h2><div id="baseline"></div></section><section><h2>第二段階AIの試作</h2><div id="challenger"></div></section></div>
 <section aria-labelledby="save-title"><h2 id="save-title">この合成選定を記録</h2>
 <p class="muted">明示した保存先へ、モデル・元予測・選定理由を残します。後からの比較記録であり、発走前実績や評価への採用ではありません。以前の記録は変更しません。</p>
@@ -14,7 +14,7 @@
 <p><button id="save-selection" disabled>選定を保存</button> <button id="new-selection" hidden>別の選定として記録</button></p>
 <p id="save-status" role="status" aria-live="polite"></p>
 <label for="receipt-id">保存要求IDで以前の記録を確認</label><br><input id="receipt-id" maxlength="32" style="max-width:100%;width:24em;font:inherit;padding:10px" autocomplete="off">
-<button id="lookup-receipt">記録を確認</button><p id="receipt-status" role="status" aria-live="polite"></p><p id="receipt-detail" class="muted"></p>
+<button id="lookup-receipt">記録を確認</button><p id="receipt-status" role="status" aria-live="polite"></p><p id="receipt-detail" class="muted"></p><p><a id="receipt-experiment-link" hidden>この選定のモデルIDから実験記録を確認</a></p>
 </section>
 <p class="muted">元の確率・オッズ・カテゴリ・順位を保持します。モデルは起動時に固定され、再確認で再学習やモデル変更は行いません。選択結果を予測履歴へ自動保存しません。</p>
 <p class="muted">誰でも開けるローカル開発画面です。実会員の認可・購入・本番公開は扱いません。保留は解除せず、モデルの学習に使用したレースと時刻条件を満たさない予測ではAI候補を表示しません。</p>
@@ -25,7 +25,7 @@ const names={hit_priority:'的中率重視',balance:'バランス',middle:'中�
 const reasons={model_not_configured:'第二段階モデルが指定されていません。起動時に保存済み合成モデルを指定してください。',held_race_requires_review:'このレースは保留中のため、AI候補を表示しません。',training_race_cannot_be_tested:'このレースはモデルの学習に使用済みのため、AI候補を表示しません。',prediction_precedes_cutoff:'この予測はモデルの学習境界より前のため、AI候補を表示しません。'};
 let generation=0,current=null,pending=null,saving=false,saved=false,requestError=false,receiptGeneration=0;
 const pendingKey='keirin-final-five-selection:'+snapshot;
-function clear(){current=null;$('save-selection').disabled=true;for(const id of ['baseline','challenger'])$(id).replaceChildren();for(const id of ['race','shortfall','model','storage','blocked'])$(id).textContent='';}
+function clear(){current=null;$('model-experiment-link').hidden=true;$('model-experiment-link').removeAttribute('href');$('save-selection').disabled=true;for(const id of ['baseline','challenger'])$(id).replaceChildren();for(const id of ['race','shortfall','model','storage','blocked'])$(id).textContent='';}
 function fail(){throw new Error('invalid_response');}
 function checkPicks(picks,size,count,scored){
  if(!Array.isArray(picks)||picks.length!==size)fail();const seen=new Set();
@@ -67,6 +67,7 @@ function render(v){
  $('status').textContent=v.status==='ready'?`同じ${b.candidate_count}候補から各${b.selected_count}点を比較`:'基準を表示しました。AI候補は利用できません。';
  $('race').textContent=`${b.race.date} ${b.race.venue} ${b.race.race_number}R · ${b.rider_count}車`;
  $('shortfall').textContent=b.shortfall?`5点に対して${b.shortfall}点不足しています。元の候補にない買い目は追加しません。`:'';
+ if(v.model){$('model-experiment-link').href='/final-five-experiments/model/'+v.model.sha256;$('model-experiment-link').hidden=false;}
  $('model').textContent=v.model?`モデル ${v.model.sha256} · 学習境界 ${v.model.cutoff} · 起動時固定`:'';
  $('storage').textContent=v.storage.write_blocked?'保存停止中：最後に確認できたメモリの予測を表示しています。':v.storage.mode==='temporary'?'一時保存の合成予測を表示しています。':'保存済みの合成予測を表示しています。';
  cards('baseline',b.picks,false);if(v.challenger)cards('challenger',v.challenger.picks,true);else $('blocked').textContent=reasons[v.blocked_reason];
@@ -93,16 +94,18 @@ function checkReceipt(value,id,expected){
  if(expected&&(r.model_sha256!==expected.model_sha256||r.snapshot_sha256!==expected.snapshot_sha256||r.reason!==expected.reason))fail();
  return r;
 }
+function clearReceipt(){$('receipt-detail').textContent='';$('receipt-experiment-link').hidden=true;$('receipt-experiment-link').removeAttribute('href');}
 function showReceipt(value,id,expected){
  const r=checkReceipt(value,id,expected);$('receipt-id').value=id;
+ $('receipt-experiment-link').href='/final-five-experiments/model/'+r.model_sha256;$('receipt-experiment-link').hidden=false;
  $('receipt-status').textContent=`保存済み記録 #${r.sequence} · ${r.comparison.baseline.selected_count}点ずつの比較`;
  $('receipt-detail').textContent=`理由：${r.reason} · 保存要求ID ${id} · モデル ${r.model_sha256} · 元予測 ${r.snapshot_sha256} · ローカル保存時刻 ${r.recorded_at}。以前の記録であり、現在の保留状態や利用可否を変更しません。`;
  if(pending&&pending.request_id===id){checkReceipt(value,id,pending);saved=true;updateSave();}
 }
 async function lookup(){
- const id=$('receipt-id').value,request=++receiptGeneration;$('receipt-status').textContent='記録を確認しています。';$('receipt-detail').textContent='';
+ const id=$('receipt-id').value,request=++receiptGeneration;$('receipt-status').textContent='記録を確認しています。';clearReceipt();
  try{if(!/^[0-9a-f]{32}$/.test(id))fail();const response=await fetch('/api/final-five-selection/'+id);if(!response.ok)throw new Error('not_confirmed');const value=await response.json();if(request!==receiptGeneration)return;showReceipt(value,id,pending?.request_id===id?pending:null);}
- catch{if(request!==receiptGeneration)return;$('receipt-status').textContent='保存済み記録を確認できませんでした。保存成功とは扱いません。IDと保存先を確認してください。';$('receipt-detail').textContent='';}
+ catch{if(request!==receiptGeneration)return;$('receipt-status').textContent='保存済み記録を確認できませんでした。保存成功とは扱いません。IDと保存先を確認してください。';clearReceipt();}
 }
 async function saveSelection(){
  if(saving||saved||!canSave())return;
@@ -114,9 +117,9 @@ async function saveSelection(){
   if(pending.snapshot_sha256!==current.snapshot_sha256||pending.model_sha256!==current.model.sha256)throw new Error('source_changed');
  }catch{$('save-status').textContent='保存要求を準備できませんでした。理由・ブラウザの保存設定・表示モデルを確認してください。未確認のIDは変更しません。';return;}
  saving=true;updateSave();$('save-status').textContent='選定を保存しています。';$('receipt-id').value=pending.request_id;
- const body={...pending},request=++receiptGeneration;$('receipt-status').textContent='';$('receipt-detail').textContent='';
+ const body={...pending},request=++receiptGeneration;$('receipt-status').textContent='';clearReceipt();
  try{const response=await fetch('/api/final-five-selection',{method:'POST',headers:{'Content-Type':'application/json','X-Keirin-Local':'synthetic-only'},body:JSON.stringify(body)});if(!response.ok)throw new Error('save_unconfirmed');const value=await response.json();if(request!==receiptGeneration)return;showReceipt(value,body.request_id,body);}
- catch{if(request!==receiptGeneration)return;$('save-status').textContent='保存結果を確認できませんでした。同じIDで記録を確認するか、同じ要求を再送してください。';$('receipt-status').textContent='保存成功は未確認です。';$('receipt-detail').textContent='';}
+ catch{if(request!==receiptGeneration)return;$('save-status').textContent='保存結果を確認できませんでした。同じIDで記録を確認するか、同じ要求を再送してください。';$('receipt-status').textContent='保存成功は未確認です。';clearReceipt();}
  finally{saving=false;$('save-selection').disabled=Boolean(saved||!canSave());}
 }
 function restoreRequest(){
