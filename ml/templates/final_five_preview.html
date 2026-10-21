@@ -1,0 +1,49 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FINAL 5 · 合成比較</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f6f8;color:#172d43;font:16px/1.6 system-ui,sans-serif}main{max-width:900px;margin:auto;padding:24px 16px}h1{font-size:28px}h2{font-size:21px;margin:0}a{color:#156b63}.notice{padding:16px;background:#fff4d9;border-left:4px solid #c7972c}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:20px 0}.pick{padding:18px;background:white;border:1px solid #dbe3e9;border-radius:12px}.muted{font-size:13px;color:#53697d}p{overflow-wrap:anywhere}button{font:inherit;padding:10px;border:1px solid #8092aa;border-radius:7px;background:white;cursor:pointer}#status{min-height:2em}@media(max-width:650px){.grid{grid-template-columns:1fr}h1{font-size:24px}}
+</style></head><body><main>
+<a href="/">合成予測の画面へ戻る</a><h1>FINAL 5 · 合成比較</h1>
+<div class="notice"><strong>選定方式を比較するための基準表示</strong><p>保存済み5カテゴリの最大15候補から、未校正確率が高い順に最大5点を表示します。同値は車番の並び順です。候補不足は補いません。</p><p>第二段階AIによる推薦は未実装です。展開・確信度・オッズ価値は評価していません。この順位は実レースの推奨や利益を示しません。</p></div>
+<p class="muted">合成データ専用 · 実取得・実学習・DB書込・本番予想・課金 OFF</p>
+<button id="refresh">保存済み候補を再確認</button><p id="status" role="status" aria-live="polite">確認しています。</p>
+<p id="race"></p><p id="shortfall"></p><div id="picks" class="grid"></div>
+<p class="muted">確率は元の値のまま表示し、5点で100%になるような換算はしません。選定元のカテゴリと元順位を併記します。オッズ未確認の候補は「未確認」と表示します。</p>
+<p class="muted">誰でも開けるローカル開発画面です。実会員の権利・最上位プランの認可・購入は扱いません。予測や結果の変更、再学習は行いません。</p>
+<script>
+'use strict';
+const snapshot=/* SNAPSHOT_ID */,$=id=>document.getElementById(id);
+const categories=['hit_priority','balance','middle','longshot','super_longshot'];
+let generation=0;
+function clear(){ $('picks').replaceChildren();$('race').textContent='';$('shortfall').textContent=''; }
+function validate(value){
+ if(value.schema_version!=='synthetic-final-five-baseline-v1'||value.scope!=='synthetic_final_five_baseline'||value.synthetic_only!==true||value.snapshot_id!==snapshot||value.probability_calibration_status!=='uncalibrated'||value.selection_policy!=='existing_category_probability_desc_combo_asc_v1'||value.authentication_status!=='not_asserted'||value.entitlement_status!=='not_asserted')throw new Error('invalid_response');
+ for(const key of ['billing_enabled','production_prediction_enabled','db_write_enabled','external_fetch_enabled','supervised_training_enabled','monetary_ev_enabled','second_stage_ai_enabled'])if(value[key]!==false)throw new Error('invalid_response');
+ if(![7,9].includes(value.rider_count)||!Number.isInteger(value.candidate_count)||value.candidate_count<0||value.candidate_count>15||!Array.isArray(value.picks)||value.picks.length!==Math.min(5,value.candidate_count)||value.selected_count!==value.picks.length||value.shortfall!==5-value.picks.length||value.status!==(value.picks.length===5?'ready':'partial'))throw new Error('invalid_response');
+ if(!value.race||typeof value.race.date!=='string'||typeof value.race.venue!=='string'||!Number.isInteger(value.race.race_number))throw new Error('invalid_response');
+ const seen=new Set();
+ for(const [i,pick] of value.picks.entries()){
+  const cars=typeof pick.combo_key==='string'?pick.combo_key.split('-').map(Number):[];
+  if(cars.length!==3||cars.some(c=>!Number.isInteger(c)||c<1||c>value.rider_count)||new Set(cars).size!==3||seen.has(pick.combo_key)||pick.rank!==i+1||!categories.includes(pick.source_category)||typeof pick.source_category_name!=='string'||!Number.isInteger(pick.source_rank)||pick.source_rank<1||pick.source_rank>3||!Number.isFinite(pick.estimated_probability)||pick.estimated_probability<0||pick.estimated_probability>1||(pick.odds!==null&&(!Number.isFinite(pick.odds)||pick.odds<=0)))throw new Error('invalid_response');
+  seen.add(pick.combo_key);
+ }
+}
+function render(value){
+ validate(value);
+ $('status').textContent=`保存済み${value.candidate_count}候補から${value.selected_count}点 · 未校正確率順の比較基準`;
+ $('race').textContent=`${value.race.date} ${value.race.venue} ${value.race.race_number}R · ${value.rider_count}車`;
+ $('shortfall').textContent=value.shortfall?`5点に対して${value.shortfall}点不足しています。元の候補にない買い目は追加しません。`:'';
+ for(const pick of value.picks){
+  const card=document.createElement('section');card.className='pick';card.dataset.combo=pick.combo_key;
+  const heading=document.createElement('h2');heading.textContent=`${pick.rank}. ${pick.combo_key}`;
+  const source=document.createElement('p');source.className='source';source.textContent=`選定元：${pick.source_category_name} ${pick.source_rank}位`;
+  const metrics=document.createElement('p');metrics.className='metrics';metrics.textContent=`未校正確率 ${(pick.estimated_probability*100).toFixed(3)}% · ${pick.odds===null?'オッズ未確認':pick.odds.toFixed(1)+'倍'}`;
+  card.append(heading,source,metrics);$('picks').append(card);
+ }
+}
+async function load(){
+ const request=++generation;clear();$('status').textContent='確認しています。';
+ try{const response=await fetch('/api/final-five-view/'+snapshot);if(!response.ok)throw new Error('request_failed');const value=await response.json();if(request!==generation)return;render(value);}
+ catch{if(request!==generation)return;clear();$('status').textContent='候補を確認できませんでした。接続を確認して再確認してください。';}
+}
+$('refresh').onclick=load;load();
+</script></main></body></html>

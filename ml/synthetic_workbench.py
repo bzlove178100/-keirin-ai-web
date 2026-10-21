@@ -20,6 +20,7 @@ from ml.model_history import capture_prediction, settle_snapshot, evaluate_histo
 from ml.offline_preview import render_preview
 from ml.model_web_response import model_web_response, render_model_web_preview
 from ml.product_category_preview import fixture_view, render_category_preview
+from ml.final_five_preview import final_five_view, render_final_five_preview
 from ml.synthetic_demo import make_record
 from ml.synthetic_session import SCHEMA, LEGACY_SCHEMA, JST, MAX_SNAPSHOTS, SessionStore, SessionSaveError, validate_session
 from ml.settle_snapshot import _iso
@@ -268,6 +269,15 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, page, 'text/html; charset=utf-8')
                 if self.path == '/api/state':
                     return self.send(200, app.state())
+                match = re.fullmatch(r'/(api/final-five-view|final-five-view)/([0-9a-f]{32})', self.path)
+                if match and match[2] in app.snapshots:
+                    try:
+                        if match[1] == 'api/final-five-view':
+                            return self.send(200, final_five_view(app.snapshots[match[2]], match[2]))
+                        html, digest = render_final_five_preview(match[2])
+                        return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
+                    except (ValueError, KeyError, TypeError):
+                        return self.send(409, {'error': 'final_five_display_contract_invalid'})
                 match = re.fullmatch(r'/api/category-view/([0-9a-f]{32})/([a-z-]+)', self.path)
                 if match and match[1] in app.snapshots:
                     try:
