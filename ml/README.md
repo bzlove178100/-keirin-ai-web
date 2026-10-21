@@ -1,5 +1,14 @@
 # keirin-ai ML pipeline
 
+## Synthetic FINAL 5 learned challenger
+
+`python -m ml.final_five_ranker` trains, saves and reloads an offline synthetic
+candidate selector, with a chronological second-stage holdout against the fixed
+probability baseline. It does not replace the existing UI or first-stage model.
+See [contract and CLI](../docs/KEIRIN_FINAL_FIVE_RANKER_20261021.md) for the explicit
+synthetic gate, label-time purge, equal-budget comparison and limitations.
+This is not a product acceptance or independently verified end-to-end holdout.
+
 ## Current stage
 
 The repository can capture a leakage-safe `training_input` inside prospective history records and convert eligible history JSON into rider-level rows.

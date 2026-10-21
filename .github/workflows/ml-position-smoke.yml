@@ -15,6 +15,7 @@ on:
       - 'tests/test_offline_preview_ui.cjs'
       - 'tests/test_category_selection.py'
       - 'tests/test_model_history.py'
+      - 'tests/test_final_five_ranker.py'
       - 'tests/test_held_history*'
       - 'prospective-tools*'
       - 'tests/test_synthetic_workbench*'
@@ -43,6 +44,7 @@ on:
       - 'tests/test_offline_preview_ui.cjs'
       - 'tests/test_category_selection.py'
       - 'tests/test_model_history.py'
+      - 'tests/test_final_five_ranker.py'
       - 'tests/test_held_history*'
       - 'prospective-tools*'
       - 'tests/test_synthetic_workbench*'
@@ -96,6 +98,10 @@ jobs:
         env:
           OMP_NUM_THREADS: '2'
         run: python -m unittest discover -s tests -p 'test_synthetic_workbench*.py' -v
+      - name: Run synthetic FINAL 5 learned challenger and leakage checks
+        env:
+          OMP_NUM_THREADS: '2'
+        run: python -m unittest discover -s tests -p 'test_final_five_ranker.py' -v
       - name: Run deployment package and rollback integrity checks
         run: python -m unittest tests.test_keirin_dev_deployment_package -v
       - name: Run position-model train and inference smoke
