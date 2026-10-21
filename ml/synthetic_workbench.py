@@ -23,6 +23,7 @@ from ml.product_category_preview import fixture_view, render_category_preview
 from ml.final_five_preview import final_five_view, render_final_five_preview
 from ml.final_five_review import evaluate_final_five, render_final_five_review
 from ml.final_five_challenger_preview import FrozenChallenger, render_challenger_preview
+from ml.final_five_selection_ledger import SelectionLedger
 from ml.synthetic_demo import make_record
 from ml.synthetic_session import SCHEMA, LEGACY_SCHEMA, JST, MAX_SNAPSHOTS, SessionStore, SessionSaveError, validate_session
 from ml.settle_snapshot import _iso
@@ -31,7 +32,7 @@ from ml.held_history_review import evaluate_reviews
 
 
 class Workbench:
-    def __init__(self, state_dir=None, final_five_experiment=None):
+    def __init__(self, state_dir=None, final_five_experiment=None, final_five_selection_dir=None):
         # Validate an explicitly selected saved model before creating state/locks.
         self.challenger = FrozenChallenger(final_five_experiment)
         self._temporary = TemporaryDirectory(prefix='keirin-synthetic-')
@@ -47,6 +48,7 @@ class Workbench:
         self.legacy = None
         self.store = None
         self.restored = False
+        self.selection_ledger = None
         self.held_review = ReviewWorkspace()
         try:
             if state_dir is not None:
@@ -57,11 +59,15 @@ class Workbench:
                     self._apply(self.store.loaded)
                     self.restored = True
                 self.held_review = ReviewWorkspace(Path(state_dir) / 'held-review')
+            if final_five_selection_dir is not None:
+                self.selection_ledger = SelectionLedger(final_five_selection_dir, synthetic=True)
         except BaseException:
             self.close()
             raise
 
     def close(self):
+        if self.selection_ledger is not None:
+            self.selection_ledger.close()
         self.held_review.close()
         if self.store is not None:
             self.store.close()
@@ -188,9 +194,46 @@ class Workbench:
         snapshot = self.snapshots[key]
         held = any(r.get('schema_version') == 'ml-held-history-v1' and
                    r.get('race_id') == snapshot['race_id'] for r in self.histories.values())
-        return self.challenger.view(snapshot, key, held=held,
+        view = self.challenger.view(snapshot, key, held=held,
                     storage={'mode': 'local_file' if self.store else 'temporary',
                              'restored': self.restored, 'write_blocked': bool(self.store and self.store.failed)})
+        ledger = self.selection_ledger
+        if ledger is not None:
+            try: ledger._current()
+            except SessionSaveError: pass  # Display the stopped state; never claim a save.
+        view.update(snapshot_sha256=snapshot['snapshot_sha256'],
+                    selection_storage={'configured': ledger is not None,
+                        'write_blocked': bool(ledger and ledger.store.failed)})
+        return view
+
+    def record_challenger(self, key, snapshot_sha256, model_sha256, request_id, reason):
+        if self.selection_ledger is None:
+            raise ValueError('selection_storage_not_configured')
+        if key not in self.snapshots:
+            raise ValueError('snapshot_not_found')
+        if self.store is not None:
+            if self.store.failed:
+                raise SessionSaveError('session_restart_required')
+            try:
+                if self.store._read() != self.store.expected:
+                    raise ValueError('prediction_session_changed')
+            except (ValueError, OSError) as exc:
+                self.store.failed = True
+                raise SessionSaveError('prediction_session_changed_restart_required') from exc
+        validate_session(self._payload())
+        view = self.challenger_view(key)
+        if view['status'] != 'ready':
+            raise ValueError(view['blocked_reason'])
+        if view['snapshot_sha256'] != snapshot_sha256 or view['model']['sha256'] != model_sha256:
+            raise ValueError('selection_source_changed_refresh_required')
+        return self.selection_ledger.record(self.challenger.artifact, self.snapshots[key], request_id, reason)
+
+    def selection_receipt(self, request_id):
+        if self.selection_ledger is None:
+            raise ValueError('selection_storage_not_configured')
+        # Historical read, including after a new hold/model change. It does not
+        # change current eligibility or reselect with the current model.
+        return self.selection_ledger.receipt(request_id)
 
     def _review_session_holds(self):
         if self.store is not None and self.store.failed:
@@ -287,6 +330,14 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, page, 'text/html; charset=utf-8')
                 if self.path == '/api/state':
                     return self.send(200, app.state())
+                match = re.fullmatch(r'/api/final-five-selection/([0-9a-f]{32})', self.path)
+                if match:
+                    try:
+                        return self.send(200, app.selection_receipt(match[1]))
+                    except SessionSaveError as exc:
+                        return self.send(503, {'error': str(exc)})
+                    except (ValueError, TypeError, KeyError) as exc:
+                        return self.send(404, {'error': str(exc)})
                 match = re.fullmatch(r'/(api/final-five-challenger|final-five-challenger)/([0-9a-f]{32})', self.path)
                 if match and match[2] in app.snapshots:
                     try:
@@ -382,7 +433,11 @@ def make_server(app: Workbench, port: int = 0):
                 payload = json.loads(self.rfile.read(length))
                 if not isinstance(payload, dict): raise ValueError('json_object_required')
                 with app.lock:
-                    if self.path == '/api/held-review/import' and set(payload) == {'json_text', 'revision'}:
+                    if self.path == '/api/final-five-selection' and set(payload) == {
+                            'snapshot_id', 'snapshot_sha256', 'model_sha256', 'request_id', 'reason'}:
+                        result = app.record_challenger(payload['snapshot_id'], payload['snapshot_sha256'],
+                            payload['model_sha256'], payload['request_id'], payload['reason'])
+                    elif self.path == '/api/held-review/import' and set(payload) == {'json_text', 'revision'}:
                         result = app.held_review.load(parse_json_file(payload['json_text']), payload['revision'])
                     elif self.path == '/api/held-review/import-session' and set(payload) == {'source_revision', 'revision'}:
                         result = app.import_review_session(payload['source_revision'], payload['revision'])
@@ -424,8 +479,9 @@ def main():
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--state-dir', type=Path, help='Optional local POSIX directory outside the checkout for synthetic predictions and held-review checkpoints.')
     parser.add_argument('--final-five-experiment', type=Path, help='Optional saved synthetic FINAL 5 experiment; read once at startup, never trained or replaced by the UI.')
+    parser.add_argument('--final-five-selection-dir', type=Path, help='Optional separate local synthetic selection ledger outside the checkout. Only explicit save requests append receipts.')
     args = parser.parse_args()
-    app = Workbench(args.state_dir, args.final_five_experiment)
+    app = Workbench(args.state_dir, args.final_five_experiment, args.final_five_selection_dir)
     server = None
     try:
         server = make_server(app, args.port)

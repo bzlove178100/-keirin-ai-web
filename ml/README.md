@@ -13,6 +13,13 @@ an evaluation source, a training-attempt ledger or a model promotion mechanism.
 Standalone receipts cannot check holds in other workspaces. See
 `../docs/KEIRIN_FINAL_FIVE_RANKER_20261021.md` for commands, limits and recovery.
 
+Workbench can opt into the same ledger using `--final-five-selection-dir`.
+An explicit save rechecks the displayed model/snapshot and current session holds.
+The page preserves its request ID before sending so a lost response can be
+looked up or retried without silently adding another receipt. Historical lookup
+works even when the current model is unavailable; it never restores eligibility.
+Simply opening or refreshing a comparison does not append a record.
+
 ## Synthetic FINAL 5 learned challenger
 
 `python -m ml.final_five_ranker` trains, saves and reloads an offline synthetic

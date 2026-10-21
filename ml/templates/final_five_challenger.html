@@ -8,6 +8,14 @@
 <button id="refresh">保存済みモデルで再確認</button><p id="status" role="status" aria-live="polite">確認しています。</p>
 <p id="race"></p><p id="shortfall"></p><p id="model" class="muted"></p><p id="storage" class="muted"></p><p id="blocked"></p>
 <div class="columns"><section><h2>確率順の比較基準</h2><div id="baseline"></div></section><section><h2>第二段階AIの試作</h2><div id="challenger"></div></section></div>
+<section aria-labelledby="save-title"><h2 id="save-title">この合成選定を記録</h2>
+<p class="muted">明示した保存先へ、モデル・元予測・選定理由を残します。後からの比較記録であり、発走前実績や評価への採用ではありません。以前の記録は変更しません。</p>
+<label for="selection-reason">記録する理由（500文字以内）</label><br><input id="selection-reason" maxlength="500" style="width:100%;font:inherit;padding:10px" autocomplete="off">
+<p><button id="save-selection" disabled>選定を保存</button> <button id="new-selection" hidden>別の選定として記録</button></p>
+<p id="save-status" role="status" aria-live="polite"></p>
+<label for="receipt-id">保存要求IDで以前の記録を確認</label><br><input id="receipt-id" maxlength="32" style="max-width:100%;width:24em;font:inherit;padding:10px" autocomplete="off">
+<button id="lookup-receipt">記録を確認</button><p id="receipt-status" role="status" aria-live="polite"></p><p id="receipt-detail" class="muted"></p>
+</section>
 <p class="muted">元の確率・オッズ・カテゴリ・順位を保持します。モデルは起動時に固定され、再確認で再学習やモデル変更は行いません。選択結果を予測履歴へ自動保存しません。</p>
 <p class="muted">誰でも開けるローカル開発画面です。実会員の認可・購入・本番公開は扱いません。保留は解除せず、モデルの学習に使用したレースと時刻条件を満たさない予測ではAI候補を表示しません。</p>
 <script>
@@ -15,8 +23,9 @@
 const snapshot=/* SNAPSHOT_ID */,$=id=>document.getElementById(id);
 const names={hit_priority:'的中率重視',balance:'バランス',middle:'中穴',longshot:'大穴',super_longshot:'超大穴'};
 const reasons={model_not_configured:'第二段階モデルが指定されていません。起動時に保存済み合成モデルを指定してください。',held_race_requires_review:'このレースは保留中のため、AI候補を表示しません。',training_race_cannot_be_tested:'このレースはモデルの学習に使用済みのため、AI候補を表示しません。',prediction_precedes_cutoff:'この予測はモデルの学習境界より前のため、AI候補を表示しません。'};
-let generation=0;
-function clear(){for(const id of ['baseline','challenger'])$(id).replaceChildren();for(const id of ['race','shortfall','model','storage','blocked'])$(id).textContent='';}
+let generation=0,current=null,pending=null,saving=false,saved=false,requestError=false,receiptGeneration=0;
+const pendingKey='keirin-final-five-selection:'+snapshot;
+function clear(){current=null;$('save-selection').disabled=true;for(const id of ['baseline','challenger'])$(id).replaceChildren();for(const id of ['race','shortfall','model','storage','blocked'])$(id).textContent='';}
 function fail(){throw new Error('invalid_response');}
 function checkPicks(picks,size,count,scored){
  if(!Array.isArray(picks)||picks.length!==size)fail();const seen=new Set();
@@ -26,14 +35,18 @@ function checkPicks(picks,size,count,scored){
   seen.add(p.combo_key);
  }
 }
-function validate(v){
- if(!v||v.schema_version!=='synthetic-final-five-comparison-v1'||v.scope!=='synthetic_final_five_comparison'||v.snapshot_id!==snapshot||v.synthetic_only!==true||v.evidence_scope!=='synthetic_test_only'||v.authentication_status!=='not_asserted'||v.entitlement_status!=='not_asserted')fail();
+function validate(v,expectedId=snapshot,receipt=false){
+ if(!v||v.schema_version!=='synthetic-final-five-comparison-v1'||v.scope!=='synthetic_final_five_comparison'||v.snapshot_id!==expectedId||v.synthetic_only!==true||v.evidence_scope!=='synthetic_test_only'||v.authentication_status!=='not_asserted'||v.entitlement_status!=='not_asserted')fail();
  for(const k of ['billing_enabled','production_prediction_enabled','db_write_enabled','external_fetch_enabled','real_data_training_enabled','training_on_request','monetary_ev_enabled','promotion_eligible','product_acceptance','provenance_independently_verified'])if(v[k]!==false)fail();
  const b=v.baseline;
- if(!b||b.schema_version!=='synthetic-final-five-baseline-v1'||b.snapshot_id!==snapshot||b.synthetic_only!==true||b.selection_policy!=='existing_category_probability_desc_combo_asc_v1'||b.probability_calibration_status!=='uncalibrated'||![7,9].includes(b.rider_count)||!Number.isInteger(b.candidate_count)||b.candidate_count<3||b.candidate_count>15||b.selected_count!==Math.min(5,b.candidate_count)||b.shortfall!==5-b.selected_count||!b.race||typeof b.race.date!=='string'||typeof b.race.venue!=='string'||!Number.isInteger(b.race.race_number))fail();
+ if(!b||b.schema_version!=='synthetic-final-five-baseline-v1'||b.snapshot_id!==expectedId||b.synthetic_only!==true||b.selection_policy!=='existing_category_probability_desc_combo_asc_v1'||b.probability_calibration_status!=='uncalibrated'||![7,9].includes(b.rider_count)||!Number.isInteger(b.candidate_count)||b.candidate_count<3||b.candidate_count>15||b.selected_count!==Math.min(5,b.candidate_count)||b.shortfall!==5-b.selected_count||!b.race||typeof b.race.date!=='string'||typeof b.race.venue!=='string'||!Number.isInteger(b.race.race_number))fail();
  for(const k of ['billing_enabled','production_prediction_enabled','db_write_enabled','external_fetch_enabled','supervised_training_enabled','monetary_ev_enabled','second_stage_ai_enabled'])if(b[k]!==false)fail();
  checkPicks(b.picks,b.selected_count,b.rider_count,false);
- if(!v.storage||!['local_file','temporary'].includes(v.storage.mode)||typeof v.storage.restored!=='boolean'||typeof v.storage.write_blocked!=='boolean')fail();
+ if(receipt){if(v.storage!==null)fail();}
+ else{
+  if(!v.storage||!['local_file','temporary'].includes(v.storage.mode)||typeof v.storage.restored!=='boolean'||typeof v.storage.write_blocked!=='boolean')fail();
+  if(!/^[0-9a-f]{64}$/.test(v.snapshot_sha256)||!v.selection_storage||typeof v.selection_storage.configured!=='boolean'||typeof v.selection_storage.write_blocked!=='boolean')fail();
+ }
  if(v.model!==null&&(!v.model||!/^([0-9a-f]{64})$/.test(v.model.sha256)||typeof v.model.cutoff!=='string'||!Number.isFinite(Date.parse(v.model.cutoff))||v.model.selection_policy!=='candidate_binary_lightgbm_v1'||v.model.loading_policy!=='pinned_at_process_start'))fail();
  if(v.status==='ready'){
   if(v.blocked_reason!==null||v.model===null||!v.challenger||v.challenger.selected_count!==b.selected_count||v.challenger.score_interpretation!=='uncalibrated_ranking_score_not_win_probability')fail();
@@ -50,16 +63,72 @@ function cards(id,picks,scored){
  $(id).append(card);}
 }
 function render(v){
- validate(v);const b=v.baseline;
+ validate(v);current=v;const b=v.baseline;
  $('status').textContent=v.status==='ready'?`同じ${b.candidate_count}候補から各${b.selected_count}点を比較`:'基準を表示しました。AI候補は利用できません。';
  $('race').textContent=`${b.race.date} ${b.race.venue} ${b.race.race_number}R · ${b.rider_count}車`;
  $('shortfall').textContent=b.shortfall?`5点に対して${b.shortfall}点不足しています。元の候補にない買い目は追加しません。`:'';
  $('model').textContent=v.model?`モデル ${v.model.sha256} · 学習境界 ${v.model.cutoff} · 起動時固定`:'';
  $('storage').textContent=v.storage.write_blocked?'保存停止中：最後に確認できたメモリの予測を表示しています。':v.storage.mode==='temporary'?'一時保存の合成予測を表示しています。':'保存済みの合成予測を表示しています。';
  cards('baseline',b.picks,false);if(v.challenger)cards('challenger',v.challenger.picks,true);else $('blocked').textContent=reasons[v.blocked_reason];
+ updateSave();
+}
+function canSave(){return !requestError&&current&&current.status==='ready'&&current.selection_storage.configured&&!current.storage.write_blocked&&!current.selection_storage.write_blocked;}
+function updateSave(){
+ $('save-selection').disabled=Boolean(saving||saved||!canSave());$('new-selection').hidden=!saved;$('selection-reason').disabled=Boolean(pending||saving);
+ if(requestError)$('save-status').textContent='ブラウザの保存要求を読めません。保存成功とは扱いません。以前の要求IDを確認してください。';
+ else if(saved)$('save-status').textContent='保存済みの選定です。別の選定を残す場合は新しい記録を作成してください。';
+ else if(pending)$('save-status').textContent='未確認の保存要求があります。同じIDで再確認します。理由は変更できません。';
+ else if(!current)$('save-status').textContent='比較の確認後に保存できます。';
+ else if(!current.selection_storage.configured)$('save-status').textContent='選定台帳の保存先が指定されていません。';
+ else if(current.storage.write_blocked||current.selection_storage.write_blocked)$('save-status').textContent='保存停止中です。保存先を確認して再起動してください。';
+ else if(current.status!=='ready')$('save-status').textContent='現在の予測は選定を保存できません。';
+ else $('save-status').textContent='理由を入力して保存してください。閲覧だけでは記録を増やしません。';
+}
+function checkReceipt(value,id,expected){
+ if(!value||value.schema_version!=='synthetic-final-five-selection-receipt-v1'||value.synthetic_only!==true||value.evidence_scope!=='synthetic_test_only'||value.selection_scope!=='retrospective_synthetic_receipt'||value.clock_source!=='local_unverified'||value.hold_status!=='not_checked_in_standalone_ledger')fail();
+ for(const k of ['evaluation_eligible','product_acceptance','training_attempts_tracked','production_prediction_enabled','external_fetch_enabled','db_write_enabled','real_data_training_enabled','monetary_ev_enabled','promotion_eligible','provenance_independently_verified'])if(value[k]!==false)fail();
+ const r=value.receipt,c=r?.comparison;
+ if(!r||r.request_id!==id||!Number.isInteger(r.sequence)||r.sequence<1||typeof r.reason!=='string'||!r.reason.trim()||r.reason.length>500||!Number.isFinite(Date.parse(r.recorded_at))||!/^[0-9a-f]{64}$/.test(r.model_sha256)||!/^[0-9a-f]{64}$/.test(r.snapshot_sha256)||!c||c.status!=='ready'||c.model?.sha256!==r.model_sha256||c.snapshot_id!==r.snapshot_sha256.slice(0,32)||c.baseline?.snapshot_id!==c.snapshot_id||![7,9].includes(c.baseline.rider_count)||c.challenger?.selected_count!==c.baseline.selected_count||c.baseline.selected_count!==Math.min(5,c.baseline.candidate_count))fail();
+ validate(c,r.snapshot_sha256.slice(0,32),true);
+ if(expected&&(r.model_sha256!==expected.model_sha256||r.snapshot_sha256!==expected.snapshot_sha256||r.reason!==expected.reason))fail();
+ return r;
+}
+function showReceipt(value,id,expected){
+ const r=checkReceipt(value,id,expected);$('receipt-id').value=id;
+ $('receipt-status').textContent=`保存済み記録 #${r.sequence} · ${r.comparison.baseline.selected_count}点ずつの比較`;
+ $('receipt-detail').textContent=`理由：${r.reason} · 保存要求ID ${id} · モデル ${r.model_sha256} · 元予測 ${r.snapshot_sha256} · ローカル保存時刻 ${r.recorded_at}。以前の記録であり、現在の保留状態や利用可否を変更しません。`;
+ if(pending&&pending.request_id===id){checkReceipt(value,id,pending);saved=true;updateSave();}
+}
+async function lookup(){
+ const id=$('receipt-id').value,request=++receiptGeneration;$('receipt-status').textContent='記録を確認しています。';$('receipt-detail').textContent='';
+ try{if(!/^[0-9a-f]{32}$/.test(id))fail();const response=await fetch('/api/final-five-selection/'+id);if(!response.ok)throw new Error('not_confirmed');const value=await response.json();if(request!==receiptGeneration)return;showReceipt(value,id,pending?.request_id===id?pending:null);}
+ catch{if(request!==receiptGeneration)return;$('receipt-status').textContent='保存済み記録を確認できませんでした。保存成功とは扱いません。IDと保存先を確認してください。';$('receipt-detail').textContent='';}
+}
+async function saveSelection(){
+ if(saving||saved||!canSave())return;
+ try{
+  if(!pending){const reason=$('selection-reason').value;if(!reason.trim()||reason.length>500||/[\x00-\x1f\x7f]/.test(reason))throw new Error('reason');
+   const body={snapshot_id:snapshot,snapshot_sha256:current.snapshot_sha256,model_sha256:current.model.sha256,request_id:crypto.randomUUID().replaceAll('-',''),reason};
+   localStorage.setItem(pendingKey,JSON.stringify(body));pending=body;
+  }
+  if(pending.snapshot_sha256!==current.snapshot_sha256||pending.model_sha256!==current.model.sha256)throw new Error('source_changed');
+ }catch{$('save-status').textContent='保存要求を準備できませんでした。理由・ブラウザの保存設定・表示モデルを確認してください。未確認のIDは変更しません。';return;}
+ saving=true;updateSave();$('save-status').textContent='選定を保存しています。';$('receipt-id').value=pending.request_id;
+ const body={...pending},request=++receiptGeneration;$('receipt-status').textContent='';$('receipt-detail').textContent='';
+ try{const response=await fetch('/api/final-five-selection',{method:'POST',headers:{'Content-Type':'application/json','X-Keirin-Local':'synthetic-only'},body:JSON.stringify(body)});if(!response.ok)throw new Error('save_unconfirmed');const value=await response.json();if(request!==receiptGeneration)return;showReceipt(value,body.request_id,body);}
+ catch{if(request!==receiptGeneration)return;$('save-status').textContent='保存結果を確認できませんでした。同じIDで記録を確認するか、同じ要求を再送してください。';$('receipt-status').textContent='保存成功は未確認です。';$('receipt-detail').textContent='';}
+ finally{saving=false;$('save-selection').disabled=Boolean(saved||!canSave());}
+}
+function restoreRequest(){
+ try{const raw=localStorage.getItem(pendingKey);if(raw===null)return;const value=JSON.parse(raw);
+  if(!value||Object.keys(value).sort().join(',')!=='model_sha256,reason,request_id,snapshot_id,snapshot_sha256'||value.snapshot_id!==snapshot||!/^[0-9a-f]{32}$/.test(value.request_id)||!/^[0-9a-f]{64}$/.test(value.model_sha256)||!/^[0-9a-f]{64}$/.test(value.snapshot_sha256)||typeof value.reason!=='string'||!value.reason.trim()||value.reason.length>500)fail();
+  pending=value;$('selection-reason').value=value.reason;$('receipt-id').value=value.request_id;lookup();
+ }catch{requestError=true;updateSave();}
 }
 async function load(){const request=++generation;clear();$('status').textContent='確認しています。';
  try{const response=await fetch('/api/final-five-challenger/'+snapshot);if(!response.ok)throw new Error('request_failed');const v=await response.json();if(request!==generation)return;render(v);}
  catch{if(request!==generation)return;clear();$('status').textContent='比較を確認できませんでした。接続を確認して再確認してください。';}}
-$('refresh').onclick=load;load();
+$('refresh').onclick=load;$('save-selection').onclick=saveSelection;$('lookup-receipt').onclick=lookup;
+$('new-selection').onclick=()=>{if(!saved||saving)return;try{localStorage.removeItem(pendingKey);}catch{return;}pending=null;saved=false;updateSave();};
+restoreRequest();load();
 </script></main></body></html>

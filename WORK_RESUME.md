@@ -1,5 +1,30 @@
 # Work resume handoff
 
+## FINAL 5 selection saving from synthetic comparison UI — 2026-10-21
+
+直前#267 07ef97b8ec961b5d66539cc6431a0723f8a65a34の選定台帳CLIは全7CI/回帰39549344298の47件成功。
+runtime39549344364/job119054714213の2026-10-21T05:35:11.1072160Zログで同一head verified=true。
+ML39549344154/job119054713388で新規台帳9＋ranker9＝18、Workbench86、既存Chrome成功。
+確定結果は#267本文/#266末尾へ保存。記録だけのcommit・旧成功CIの手動再実行/取消しなし。
+main d069ab9b6adcf9585954a5bae7be7df0546e473c、#266 ae2658f7acadb597bf67217c165afe722a651587は不変。
+
+次の許可済み合成開発として、--final-five-selection-dirの明示時だけ比較画面から台帳へ保存できるようにした。
+理由と保存要求IDを持ち、保存直前にmodel/snapshot/同セッション保留/元保存物を再検査。
+閲覧/再確認だけでは追記なし、予測/通常結果/保留/確認一式は不変。台帳の既存検証/復元/上限を再利用。
+ブラウザは送信前に要求を保持し、応答喪失は未確認として同IDで照会/再送。成功後の明示選び直しは新ID。
+再読込で保持IDを照会。不正な控え/返却値/遅い旧照会を拒否。モデルなし/保留後でも過去記録の確認だけは可能。
+別origin/端末では控えを共有しない。ID手入力またはCLI inspect/showで確認。自動学習/昇格/保留解除なし。
+新規Python/API6＋影響する既存challenger6がローカル成功、実API→実JS検証関数と不正な内側安全主張の拒否も成功。
+JS構文/diff check成功。新Chrome2（390/1280幅・7/9×3/4/5保存、応答喪失/再送/reload/SIGKILL再起動、
+選び直し、不正/旧照会、送信前保留、控え破損、モデルなし過去照会）をML CIへ追加。
+新headの全CI/実Chrome確定結果は#267本文を優先し、記録だけでcommit/CIを再起動しない。
+契約：docs/KEIRIN_FINAL_FIVE_RANKER_20261021.md「合成比較画面から選定を保存・確認」。
+
+残件：学習前の実験登録/失敗/再試行/検証集合の再使用記録、商品評価軸/受入、第一段階を含む独立評価、DREAM、会員/課金/実データ受入。
+後からの合成選定記録であり、実精度/利益/前向き実績/商品受入ではない。別保存先の保留検知なし。
+API20/12/11/7記録値、KEIRIN.JP HOLD、実取得/実学習/予想DB書込/本番予想OFF。
+#266/#267マージ・公開・Function配備未承認。将来の現行原本保存・段階受入・復元は#266本文を厳守。
+
 ## FINAL 5 persistent synthetic selection ledger — 2026-10-21
 
 再開時照合：main d069ab9b6adcf9585954a5bae7be7df0546e473c、#267 cb632bed30666eec361df61019b85c7f1a8db3c7。
