@@ -1,0 +1,48 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FINAL 5 · 合成結果の診断</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f6f8;color:#172d43;font:16px/1.6 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:24px 16px}h1{font-size:27px}h2{font-size:21px}h3{font-size:17px}a{color:#156b63}.notice{padding:16px;background:#fff4d9;border-left:4px solid #c7972c}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:20px 0}.card{padding:16px;background:white;border:1px solid #dbe3e9;border-radius:12px}.muted{font-size:13px;color:#53697d}p{overflow-wrap:anywhere}button{font:inherit;padding:10px;border:1px solid #8092aa;border-radius:7px;background:white;cursor:pointer}.actions{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:20px}#status{min-height:2em}@media(max-width:650px){.grid{grid-template-columns:1fr}h1{font-size:24px}}
+</style></head><body><main>
+<a href="/">合成予測の画面へ戻る</a><h1>FINAL 5 · 合成結果の診断</h1>
+<div class="notice"><strong>保存済みの合成予測と結果だけを照合します</strong><p>既存の候補に正解があったか、確率順の最大5点に残せたかを確認します。元候補は最大15点で、5点と同じ点数の比較対象ではありません。</p><p>後から固定の選定基準を適用した診断です。前向き検証や第二段階AIの評価、実レースの成績・利益を示すものではありません。</p></div>
+<div class="actions"><button id="refresh">現在の記録で再確認</button><a href="/export/final-five-review" id="download">取得時点の集計JSONを保存</a></div>
+<p id="status" role="status" aria-live="polite">確認しています。</p><p id="storage" class="muted"></p>
+<p id="counts"></p><p id="summary"></p><p id="exclusions" class="muted"></p>
+<h2>車数・選定点数ごとの結果</h2><p class="muted">3点・4点・5点を混ぜた的中率は出しません。対象0件は「未算出」です。</p><div id="strata" class="grid"></div>
+<h2>レースごとの照合</h2><div id="races" class="grid"></div>
+<p class="muted">結果未入力の予測、保留のあるレース、競合・不正記録は評価対象に含めません。別画面の保留訂正を通常履歴へ自動反映する機能は未接続です。</p>
+<p class="muted">同じレースの有効な通常結果が一致する場合だけ、最新の保存予測を1件採用します。選定方式の変更・再学習は行いません。実取得・実学習・DB書込・本番予想・課金 OFF。</p>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const diagnostics={selected_hit:'選定候補に正解',removed_by_five:'絞り込みで正解を除外',outside_pool:'元候補に正解なし'};
+let generation=0;
+function clear(){for(const id of ['status','storage','counts','summary','exclusions'])$(id).textContent='';$('strata').replaceChildren();$('races').replaceChildren();}
+function validate(v){
+ if(v.schema_version!=='synthetic-final-five-review-v1'||v.synthetic_only!==true||v.evidence_scope!=='synthetic_test_only'||v.evaluation_design!=='retrospective_fixed_rule_diagnostic'||v.selection_policy!=='existing_category_probability_desc_combo_asc_v1'||v.authentication_status!=='not_asserted'||v.entitlement_status!=='not_asserted')throw new Error('invalid_response');
+ for(const k of ['billing_enabled','second_stage_ai_enabled','production_prediction_enabled','db_write_enabled','external_fetch_enabled','monetary_ev_enabled','supervised_training_enabled','promotion_eligible'])if(v[k]!==false)throw new Error('invalid_response');
+ for(const k of ['input_records','evaluated_races','held_races','duplicate_snapshots_removed','pending_snapshots'])if(!Number.isInteger(v[k])||v[k]<0)throw new Error('invalid_response');
+ if(!Array.isArray(v.per_race)||v.per_race.length!==v.evaluated_races||!Array.isArray(v.strata)||v.strata.length!==6||!v.summary||v.summary.races!==v.evaluated_races||v.status!==(v.evaluated_races?'completed_synthetic_diagnostic':'blocked_no_valid_histories')||!v.storage||typeof v.storage.write_blocked!=='boolean')throw new Error('invalid_response');
+ if(v.summary.selected_hits+v.summary.removed_by_five+v.summary.outside_pool!==v.evaluated_races)throw new Error('invalid_response');
+ const groups=new Set();
+ for(const s of v.strata){
+  const key=s.rider_count+':'+s.selected_count;
+  if(![7,9].includes(s.rider_count)||![3,4,5].includes(s.selected_count)||groups.has(key)||!Number.isInteger(s.races)||s.races<0||!Number.isInteger(s.selected_hits)||s.selected_hits<0||s.selected_hits>s.races||s.selected_hit_rate!==(s.races?s.selected_hits/s.races:null))throw new Error('invalid_response');
+  groups.add(key);
+ }
+ if(v.strata.reduce((sum,s)=>sum+s.races,0)!==v.evaluated_races)throw new Error('invalid_response');
+ for(const r of v.per_race)if(!r.race||typeof r.race.venue!=='string'||!Object.hasOwn(diagnostics,r.diagnostic)||!Array.isArray(r.selected_combos)||r.selected_combos.length!==r.selected_count)throw new Error('invalid_response');
+}
+function text(tag,value,className){const node=document.createElement(tag);node.textContent=value;if(className)node.className=className;return node;}
+function render(v){
+ validate(v);
+ $('status').textContent=v.evaluated_races?'合成結果の診断を表示しています。':'評価できる通常履歴がありません。';
+ $('storage').textContent=v.storage.write_blocked?'保存停止中：直前に確認できたメモリの集計です。再起動して保存状態を確認してください。':v.storage.mode==='temporary'?'一時モードの記録を集計しています。':'同じ保存先の現在の記録を集計しています。';
+ $('counts').textContent=`評価 ${v.evaluated_races}レース · 保留 ${v.held_races}レース · 結果未入力 ${v.pending_snapshots}予測 · 古い重複 ${v.duplicate_snapshots_removed}件`;
+ $('summary').textContent=`選定候補に正解 ${v.summary.selected_hits}件 · 絞り込みで除外 ${v.summary.removed_by_five}件 · 元候補に正解なし ${v.summary.outside_pool}件`;
+ $('exclusions').textContent='除外記録：'+(Object.entries(v.excluded).map(([reason,n])=>`${reason} ${n}件`).join(' / ')||'なし');
+ for(const s of v.strata){const card=document.createElement('section');card.className='card stratum';card.dataset.group=s.rider_count+'-'+s.selected_count;card.append(text('h3',`${s.rider_count}車・${s.selected_count}点`),text('p',`${s.selected_hits}/${s.races}レース · ${s.selected_hit_rate===null?'未算出':(s.selected_hit_rate*100).toFixed(1)+'%（合成）'}`));$('strata').append(card);}
+ for(const r of v.per_race){const card=document.createElement('section');card.className='card race';card.dataset.diagnostic=r.diagnostic;card.append(text('h3',`${r.race.date} ${r.race.venue} ${r.race.race_number}R · ${r.rider_count}車`),text('p',diagnostics[r.diagnostic]),text('p',`正解 ${r.outcome_combo} · 元候補 ${r.candidate_count}点 → 選定 ${r.selected_count}点`),text('p',r.selected_combos.join(' / ')),text('p',`保存時刻 ${r.prediction_timestamp}`,'muted'));$('races').append(card);}
+}
+async function load(){const request=++generation;clear();$('status').textContent='確認しています。';try{const response=await fetch('/api/final-five-review');if(!response.ok)throw new Error('request_failed');const value=await response.json();if(request!==generation)return;render(value);}catch{if(request!==generation)return;clear();$('status').textContent='集計を確認できませんでした。接続を確認して再確認してください。';}}
+$('refresh').onclick=load;load();
+</script></main></body></html>

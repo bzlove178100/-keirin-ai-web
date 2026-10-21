@@ -21,6 +21,7 @@ from ml.offline_preview import render_preview
 from ml.model_web_response import model_web_response, render_model_web_preview
 from ml.product_category_preview import fixture_view, render_category_preview
 from ml.final_five_preview import final_five_view, render_final_five_preview
+from ml.final_five_review import evaluate_final_five, render_final_five_review
 from ml.synthetic_demo import make_record
 from ml.synthetic_session import SCHEMA, LEGACY_SCHEMA, JST, MAX_SNAPSHOTS, SessionStore, SessionSaveError, validate_session
 from ml.settle_snapshot import _iso
@@ -174,6 +175,12 @@ class Workbench:
     def report(self):
         return evaluate_histories(list(self.histories.values()), synthetic=True)
 
+    def final_five_report(self):
+        return {**evaluate_final_five(list(self.histories.values()), synthetic=True),
+                'pending_snapshots': len(self.snapshots)-len(self.histories),
+                'storage': {'mode': 'local_file' if self.store else 'temporary',
+                            'restored': self.restored, 'write_blocked': bool(self.store and self.store.failed)}}
+
     def _review_session_holds(self):
         if self.store is not None and self.store.failed:
             raise ValueError('prediction_session_restart_required')
@@ -269,6 +276,12 @@ def make_server(app: Workbench, port: int = 0):
                     return self.send(200, page, 'text/html; charset=utf-8')
                 if self.path == '/api/state':
                     return self.send(200, app.state())
+                if self.path == '/final-five-review':
+                    html, digest = render_final_five_review()
+                    return self.send(200, html, 'text/html; charset=utf-8', page_script_hash=digest)
+                if self.path in ('/api/final-five-review', '/export/final-five-review'):
+                    result = app.final_five_report()
+                    return self.send(200, result, filename='synthetic-final-five-review.json' if self.path.startswith('/export/') else None)
                 match = re.fullmatch(r'/(api/final-five-view|final-five-view)/([0-9a-f]{32})', self.path)
                 if match and match[2] in app.snapshots:
                     try:
