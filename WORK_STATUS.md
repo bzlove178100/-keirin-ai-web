@@ -1,5 +1,25 @@
 # Work status
 
+## Jarvis core decision loop — 2026-10-24 (latest for this branch)
+
+Current inspected main is `d069ab9b6adcf9585954a5bae7be7df0546e473c`.
+The common-agent source was identified in `agent_core/`. New isolated branch
+`work/jarvis-core-20261024` adds model-decision feedback over the existing registry,
+runner and state store plus a bounded private document adapter. Local verification:
+25 new scripted-model/real-file tests, 42 existing tests and web/safety regression
+passed. The actual no-provider entrypoint blocks with `model_unavailable`, zero
+model calls and no report. Live AI, cloud hosting and autonomous completion are
+NOT RUN. Six-stage assessment: 1 confirmed, 5 incomplete; no percentage inferred.
+
+See `docs/JARVIS_CORE_RESUME_20261024.md` for source/entrypoints, private state,
+restart/reconciliation, known limits, costs and the exact next dependency.
+No merge/deploy, credential registration, provider API fallback, schedule,
+external send, database/production/source acquisition or billing change.
+#266/#267 also change these handoff documents; preserve both branches' entries
+when integrating. Historical material below is retained, not globally restated
+as current. Remote CI status is recorded only after observation in this PR.
+
+
 ## Data duplicate-type correction / prepared Claude pilot — 2026-10-14
 
 Baseline main `703e2ed24a8d0c0df307b90776f2272478b96013` is unchanged since the
