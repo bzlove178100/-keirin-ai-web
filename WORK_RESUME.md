@@ -1,5 +1,20 @@
 # Work resume handoff
 
+## Jarvis existing-CLI transport — 2026-10-24 continuation
+
+Owner-approved workspace trust completed. Existing Claude Code 2.1.296 was
+verified; ordinary and safe-mode auth report not logged in. Added an opt-in
+Claude subprocess provider plus preflight-only default CLI. No installer,
+credential read, API fallback or live inference. Eleven fake-CLI process tests
+and the 25 decision-loop tests pass; real model acceptance remains NOT RUN.
+Six-stage assessment remains 1 confirmed, 5 incomplete. See the latest section
+of `docs/JARVIS_CORE_RESUME_20261024.md` for review gates and next steps.
+Previous head 343d45b4: four workflows passed, regression failed on an unchanged
+pinned Ubuntu source URL returning 404, and read-only smoke blocked on that
+failure. Latest head status belongs in PR #269; no merge/deploy authorized.
+Next: owner completes official subscription login, then verify allowance,
+disabled overage charging and managed policies before one live fixture task.
+
 ## Jarvis core decision loop — 2026-10-24 (latest for this branch)
 
 Current inspected main is `d069ab9b6adcf9585954a5bae7be7df0546e473c`.

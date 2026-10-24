@@ -5,14 +5,18 @@ on:
     paths:
       - 'agent_core/**'
       - 'tests/test_agent_decision_loop.py'
+      - 'tests/test_claude_decision_provider.py'
       - 'tools/jarvis_document_task.py'
+      - 'tools/jarvis_claude_document_task.py'
       - '.github/workflows/agent-decision-loop.yml'
   push:
     branches: [main]
     paths:
       - 'agent_core/**'
       - 'tests/test_agent_decision_loop.py'
+      - 'tests/test_claude_decision_provider.py'
       - 'tools/jarvis_document_task.py'
+      - 'tools/jarvis_claude_document_task.py'
       - '.github/workflows/agent-decision-loop.yml'
 
 permissions:
@@ -29,3 +33,5 @@ jobs:
           python-version: '3.12'
       - name: Scripted model and real local file contracts (no provider credentials)
         run: python tests/test_agent_decision_loop.py
+      - name: Fake CLI process transport and real file feedback (no provider credentials)
+        run: python tests/test_claude_decision_provider.py

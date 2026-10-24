@@ -1,5 +1,88 @@
 # Jarvis core: bounded decision loop, live AI still unqualified
 
+## Latest continuation: existing CLI found, authentication required
+
+Workspace trust was enabled after the owner's explicit action-time approval.
+The existing development environment has Claude Code **2.1.296**. Both ordinary
+and safe-mode CLI authentication checks report `loggedIn=false`,
+`authMethod=none`, `apiProvider=firstParty`, `subscriptionType=null`.
+No credential contents were opened, installed, copied or registered. No model
+inference was attempted. Exact private connection details remain in the private
+handoff. Authentication must be completed through the official subscription
+login by the owner; do not request a secret in chat.
+
+`agent_core/claude_decision_provider.py` now supplies the previously missing
+subprocess transport. `tools/jarvis_claude_document_task.py` defaults to a
+read-only version/authentication preflight. Its explicit execution mode connects
+the same DecisionLoop to the existing CLI; it does not replay scripted answers.
+The older no-provider CLI keeps its original behavior.
+
+The profile requires the inspected CLI version, first-party `claude.ai` login,
+a recognized Pro/Max subscription, and completed runtime/cost reviews. It
+refuses API-key, generic OAuth-token, unknown plan and third-party routes.
+No installer, login automation or fallback provider is included. Before setting
+the review flags, verify that existing subscription allowance is available,
+usage-credit/extra-usage charging is disabled, and managed policies cannot add
+hooks, commands, tools, credentials or alternate endpoints. These flags record
+operator review, not automatic proof of entitlement or a billing guarantee.
+
+Each decision runs with safe mode, restricted mode, no user/project settings,
+no built-in tools, denied MCP tools, empty strict MCP config, no session
+persistence, no browser integration and one agentic turn. The host uses a clean
+temporary working directory and a small environment allowlist; keys, gateway
+overrides, proxies and Node injection settings are not inherited. Managed policy
+still applies, so this is not an OS sandbox. The real home remains unchanged for
+official CLI authentication; the adapter never reads credential files itself.
+OAuth-incompatible bare mode and permission bypass are not used.
+
+The transport caps input/output and elapsed process time, terminates/reaps its
+process group, redacts errors and never retries automatically. Jarvis validates
+every returned decision and alone executes the fixed document operations. Only
+numeric usage and allowlisted model identifiers enter provider receipts, never
+session IDs or raw error metadata. These receipts are local to an invocation;
+they are not a durable billing ledger. `inference_attempts` counts CLI inference
+launches, not confirmed provider requests; the loop's `model_calls` counts model
+callable attempts, which can fail preflight without inference. A timeout cannot
+prove that a remote request was unbilled. Parent-process death, long-running
+hosting and durable usage reconciliation remain unqualified.
+
+Validation: **11 new fake-CLI process tests passed**, including full feedback
+through real files, duplicate refusal, metadata-only default, absent auth,
+wrong credential/plan, review gates, version drift, empty argv preservation,
+environment isolation, redaction, malformed output, timeout, bounded stdout and
+host rejection of an out-of-scope action. The existing **25 decision-loop tests
+passed again** after connecting the transport. This is not real Claude output.
+Live execution/quality/usage and stages 2–6 remain incomplete; count stays 1/6.
+
+Read-only command (does not install, authenticate or infer):
+
+```sh
+python -m tools.jarvis_claude_document_task --claude /absolute/path/to/claude
+```
+
+After authentication and both reviews, the host may add `--execute`,
+`--runtime-reviewed`, `--subscription-only-reviewed`, `--source`, `--output`,
+`--state-dir`, and a new `--task-id`. Use the nonsecret fixture first. Do not
+set the review flags merely to get past the guard. Use the prior review/resume
+procedure for an uncertain or blocked task; never silently reset it.
+
+The previous head `343d45b4f94442d40c769d494e5769e64a730b07` finished with four
+successful workflows and two failures. Regression job `120517843579` failed
+because the pinned Ubuntu `systemd_255.4-1ubuntu8.17.debian.tar.xz` download
+returned HTTP 404; the read-only smoke correctly refused that failed sibling
+workflow. The main `regression` job itself passed. This is not full-CI success.
+The existing Ubuntu fixture/workflow is unchanged and was not blindly rerun.
+The latest candidate's CI must be inspected separately in PR #269.
+
+Reference checked against installed help and official docs:
+https://code.claude.com/docs/en/cli-reference
+https://code.claude.com/docs/en/headless
+https://code.claude.com/docs/en/env-vars
+https://code.claude.com/docs/en/costs
+
+The sections below record the initial implementation before this continuation;
+their unbound-provider/unlocated-runtime statements are superseded above.
+
 ## Source and boundary
 
 Inspected on 2026-10-24 JST. The connected account lists one accessible
