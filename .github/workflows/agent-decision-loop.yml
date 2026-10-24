@@ -1,0 +1,37 @@
+name: agent decision loop offline contract
+
+on:
+  pull_request:
+    paths:
+      - 'agent_core/**'
+      - 'tests/test_agent_decision_loop.py'
+      - 'tests/test_claude_decision_provider.py'
+      - 'tools/jarvis_document_task.py'
+      - 'tools/jarvis_claude_document_task.py'
+      - '.github/workflows/agent-decision-loop.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'agent_core/**'
+      - 'tests/test_agent_decision_loop.py'
+      - 'tests/test_claude_decision_provider.py'
+      - 'tools/jarvis_document_task.py'
+      - 'tools/jarvis_claude_document_task.py'
+      - '.github/workflows/agent-decision-loop.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Scripted model and real local file contracts (no provider credentials)
+        run: python tests/test_agent_decision_loop.py
+      - name: Fake CLI process transport and real file feedback (no provider credentials)
+        run: python tests/test_claude_decision_provider.py

@@ -1,0 +1,4 @@
+Synthetic internal task for the Jarvis document adapter.
+Prepare a short private report describing this fixture and the next action.
+This file contains no customer order, real revenue, race data or credential.
+Passing its structural check does not establish live model operation.
